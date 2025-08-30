@@ -1,7 +1,7 @@
 # ===================================================================
-# 2-m Autonomous Sailboat
+# 2-m Autonomous Sailboat – Proof-of-Concept Configuration
 # Dimensions   : LOA ≈ 2.0 m, Beam ≈ 0.60 m
-# Displacement : ~27 kg
+# Displacement : ~27 kg (hull + rig + electronics + ballast)
 # Coordinate   : body-fixed (x fwd, y starboard, z down)
 # All units    : SI (m, kg, s, rad, N, N·m)
 # ===================================================================
@@ -28,7 +28,7 @@ boat:
   A_vv:     8.0
   A_rr:     2.0          # [kg·m²]
   # — Hull leeway lift (set small: keel carries main load) —
-  rho_water: 1025        # [kg/m³] seawater
+  rho_water: 1000        # [kg/m³] seawater
   S_lat:     0.08        # [m²]  hull lateral area (exclude keel)
   CY_beta:   1.0         # [-]   small lift slope
   beta_lim_deg: 10       # [deg] hull stall
@@ -36,18 +36,18 @@ boat:
 
 # ─────────────────────────── Keel Foil ─────────────────────────────
 keel:
-  rho_water: 1025
+  rho_water: 1000
   S_k:       0.15        # [m²]    planform area (fin + bulb strut)
   x_k:      -0.25        # [m]     keel force arm (aft, negative)
   stall_deg: 15
-  airfoil_name: NACA0012 # section for XFoil (symmetric)
-  CL_max:    1.0         # used if flat-plate fallback
+  airfoil_name: NACA0012 
+  CL_max:    1.0         
   CD0:       0.01
   k_ind:     0.02
 
 # ─────────────────────────── Rudder Foil ───────────────────────────
 rudder:
-  rho_water: 1025
+  rho_water: 1000
   S_r:       0.05        # [m²]    rudder planform
   x_r:      -1.00        # [m]     distance CG→rudder (aft)
   delta_max_deg: 30
@@ -57,7 +57,7 @@ rudder:
   CD0_r:     0.02
   k_ind_r:   0.9
 
-# ─────────────────────────── Sail / Rig  (dummy thrust) ────────────
+# ─────────────────────────── Sail  ────────────────────────────────
 sail:
   rho_air:   1.225
   S_s:       1.2         # [m²]   main + jib projected area
