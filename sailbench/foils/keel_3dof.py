@@ -11,7 +11,7 @@ class KeelModel3DOF(Foil3DOF):
         u, v = state[0], state[1]
         V = np.hypot(u, v) + 1e-9
 
-        beta = np.arctan2(v, u + 1e-9)          # leeway
+        beta = np.arctan2(v, u + 1e-9)  # leeway
         CL, CD = self.cl_cd(beta)
 
         q = 0.5 * self.p["rho_water"] * V**2

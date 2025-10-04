@@ -34,33 +34,52 @@ class Boat3DOF:
     keel: object
     rudder: object
     sail: object
-    env: Dict[str, float] = field(default_factory=lambda: {"wind_speed": 4.0, "wind_dir": 0.0})
+    env: Dict[str, float] = field(
+        default_factory=lambda: {"wind_speed": 4.0, "wind_dir": 0.0}
+    )
     state: np.ndarray = field(default_factory=lambda: np.zeros(6, dtype=float))
-    inputs: Dict[str, float] = field(default_factory=lambda: {"delta_rudder": 0.0, "delta_sail": 0.0})
+    inputs: Dict[str, float] = field(
+        default_factory=lambda: {"delta_rudder": 0.0, "delta_sail": 0.0}
+    )
     use_coriolis: bool = True
 
     # --- small helpers -------------------------------------------------
     def reset(self, state: Optional[np.ndarray] = None):
         self.state[:] = 0.0 if state is None else np.asarray(state, dtype=float)
 
-    def set_controls(self, *, delta_rudder: Optional[float] = None, delta_sail: Optional[float] = None):
-        if delta_rudder is not None: self.inputs["delta_rudder"] = float(delta_rudder)
-        if delta_sail   is not None: self.inputs["delta_sail"]   = float(delta_sail)
+    def set_controls(
+        self,
+        *,
+        delta_rudder: Optional[float] = None,
+        delta_sail: Optional[float] = None,
+    ):
+        if delta_rudder is not None:
+            self.inputs["delta_rudder"] = float(delta_rudder)
+        if delta_sail is not None:
+            self.inputs["delta_sail"] = float(delta_sail)
 
-    def set_environment(self, *, wind_speed: Optional[float] = None, wind_dir: Optional[float] = None):
-        if wind_speed is not None: self.env["wind_speed"] = float(wind_speed)
-        if wind_dir   is not None: self.env["wind_dir"]   = float(wind_dir)  # radians, FROM
+    def set_environment(
+        self, *, wind_speed: Optional[float] = None, wind_dir: Optional[float] = None
+    ):
+        if wind_speed is not None:
+            self.env["wind_speed"] = float(wind_speed)
+        if wind_dir is not None:
+            self.env["wind_dir"] = float(wind_dir)  # radians, FROM
 
     # --- physics core --------------------------------------------------
     def _forces(self, s: np.ndarray) -> tuple[float, float, float]:
         Xh, Yh, Nh = self.hull.compute(s)
         Xk, Yk, Nk = self.keel.compute(s)
-        Xr, Yr, Nr = self.rudder.compute(s, {"delta_rudder": self.inputs["delta_rudder"]})
-        Xs, Ys, Ns = self.sail.compute(s, {"delta_sail": self.inputs["delta_sail"]}, self.env)
+        Xr, Yr, Nr = self.rudder.compute(
+            s, {"delta_rudder": self.inputs["delta_rudder"]}
+        )
+        Xs, Ys, Ns = self.sail.compute(
+            s, {"delta_sail": self.inputs["delta_sail"]}, self.env
+        )
 
         if self.use_coriolis:
-            Cxu = self.m * s[1] * s[2]      # m * v * r
-            Cyv = -self.m * s[0] * s[2]     # -m * u * r
+            Cxu = self.m * s[1] * s[2]  # m * v * r
+            Cyv = -self.m * s[0] * s[2]  # -m * u * r
         else:
             Cxu = Cyv = 0.0
 
@@ -82,7 +101,13 @@ class Boat3DOF:
         return np.array([du, dv, dr, dx, dy, dpsi], dtype=float)
 
     # --- stepping via external solver ---------------------------------
-    def step(self, dt: float, stepper: Callable[[Callable[[np.ndarray], np.ndarray], np.ndarray, float], np.ndarray]):
+    def step(
+        self,
+        dt: float,
+        stepper: Callable[
+            [Callable[[np.ndarray], np.ndarray], np.ndarray, float], np.ndarray
+        ],
+    ):
         """
         Advance by dt using an external stepper:
           next_state = stepper(self.f, self.state, dt)
@@ -92,15 +117,32 @@ class Boat3DOF:
 
     # --- factory ------------------------------------------
     @staticmethod
-    def from_config(cfg: dict, *, hull_cls, keel_cls, rudder_cls, sail_cls, use_coriolis: bool = True) -> "Boat3DOF":
+    def from_config(
+        cfg: dict,
+        *,
+        hull_cls,
+        keel_cls,
+        rudder_cls,
+        sail_cls,
+        use_coriolis: bool = True,
+    ) -> "Boat3DOF":
         boat = cfg["boat"]
-        hull   = hull_cls(boat)
-        keel   = keel_cls(cfg["keel"])
+        hull = hull_cls(boat)
+        keel = keel_cls(cfg["keel"])
         rudder = rudder_cls(cfg["rudder"])
-        sail   = sail_cls(cfg["sail"])
+        sail = sail_cls(cfg["sail"])
         envcfg = cfg.get("environment", {})
-        env = {"wind_speed": float(envcfg.get("wind_speed", 4.0)),
-               "wind_dir": math.radians(float(envcfg.get("wind_dir_deg", 0.0)))}
-        return Boat3DOF(m=float(boat["m"]), Iz=float(boat["Iz"]),
-                        hull=hull, keel=keel, rudder=rudder, sail=sail,
-                        env=env, use_coriolis=use_coriolis)
+        env = {
+            "wind_speed": float(envcfg.get("wind_speed", 4.0)),
+            "wind_dir": math.radians(float(envcfg.get("wind_dir_deg", 0.0))),
+        }
+        return Boat3DOF(
+            m=float(boat["m"]),
+            Iz=float(boat["Iz"]),
+            hull=hull,
+            keel=keel,
+            rudder=rudder,
+            sail=sail,
+            env=env,
+            use_coriolis=use_coriolis,
+        )

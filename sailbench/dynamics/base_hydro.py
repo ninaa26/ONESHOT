@@ -10,6 +10,7 @@ statedot : optional [du, dv, dr, dx, dy, dpsi] (some models need ν̇)
 All forces/moment are in BOAT BODY axes (X forward, Y starboard).
 Units: N, N, N·m (SI).
 """
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import numpy as np
@@ -22,7 +23,8 @@ class HydroModel3DOF(ABC):
         self.p = params
 
     @abstractmethod
-    def compute(self, state: np.ndarray,
-                      statedot: Optional[np.ndarray] = None) -> np.ndarray:
+    def compute(
+        self, state: np.ndarray, statedot: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         """Return np.array([X, Y, N]) in body axes."""
         ...

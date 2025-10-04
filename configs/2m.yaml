@@ -57,16 +57,36 @@ rudder:
   CD0_r:     0.02
   k_ind_r:   0.9
 
-# ─────────────────────────── Sail  ────────────────────────────────
+# # ─────────────────────────── Sail  ────────────────────────────────
+# sail:
+#   rho_air:   1.225
+#   S_s:       1.2         # [m²]   main + jib projected area
+#   x_s:       0.30        # [m]    CG→sail centre (fwd positive)
+#   stall_deg: 25
+#   CL_max:    1.1
+#   CD0:       0.02
+#   k_ind:     0.03
+#   airfoil_name: NACA0012
+
+# ─────────────────────────── Sailblade  ────────────────────────────────
+
+# These coefficients define a blade-element sail. Either blade element sail or airfoil sail can be used in the simulation 
 sail:
-  rho_air:   1.225
-  S_s:       1.2         # [m²]   main + jib projected area
-  x_s:       0.30        # [m]    CG→sail centre (fwd positive)
+  rho_air: 1.225
+  S_s: 1.2          # sail area [m^2]
+  x_s: 0.30         # yaw lever [m]
+  AR: 4.0           # aspect ratio (≈ b^2 / S)
+  span: 2.2         # optional; if omitted, computed from AR and S
+  nel: 12           # blade elements
+  CL_alpha: 6.0     # per rad (≈ 2π reduced by losses)
   stall_deg: 25
-  CL_max:    1.1
-  CD0:       0.02
-  k_ind:     0.03
-  airfoil_name: NACA0012
+  CD0: 0.02
+  k_prof: 0.01
+  e_oswald: 0.8
+  twist_root_deg: 0
+  twist_tip_deg: 12
+  delta_max_deg: 85
+
 
 # ─────────────────────────── Environment Defaults ──────────────────
 environment:

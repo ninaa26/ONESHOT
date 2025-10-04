@@ -8,8 +8,8 @@ from sailbench.foils.rudder_3dof import RudderModel3DOF
 
 
 CFG_PATH = "configs/default.yaml"
-CFG      = load_config(CFG_PATH)
-RUDDER_P = CFG["rudder"]      # param dict for rudder
+CFG = load_config(CFG_PATH)
+RUDDER_P = CFG["rudder"]  # param dict for rudder
 
 
 def _rudder_force(state, inputs):

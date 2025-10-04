@@ -11,11 +11,11 @@ class RudderModel3DOF(Foil3DOF):
         u, v = state[0], state[1]
         V = np.hypot(u, v) + 1e-9
 
-        beta  = np.arctan2(v, u + 1e-9)
+        beta = np.arctan2(v, u + 1e-9)
         delta = np.clip(
             inputs.get("delta_rudder", 0.0),
             -np.deg2rad(self.p["delta_max_deg"]),
-            +np.deg2rad(self.p["delta_max_deg"])
+            +np.deg2rad(self.p["delta_max_deg"]),
         )
         alpha = beta - delta
 

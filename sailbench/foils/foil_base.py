@@ -17,8 +17,8 @@ class Foil3DOF:
         self,
         p: dict,
         *,
-        cache_tag: str,                   # e.g. "rudder", "keel", "sail"
-        alphas=np.arange(-25, 26, 1),     # degrees
+        cache_tag: str,  # e.g. "rudder", "keel", "sail"
+        alphas=np.arange(-25, 26, 1),  # degrees
         Re: float = 5e5,
         cache_dir: str = "cached_foils",
     ):
@@ -41,7 +41,7 @@ class Foil3DOF:
             self.foil.generate_polars(
                 alphas=self.alphas_deg,
                 Res=np.array([self.Re]),
-                cache_filename=str(self.cache_file)
+                cache_filename=str(self.cache_file),
             )
         else:
             # Load existing cache (attaches CL_function/CD_function)

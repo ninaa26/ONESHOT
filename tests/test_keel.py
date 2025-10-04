@@ -8,8 +8,8 @@ from sailbench.foils.keel_3dof import KeelModel3DOF
 
 
 CFG_PATH = "configs/default.yaml"
-CFG      = load_config(CFG_PATH)
-KEEL_P   = CFG["keel"]      # param dict for keel
+CFG = load_config(CFG_PATH)
+KEEL_P = CFG["keel"]  # param dict for keel
 
 
 def _keel_force(state):
@@ -26,11 +26,9 @@ def test_zero_leeway_has_no_force():
     so the keel should generate ~zero side-force
     and ~zero yaw moment.
     """
-    state = np.array([2.0,     # u  [m/s]
-                      0.0,     # v  (no leeway)
-                      0.0,     # r
-                      0, 0, 0  # x,y,ψ (unused)
-                     ])
+    state = np.array(
+        [2.0, 0.0, 0.0, 0, 0, 0]  # u  [m/s]  # v  (no leeway)  # r  # x,y,ψ (unused)
+    )
     X, Y, N = _keel_force(state)
     # Surge drag X_k may be small; focus on Y and N
     tol = 0.5
@@ -44,10 +42,7 @@ def test_positive_leeway_force_direction():
     β>0. The keel side-force should act to PORT (negative Y)
     to oppose the leeway.
     """
-    state = np.array([2.0,      # u
-                      0.5,      # v  (starboard drift)
-                      0.0,
-                      0, 0, 0])
+    state = np.array([2.0, 0.5, 0.0, 0, 0, 0])  # u  # v  (starboard drift)
     X, Y, N = _keel_force(state)
 
     assert Y < 0, "Keel side-force sign does not oppose positive leeway"
