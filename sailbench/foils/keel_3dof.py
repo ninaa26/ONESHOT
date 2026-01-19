@@ -1,4 +1,5 @@
 import numpy as np
+
 from .foil_base import Foil3DOF
 
 

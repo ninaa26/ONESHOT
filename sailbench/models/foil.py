@@ -1,29 +1,18 @@
-"""Foil3DOF (XFoil-based superclass)
-- Builds/loads XFoil polars via AeroSandbox and caches them to JSON.
-- Child classes call cl_cd(alpha_rad) -> (CL, CD).
-"""
+"""Base foil model."""
 
-from __future__ import annotations
+from abc import ABC, abstractmethod
 
-import json
-from functools import cache
-from pathlib import Path
-
-import aerosandbox as asb
 import numpy as np
 
+from sailbench.models.model import Model
 
-class Foil3DOF:
-    def __init__(
-        self,
-        p: dict,
-        *,
-        cache_tag: str,  # e.g. "rudder", "keel", "sail"
-        alphas=np.arange(-25, 26, 1),  # degrees
-        Re: float = 5e5,
-        cache_dir: str = "cached_foils",
-    ):
-        self.p = p
+
+class Foil(Model):
+    """Base class for all components utilizing foil physics."""
+
+    def __init__(self, params: dict) -> None:
+        """Store a dict of parameters (usually from YAML)."""
+        self.p = params
         self.Re = float(Re)
         self.alphas_deg = np.asarray(alphas, dtype=float)
         self.airfoil_name = p.get("airfoil_name", "NACA0012")
@@ -61,11 +50,15 @@ class Foil3DOF:
         self.alpha_min = float(self.alphas_deg.min())
         self.alpha_max = float(self.alphas_deg.max())
 
-    # ------------------------------------------------------------------
-    @cache
-    def cl_cd(self, alpha_rad: float) -> tuple[float, float]:
-        """Return (CL, CD) for an input angle in radians. Alpha is clipped to the cached range."""
-        a_deg = float(np.clip(np.degrees(alpha_rad), self.alpha_min, self.alpha_max))
-        CL = float(self.foil.CL_function(a_deg, Re=self.Re, mach=0.0))
-        CD = float(self.foil.CD_function(a_deg, Re=self.Re, mach=0.0))
-        return CL, CD
+    @abstractmethod
+    def compute(self, state: np.ndarray) -> np.ndarray:
+        """Compute the outputted force vector produced by the component.
+
+        Args:
+            state (np.ndarray): Current body state of the sailboat -> [x, y, psi, u, v, r]
+
+        Returns:
+            np.ndarray: Returns X and Y forces in newtons (within component frame)
+
+        """
+        ...

@@ -1,4 +1,3 @@
-import numpy as np
 
 
 def rk4_step(f, state, dt, *args):

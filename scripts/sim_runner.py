@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 
-import argparse, math
-from pathlib import Path
+import argparse
+import math
 from collections import deque
+from pathlib import Path
+
 import numpy as np
 import pygame
 
-from sailbench.utils.loader import load_config
-from sailbench.sim.boat import Boat3DOF
 from sailbench.dynamics.linear_drag_hydro_3dof import LinearDragModel
 from sailbench.foils.keel_3dof import KeelModel3DOF
 from sailbench.foils.rudder_3dof import RudderModel3DOF
-from sailbench.foils.sail_3dof import SailModel3DOF
 from sailbench.foils.sailblade_3dof import SailBEM3DOF
+from sailbench.sim.boat import Boat3DOF
 from sailbench.solvers.rk4 import rk4_step
+from sailbench.utils.loader import load_config
 
- 
+
 def rotate_poly(poly, angle):
     c, s = math.cos(angle), math.sin(angle)
     R = np.array([[c, -s], [s, c]])
@@ -29,7 +30,7 @@ def world_to_screen(x, y, cam_x, cam_y, scale, W, H):
 
 
 def clip(x, lo, hi):
-    return lo if x < lo else hi if x > hi else x
+    return lo if x < lo else min(x, hi)
 
 
 def main():
@@ -37,9 +38,7 @@ def main():
     ap.add_argument("--config", default="configs/2m.yaml", help="YAML config path")
     ap.add_argument("--fps", type=int, default=60)
     ap.add_argument("--scale", type=float, default=8.0, help="pixels per meter")
-    ap.add_argument(
-        "--trace_len", type=int, default=1200, help="max points in boat trace"
-    )
+    ap.add_argument("--trace_len", type=int, default=1200, help="max points in boat trace")
     args = ap.parse_args()
 
     if not Path(args.config).exists():
@@ -59,9 +58,7 @@ def main():
     # angle limits from config
     delta_r_max = math.radians(cfg["rudder"]["delta_max_deg"])
     sail_cfg = cfg.get("sail", {})
-    delta_s_max = math.radians(
-        sail_cfg.get("delta_max_deg", min(85.0, 1.2 * sail_cfg.get("stall_deg", 30.0)))
-    )
+    delta_s_max = math.radians(sail_cfg.get("delta_max_deg", min(85.0, 1.2 * sail_cfg.get("stall_deg", 30.0))))
 
     # --- pygame setup ---
     W, H = 1280, 800
@@ -136,17 +133,13 @@ def main():
 
         # draw trace as a polyline in world coords with fixed camera
         if len(trace) > 1:
-            pts = [
-                world_to_screen(px, py, cam_x, cam_y, SCALE, W, H) for (px, py) in trace
-            ]
+            pts = [world_to_screen(px, py, cam_x, cam_y, SCALE, W, H) for (px, py) in trace]
             pygame.draw.lines(screen, TRACE_COLOR, False, pts, 2)
 
         # draw boat
         u, v, r, x, y, psi = state
         hull_world = rotate_poly(BOAT_POLY, psi) + np.array([[x, y]])
-        hull_pts = [
-            world_to_screen(px, py, cam_x, cam_y, SCALE, W, H) for px, py in hull_world
-        ]
+        hull_pts = [world_to_screen(px, py, cam_x, cam_y, SCALE, W, H) for px, py in hull_world]
         pygame.draw.polygon(screen, BOAT_COLOR, hull_pts)
 
         # rudder line at stern for visualization
@@ -155,7 +148,7 @@ def main():
             [
                 [-1.3, 0.0],
                 [-1.3 - rud_len * math.cos(delta_r), rud_len * math.sin(delta_r)],
-            ]
+            ],
         )
         rud_world = rotate_poly(rud_local, psi) + np.array([[x, y]])
         p0 = world_to_screen(*rud_world[0], cam_x, cam_y, SCALE, W, H)

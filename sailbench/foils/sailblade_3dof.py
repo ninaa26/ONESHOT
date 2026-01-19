@@ -1,10 +1,10 @@
-import numpy as np
 import math
+
+import numpy as np
 
 
 class SailBEM3DOF:
-    """
-    Blade-element sail model.
+    """Blade-element sail model.
     - Discretizes the sail span, applies twist, sums forces.
     - Uses linear CL slope with soft stall + profile drag.
     - Adds global induced drag using AR and Oswald e.
@@ -19,9 +19,7 @@ class SailBEM3DOF:
         self.rho = float(p.get("rho_air", 1.225))
         self.S = float(p["S_s"])  # total sail area [m^2]
         self.x_s = float(p["x_s"])  # yaw lever [m]
-        self.b = float(
-            p.get("span", math.sqrt(p["S_s"] * float(p.get("AR", 4.0))))
-        )  # span [m]
+        self.b = float(p.get("span", math.sqrt(p["S_s"] * float(p.get("AR", 4.0)))))  # span [m]
         self.Nel = int(p.get("nel", 12))  # blade elements along span
 
         # Aero coefficients
@@ -57,7 +55,7 @@ class SailBEM3DOF:
             [
                 u * math.cos(psi) - v * math.sin(psi),
                 u * math.sin(psi) + v * math.cos(psi),
-            ]
+            ],
         )
         # Apparent wind in body
         Vaw_i = Vw_i - Vb_i
@@ -74,9 +72,7 @@ class SailBEM3DOF:
         # Spanwise discretization (rectangular chord for simplicity)
         # If you know your chord(z), replace S/Nel with c_i * dz.
         S_i = self.S / self.Nel
-        zeta = (
-            np.linspace(0.0, 1.0, self.Nel, endpoint=False) + 0.5 / self.Nel
-        )  # midpoints 0..1
+        zeta = np.linspace(0.0, 1.0, self.Nel, endpoint=False) + 0.5 / self.Nel  # midpoints 0..1
 
         q = 0.5 * self.rho * Vaw**2
 

@@ -1,5 +1,4 @@
-"""
-SailModel3DOF
+"""SailModel3DOF
 -------------
 • Inherits Foil3DOF
 • Inputs:
@@ -9,8 +8,10 @@ SailModel3DOF
 • Returns: np.array([Fx, Fy, N]) in boat body axes.
 """
 
-import numpy as np
 import math
+
+import numpy as np
+
 from .foil_base import Foil3DOF
 
 
@@ -19,20 +20,20 @@ class SailModel3DOF(Foil3DOF):
         # Default Re for a small sail at low speed; override via p["Re_air"] if desired.
         Re_air = float(p.get("Re_air", 3e5))
         super().__init__(
-            p, cache_tag="sail", alphas=np.arange(-30, 31, 1), Re=Re_air  # deg
+            p,
+            cache_tag="sail",
+            alphas=np.arange(-30, 31, 1),
+            Re=Re_air,  # deg
         )
         # Convenience shorthands
         self.rho_air = float(p.get("rho_air", 1.225))
         self.S_s = float(p["S_s"])
         self.x_s = float(p["x_s"])
-        self.delta_max = math.radians(
-            float(p.get("delta_max_deg", 85.0))
-        )  # clamp if provided
+        self.delta_max = math.radians(float(p.get("delta_max_deg", 85.0)))  # clamp if provided
 
     # ------------------------------------------------------------------
     def compute(self, state: np.ndarray, inputs: dict, env: dict) -> np.ndarray:
-        """
-        env['wind_dir'] is the direction the wind is COMING FROM, in radians (inertial frame).
+        """env['wind_dir'] is the direction the wind is COMING FROM, in radians (inertial frame).
         """
         u, v, r, x, y, psi = state.astype(float)
 
@@ -46,7 +47,7 @@ class SailModel3DOF(Foil3DOF):
             [
                 u * math.cos(psi) - v * math.sin(psi),
                 u * math.sin(psi) + v * math.cos(psi),
-            ]
+            ],
         )
 
         # Apparent wind in inertial, then to body frame
