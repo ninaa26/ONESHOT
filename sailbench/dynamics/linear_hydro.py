@@ -9,10 +9,10 @@ class LinearHydroModel(Model):
     """Linear viscous drag hydrodynamic hull model."""
 
     def compute(self, state: np.ndarray) -> np.ndarray:
-        """_summary_.
+        """Compute forces on hull model.
 
         Args:
-            state (np.ndarray): _description_
+            state (np.ndarray): State vector containing [u, v, r]
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within component frame)
