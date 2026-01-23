@@ -1,6 +1,0 @@
-pyyaml
-numpy
-matplotlib
-aerosandbox==4.2.8
-pytest>=7.0
-pygame
