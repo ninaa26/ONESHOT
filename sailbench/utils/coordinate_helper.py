@@ -47,3 +47,21 @@ def get_velocity_magnitude(state: np.ndarray) -> float:
     u = state[3]
     v = state[4]
     return float(np.hypot(u, v))
+
+
+def fluid_frame_to_body_frame(forces_fluid: np.ndarray, local_track_deg: float) -> np.ndarray:
+    """Convert forces from fluid frame to body frame.
+
+    Args:
+        forces_fluid (np.ndarray): Forces in fluid frame (x: lift, y: drag).
+        local_track_deg (float): Local track angle in degrees.
+
+    Returns:
+        np.ndarray: Forces in body frame (+X, +Y).
+
+    """
+    local_track_rad = np.radians(local_track_deg)
+    rotation_matrix = np.array(
+        [[np.cos(local_track_rad), -np.sin(local_track_rad)], [np.sin(local_track_rad), np.cos(local_track_rad)]]
+    )
+    return np.asarray(rotation_matrix @ forces_fluid, dtype=np.float64)

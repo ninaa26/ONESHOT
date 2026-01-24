@@ -4,8 +4,8 @@ from typing import Any
 
 import numpy as np
 
-from sailbench.models.foil import Foil
 import sailbench.utils.coordinate_helper as utils
+from sailbench.models.foil import Foil
 
 
 class BasicKeel(Foil):
@@ -49,8 +49,4 @@ class BasicKeel(Foil):
         drag = cd * q * s
         # Fluid-frame force
         f_fluid = np.array([-drag, lift])
-
-        # Rotation wind -> body
-        r = np.array([[np.cos(local_track), -np.sin(local_track)], [np.sin(local_track), np.cos(local_track)]])
-
-        return np.asarray(r @ f_fluid, dtype=np.float64)
+        return utils.fluid_frame_to_body_frame(f_fluid, local_track)
