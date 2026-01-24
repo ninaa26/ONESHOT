@@ -20,7 +20,5 @@
    ```bash
    uv sync
 
-3. Activate your python venv.  
-    - On Mac and Linux: ```source .venv/bin/activate```
-    - On Windows: ```.\.venv\Scripts\Activate.ps1```
-
+4. **[Optional but recommended] Setup VSCode Extensions**   
+    I would recommend utilizing VSCode for developing in this project. The two extensions to install are [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) (Python formatter and linter) as well as [MyPy](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) (Python type checker). This will help keep consistent code quality and style across sailbench.
