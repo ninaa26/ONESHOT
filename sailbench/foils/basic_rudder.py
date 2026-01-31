@@ -3,6 +3,7 @@
 import numpy as np
 
 from sailbench.models.foil import Foil
+from sailbench.models.model import State
 
 
 class BasicRudder(Foil):
@@ -17,7 +18,7 @@ class BasicRudder(Foil):
         """
         super().__init__(params)
 
-    def compute(self, state: np.ndarray, angle_input: float = 0.0) -> np.ndarray:
+    def compute(self, state: State, angle_input: float = 0.0) -> np.ndarray:
         """Compute the lift and drag coefficients for the rudder.
 
         Args:
@@ -36,17 +37,17 @@ class BasicRudder(Foil):
 
         # compute dynamic pressure
         rho = self.p.get("water_density", 1000.0)  # kg/m^3
-        u = state[3]
-        v = state[4]
-        V = np.hypot(u, v)
-        q = 0.5 * rho * V**2
+        u = state.u
+        v = state.v
+        v = np.hypot(u, v)
+        q = 0.5 * rho * v**2
 
         # compute forces
-        S = self.p.get("area", 1.0)  # m^2
-        L = CL * q * S
-        D = CD * q * S
+        s = self.p.get("area", 1.0)  # m^2
+        lift = cl * q * s
+        drag = cd * q * s
 
         # return forces in rudder frame (X forward, Y starboard)
-        Fx = -D
-        Fy = -L
-        return np.array([Fx, Fy])
+        fx = -drag
+        fy = -lift
+        return np.array([fx, fy])

@@ -6,6 +6,7 @@ import numpy as np
 import yaml
 
 from sailbench.foils.basic_keel import BasicKeel
+from sailbench.models.model import State
 
 CONFIG_PATH = "configs/"
 
@@ -32,7 +33,7 @@ class SailboatHub:
         self.components = [self.keel]
 
     # --- Physics core ----------------------------------------
-    def _forces(self, state: np.ndarray) -> tuple[float, float, float]:
+    def _forces(self, state: State) -> tuple[float, float, float]:
         """Compute total body-frame forces and yaw moment."""
         fx_total = 0.0
         fy_total = 0.0

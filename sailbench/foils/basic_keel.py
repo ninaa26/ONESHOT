@@ -6,6 +6,7 @@ import numpy as np
 
 import sailbench.utils.coordinate_helper as utils
 from sailbench.models.foil import Foil
+from sailbench.models.model import State
 
 
 class BasicKeel(Foil):
@@ -20,13 +21,13 @@ class BasicKeel(Foil):
         """
         super().__init__(params)
 
-    def compute(self, state: np.ndarray) -> np.ndarray:
+    def compute(self, state: State) -> np.ndarray:
         """Compute the lift and drag coefficients for the keel.
 
         Assume the keel is parallel to the axis of the boat.
 
         Args:
-            state (np.ndarray): Current boat state.
+            state (State): Current boat state.
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within keel frame)

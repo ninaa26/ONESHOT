@@ -7,25 +7,20 @@ import numpy as np
 
 
 @dataclass
-class Pose:
-    x: float  # global x position
-    y: float  # global y position
-    c: float  # cos of global heading angle
-    s: float  # sin of global heading angle
-    u: float  # body-frame x velocity
-    v: float  # body-frame y velocity
-    r: float  # body-frame angular velocity
+class State:
+    """State class."""
+
+    x:float
+    y:float
+    psi:tuple[float,float] # angle is cosine (tuple[0]) + i*sine (tuple[1])
+    u: float
+    v: float
+    r: float
 
     @property
-    def heading(self) -> float:
-        """Return the global heading angle in degrees."""
-        return float(np.degrees(np.arctan2(self.s, self.c)))
-
-    @property
-    def velocity_magnitude(self) -> float:
-        """Return the body-frame velocity magnitude."""
-        return float(np.sqrt(self.u**2 + self.v**2))
-
+    def get_heading(self) -> float:
+        """Returns angle in degress."""
+        return float(np.degrees(np.arctan(self.psi[1]/self.psi[0])))
 
 class Model(ABC):
     """Base class for physics models."""
@@ -35,7 +30,7 @@ class Model(ABC):
         self.p = params
 
     @abstractmethod
-    def compute(self, state: np.ndarray) -> np.ndarray:
+    def compute(self, state: State) -> np.ndarray:
         """Compute the outputted force vector produced by the component.
 
         Args:
