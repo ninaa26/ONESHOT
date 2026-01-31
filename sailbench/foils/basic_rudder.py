@@ -1,6 +1,7 @@
 """Basic rudder foil model."""
 
 import numpy as np
+
 from sailbench.models.foil import Foil
 
 
