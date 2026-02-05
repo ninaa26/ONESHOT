@@ -10,9 +10,9 @@ import numpy as np
 class State:
     """State class."""
 
-    x:float
-    y:float
-    psi:tuple[float,float] # angle is cosine (tuple[0]) + i*sine (tuple[1])
+    x: float
+    y: float
+    psi: tuple[float, float]  # angle is cosine (tuple[0]) + i*sine (tuple[1])
     u: float
     v: float
     r: float
@@ -20,7 +20,45 @@ class State:
     @property
     def get_heading(self) -> float:
         """Returns angle in degress."""
-        return float(np.degrees(np.arctan(self.psi[1]/self.psi[0])))
+        return float(np.degrees(np.arctan2(self.psi[1], self.psi[0])))
+
+    def to_array(self) -> np.ndarray:
+        """Convert State to array."""
+        return np.array(
+            [
+                self.x,
+                self.y,
+                self.psi[0],
+                self.psi[1],
+                self.u,
+                self.v,
+                self.r,
+            ],
+            dtype=float,
+        )
+
+    @classmethod
+    def from_array(cls, arr: np.ndarray) -> "State":
+        """Create State from array."""
+        x, y, c, s, u, v, r = arr
+
+        # normalize heading pair (important for numerical drift)
+        norm = float(np.hypot(c, s))
+        if norm == 0:
+            c, s = 1.0, 0.0
+        else:
+            c /= norm
+            s /= norm
+
+        return cls(
+            x=float(x),
+            y=float(y),
+            psi=(float(c), float(s)),
+            u=float(u),
+            v=float(v),
+            r=float(r),
+        )
+
 
 class Model(ABC):
     """Base class for physics models."""
