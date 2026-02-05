@@ -2,23 +2,23 @@
 
 import numpy as np
 
-from sailbench.models.model import Model
+from sailbench.models.model import Model, State
 
 
 class LinearHydroModel(Model):
     """Linear viscous drag hydrodynamic hull model."""
 
-    def compute(self, state: np.ndarray) -> np.ndarray:
+    def compute(self, state: State) -> np.ndarray:
         """Compute forces on hull model.
 
         Args:
-            state (np.ndarray): State vector containing [u, v, r]
+            state (State): State object
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within component frame)
 
         """
-        u, v, r = state[:3]
+        u, v, r = state.u, state.v, state.r
 
         xu1 = float(self.p.get("Xu1", 0.0))  # [N·s/m]
         yv1 = float(self.p.get("Yv1", 0.0))  # [N·s/m]

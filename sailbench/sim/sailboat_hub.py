@@ -1,5 +1,6 @@
 """Compose a simulated sailboat."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,40 @@ class SailboatHub:
         """Instantiate boat components from configs."""
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.keel]
+
+    def step(self, state: State, dt: float, solver: Callable) -> State:
+        """Sail the boat."""
+
+        def dynamics(state: State) -> np.ndarray:
+            # --- forces from all components ---
+            fx, fy, mz = self._forces(state)
+
+            m = self.boat_cfg["mass"]
+            iz = self.boat_cfg["inertia_z"]
+
+            c = state.psi[0]  # Heading cosine term
+            s = state.psi[1]  # Heading sine term
+
+            # --- body-frame accelerations ---
+            du = fx / m + state.r * state.v
+            dv = fy / m - state.r * state.u
+            dr = mz / iz
+
+            # --- world-frame position rates ---
+            dx = state.u * c - state.v * s
+            dy = state.u * s + state.v * c
+
+            # --- heading representation rates ---
+            dc = -state.r * s
+            ds = state.r * c
+
+            return np.array([dx, dy, dc, ds, du, dv, dr])
+
+        # --- integrate ---
+        next_arr = solver(dynamics, state.to_array(), dt)
+
+        # --- rebuild state ---
+        return State.from_array(next_arr)
 
     # --- Physics core ----------------------------------------
     def _forces(self, state: State) -> tuple[float, float, float]:
