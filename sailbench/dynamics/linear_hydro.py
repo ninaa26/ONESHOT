@@ -18,6 +18,7 @@ class LinearHydroModel(Model):
             np.ndarray: Returns X and Y forces in newtons (within component frame)
 
         """
+        # TODO: Need to translate velocity from global to local frame
         u, v, r = state.u, state.v, state.r
 
         xu1 = float(self.p.get("Xu1", 0.0))  # [N·s/m]
