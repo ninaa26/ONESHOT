@@ -39,7 +39,6 @@ class BasicKeel(Foil):
 
         # get lift and drag coefficients
         cl, cd = self.cl_cd(np.radians(aoa), re=self.p.get("re", 1e5))
-        print(f"local_track: {local_track:.2f} deg, CL: {cl:.4f}, CD: {cd:.4f}")
         # compute dynamic pressure
         rho = self.p.get("water_density", 1000.0)  # kg/m^3
         v = utils.get_velocity_magnitude(state)
@@ -48,8 +47,6 @@ class BasicKeel(Foil):
         s = self.p.get("area", 1.0)  # m^2
         lift = cl * q * s
         drag = cd * q * s
-        print(f"Lift: {lift:.2f} N, Drag: {drag:.2f} N")
         # Fluid-frame force
         f_fluid = np.array([-drag, lift])
-        print(f"Fluid-frame forces: {f_fluid}")
         return utils.fluid_frame_to_body_frame(f_fluid, local_track)

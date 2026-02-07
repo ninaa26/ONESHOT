@@ -47,8 +47,6 @@ class TestKeel:
         [
             (1, 0.2),
             (1, -0.2),
-            # (-5.0, 5.0),
-            # (-5.0, -5.0),
         ],
     )
     def test_quadrant_flow(self, keel: BasicKeel, u: float, v: float) -> None:
