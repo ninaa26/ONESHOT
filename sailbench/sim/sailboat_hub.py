@@ -36,28 +36,29 @@ class SailboatHub:
     def step(self, state: State, dt: float, solver: Callable) -> State:
         """Sail the boat."""
 
-        def dynamics(state: State) -> np.ndarray:
-            # --- forces from all components ---
-            fx, fy, mz = self._forces(state)
+        def dynamics(arr: np.ndarray) -> np.ndarray:
+            """State derivative; arr = [x, y, c, s, u, v, r]."""
+            state_vec = State.from_array(arr)
+            fx, fy, mz = self._forces(state_vec)
 
-            m = self.boat_cfg["mass"]
-            iz = self.boat_cfg["inertia_z"]
+            m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
+            iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 10.0))
 
-            c = state.psi[0]  # Heading cosine term
-            s = state.psi[1]  # Heading sine term
+            c, s = arr[2], arr[3]  # Heading cosine, sine
+            u, v, r = arr[4], arr[5], arr[6]
 
             # --- body-frame accelerations ---
-            du = fx / m + state.r * state.v
-            dv = fy / m - state.r * state.u
+            du = fx / m + r * v
+            dv = fy / m - r * u
             dr = mz / iz
 
             # --- world-frame position rates ---
-            dx = state.u * c - state.v * s
-            dy = state.u * s + state.v * c
+            dx = u * c - v * s
+            dy = u * s + v * c
 
             # --- heading representation rates ---
-            dc = -state.r * s
-            ds = state.r * c
+            dc = -r * s
+            ds = r * c
 
             return np.array([dx, dy, dc, ds, du, dv, dr])
 
@@ -81,8 +82,10 @@ class SailboatHub:
             fx_total += fx
             fy_total += fy
 
-            # Moment about CG (2D cross product)
-            mz = component.p["x_pos"] * fy - component.p["y_pos"] * fx
+            # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
+            x_pos = component.p.get("x_pos", component.p.get("x_k", component.p.get("x_r", 0.0)))
+            y_pos = component.p.get("y_pos", 0.0)
+            mz = x_pos * fy - y_pos * fx
             mz_total += mz
 
         return fx_total, fy_total, mz_total

@@ -36,6 +36,7 @@ boat:
 
 # ─────────────────────────── Keel Foil ─────────────────────────────
 keel:
+  model_type: keel       # for foil cache naming
   rho_water: 1025
   S_k:       0.15        # [m²]    planform area (fin + bulb strut)
   x_k:      -0.25        # [m]     keel force arm (aft, negative)

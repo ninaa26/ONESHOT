@@ -34,12 +34,12 @@ class Foil(Model):
 
         # generate the Airfoil
         self.foil = Airfoil(name=self.airfoil_name)
-        alphas_deg = np.arange(self.p.get("alpha_min"), self.p.get("alpha_max"), step=1)  # type: np.ndarray
+        self.alphas_deg = np.arange(self.p.get("alpha_min"), self.p.get("alpha_max"), step=1)  # type: np.ndarray
         # build or load polar
         if not self.cache_file.exists():
             # First time: run XFoil and write cache
             self.foil.generate_polars(
-                alphas=alphas_deg,
+                alphas=self.alphas_deg,
                 Res=np.array(self.p.get("res", 1e5)),
                 cache_filename=str(self.cache_file),
             )

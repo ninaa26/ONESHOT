@@ -1,6 +1,7 @@
 """Helper functions for coordinate transforms."""
 
 import numpy as np
+
 from sailbench.models.model import State
 
 
@@ -27,12 +28,16 @@ def get_local_track(state: State) -> float:
         state (State): Current body state of the sailboat -> [x, y, psi, u, v, r]
 
     Returns:
-        float: Boat local track angle in degrees from 0 to 360.
+        float: Boat local track angle in degrees from -180 to 180.
 
     """
-    psi = state.get_heading
-    track_rad = get_global_track(state) - psi
-    return float(np.degrees(track_rad) + 360) % 360
+    global_deg = get_global_track(state)
+    psi_deg = state.get_heading
+
+    diff = global_deg - psi_deg
+
+    # wrap to [-180, 180]
+    return ((diff + 180.0) % 360.0) - 180.0
 
 
 def get_velocity_magnitude(state: State) -> float:
