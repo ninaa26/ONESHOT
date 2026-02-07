@@ -6,6 +6,14 @@
 
 ### Prerequisites
 - Python 3.12+
+- (Optional )XFoil (See below, XFoil is only necessary for generating polars)
+  
+### XFoil Integration (Instructions for Windows)
+If you are developing new models with new foil types / characteristics, you may run into an issue with Aerosandbox generating new polars:
+
+```Running XFoil to generate polars for Airfoil 'NACA0012'::   0%|          | 0/1 [00:00<?, ?it/s]```
+
+This is because Aerosandbox requires the XFoil software to generate polars, to install head to this link: https://web.mit.edu/drela/Public/web/xfoil/ and download XFOIL6.99.zip. You then must add your XFoil folder to PATH.
 
 ### Setup Instructions
 
