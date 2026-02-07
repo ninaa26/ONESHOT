@@ -51,4 +51,5 @@ class BasicKeel(Foil):
         print(f"Lift: {lift:.2f} N, Drag: {drag:.2f} N")
         # Fluid-frame force
         f_fluid = np.array([-drag, lift])
+        print(f"Fluid-frame forces: {f_fluid}")
         return utils.fluid_frame_to_body_frame(f_fluid, local_track)
