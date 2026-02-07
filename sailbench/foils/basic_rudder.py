@@ -2,6 +2,7 @@
 
 import numpy as np
 
+import sailbench.utils.coordinate_helper as utils
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
 
@@ -30,7 +31,19 @@ class BasicRudder(Foil):
 
         """
         # get angle of attack in radians
-        alpha_rad = np.radians(angle_input)
+        # alpha_rad = np.radians(angle_input)
+        global_track_vector = np.ndarray(state.u, state.v)
+        local_track_vector = utils.global_to_local(global_track_vector)
+
+
+        #Rotation matrix: local to rudder frame
+        rotate_into_rudder = np.array([
+        [np.cosine(np.radians(angle_input)), np.sine(np.radians(angle_input))],
+        [-1* np.sine(np.radians(angle_input)), np.cosine(np.radians(angle_input))],
+        ])
+
+        rudder_frame_track = local_track_vector @ rotate_into_rudder
+
 
         # get lift and drag coefficients
         cl, cd = self.cl_cd(alpha_rad, re=self.p.get("re", 1e5))
@@ -44,10 +57,13 @@ class BasicRudder(Foil):
 
         # compute forces
         s = self.p.get("area", 1.0)  # m^2
+        cl, cd = self.cl_cd(np.radians(np.arctan2(rudder_frame_track[1], rudder_frame_track[0])), re=self.p.get("re", 1e5)) 
         lift = cl * q * s
         drag = cd * q * s
 
         # return forces in rudder frame (X forward, Y starboard)
+        #TODO : convert back to local frame
         fx = -drag
         fy = -lift
+
         return np.array([fx, fy])
