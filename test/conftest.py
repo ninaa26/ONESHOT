@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from sailbench.foils.basic_keel import BasicKeel
+from sailbench.foils.basic_sail import BasicSail
 
 
 @pytest.fixture
@@ -21,3 +22,9 @@ def keel(config: dict[str, Any]) -> BasicKeel:
     """Generate a BasicKeel instance for testing."""
     keel_cfg = config["keel"]
     return BasicKeel(keel_cfg)
+
+@pytest.fixture
+def sail(config: dict[str, Any]) -> BasicSail:
+    """Create a basic sail with fixed wind."""
+    sail_cfg = config["sail"]
+    return BasicSail(sail_cfg)

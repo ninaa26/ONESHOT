@@ -86,3 +86,10 @@ def global_to_local(vec_global: np.ndarray, psi: tuple[float, float]) -> np.ndar
     )
 
     return np.ndarray(rot_t @ vec_global)
+
+def wind_to_vector(speed, angle_deg):
+    """Convert wind speed and angle to vector components."""
+    angle_rad = math.radians(angle_deg)
+    x = speed * math.cos(angle_rad)
+    y = speed * math.sin(angle_rad)
+    return x, y
