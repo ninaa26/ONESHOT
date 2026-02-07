@@ -10,12 +10,12 @@ import numpy as np
 class State:
     """State class."""
 
-    x: float
-    y: float
-    psi: tuple[float, float]  # angle is cosine (tuple[0]) + i*sine (tuple[1])
-    u: float
-    v: float
-    r: float
+    x:float
+    y:float
+    psi:tuple[float,float] # angle is cosine (tuple[0]) + i*sine (tuple[1])
+    u: float # x velocity in global frame
+    v: float # y velocity in global frame
+    r: float # angular velocity
 
     @property
     def get_heading(self) -> float:

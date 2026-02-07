@@ -71,3 +71,14 @@ def fluid_frame_to_body_frame(forces_fluid: np.ndarray, local_track_deg: float) 
         [[np.cos(local_track_rad), -np.sin(local_track_rad)], [np.sin(local_track_rad), np.cos(local_track_rad)]]
     )
     return np.asarray(rotation_matrix @ forces_fluid, dtype=np.float64)
+
+def global_to_local(vec_global: np.ndarray, psi: tuple[float, float]) -> np.ndarray:
+    """Rotate vector from global frame to body/local frame."""
+    c, s = psi
+
+    rot_t = np.array([
+    [c, s],
+    [-s, c],
+    ])
+
+    return np.ndarray (rot_t @ vec_global)
