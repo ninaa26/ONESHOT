@@ -18,6 +18,11 @@ class Transform2D:
         """Return 2x2 rotation matrix."""
         return np.array([[self.c, -self.s], [self.s, self.c]], dtype=float)
 
+    @staticmethod
+    def identity() -> Transform2D:
+        """Return identity transform."""
+        return Transform2D(0.0, 0.0, 1.0, 0.0)
+
 
 class TFTree2D:
     """Simple 2D transform tree."""
@@ -25,6 +30,11 @@ class TFTree2D:
     def __init__(self) -> None:
         self.transforms: Dict[str, Transform2D] = {}
         self.parents: Dict[str, Optional[str]] = {}
+        self.root: str = "world"
+
+    def add_root(self, name: str) -> None:
+        """Add a root frame."""
+        self.root = name
 
     def add_frame(
         self,
@@ -54,10 +64,16 @@ class TFTree2D:
 
     def get_to_root(self, name: str) -> Transform2D:
         """Get transform from frame to root."""
+        if name == self.root:
+            return Transform2D.identity()
+
         tf = self.transforms[name]
         parent = self.parents[name]
 
         while parent is not None:
+            if parent == self.root:
+                break
+
             parent_tf = self.transforms[parent]
             tf = self._compose(parent_tf, tf)
             parent = self.parents[parent]
