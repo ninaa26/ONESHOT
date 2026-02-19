@@ -11,6 +11,7 @@ from sailbench.foils.basic_sail import BasicSail
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 
 @pytest.fixture
@@ -36,7 +37,6 @@ def keel(config: dict[str, Any]) -> BasicKeel:
     """Generate a BasicKeel instance for testing."""
     keel_cfg = config["keel"]
     return BasicKeel(keel_cfg)
-
 
 @pytest.fixture
 def sail(config: dict[str, Any]) -> BasicSail:
