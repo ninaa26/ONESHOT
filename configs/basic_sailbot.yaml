@@ -6,6 +6,8 @@ keel:
   alpha_max: 25
   res: [1e5]
   area: 0.5    # [m²]    planform area (fin + bulb strut)
+  x_pos: 0.0  # [m]     x position relative to boat center of rotation
+  y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
 sail:
   airfoil_name: NACA0012

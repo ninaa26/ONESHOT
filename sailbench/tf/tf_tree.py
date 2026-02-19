@@ -1,80 +1,75 @@
-"""Simple 2D TF tree implementation."""
+from __future__ import annotations
 
 from dataclasses import dataclass
 
 import numpy as np
 
 
-@dataclass(slots=True)
+@dataclass
 class Transform2D:
     """Rigid transform in 2D."""
 
     x: float
     y: float
-    theta: float  # radians
+    c: float  # cos(theta)
+    s: float  # sin(theta)
 
     def rotation_matrix(self) -> np.ndarray:
         """Return 2x2 rotation matrix."""
-        c = float(np.cos(self.theta))
-        s = float(np.sin(self.theta))
-        return np.array([[c, -s], [s, c]], dtype=np.float64)
-
-    def inverse(self) -> "Transform2D":
-        """Return inverse transform."""
-        r = self.rotation_matrix().T
-        t = -r @ np.array([self.x, self.y], dtype=np.float64)
-        theta = -self.theta
-        return Transform2D(float(t[0]), float(t[1]), theta)
-
-    def __matmul__(self, other: "Transform2D") -> "Transform2D":
-        """Compose transforms."""
-        r = self.rotation_matrix()
-        t = r @ np.array([other.x, other.y], dtype=np.float64)
-        return Transform2D(
-            x=float(self.x + t[0]),
-            y=float(self.y + t[1]),
-            theta=float(self.theta + other.theta),
-        )
+        return np.array([[self.c, -self.s], [self.s, self.c]], dtype=float)
 
 
 class TFTree2D:
-    """Simple parent-child TF tree."""
+    """Simple 2D transform tree."""
 
     def __init__(self) -> None:
-        self._edges: Dict[str, Tuple[str, Transform2D]] = {}
+        self.transforms: Dict[str, Transform2D] = {}
+        self.parents: Dict[str, Optional[str]] = {}
 
-    def set_transform(
+    def add_frame(
         self,
-        parent: str,
-        child: str,
+        name: str,
+        parent: Optional[str],
         transform: Transform2D,
     ) -> None:
-        """Register transform parent→child."""
-        self._edges[child] = (parent, transform)
+        """Add or update a frame. Transform is from parent -> child."""
+        self.transforms[name] = transform
+        self.parents[name] = parent
 
-    def _to_root(self, frame: str) -> Transform2D:
-        t = Transform2D(0.0, 0.0, 0.0)
-        current = frame
-
-        while current in self._edges:
-            parent, edge = self._edges[current]
-            t = edge @ t
-            current = parent
-
-        return t
-
-    def lookup(self, from_frame: str, to_frame: str) -> Transform2D:
-        """Get transform from_frame → to_frame."""
-        t_from = self._to_root(from_frame)
-        t_to = self._to_root(to_frame)
-        return t_to.inverse() @ t_from
-
-    def rotate_vector(
+    def vector_to_frame(
         self,
         vec: np.ndarray,
         from_frame: str,
         to_frame: str,
     ) -> np.ndarray:
         """Rotate vector between frames (no translation)."""
-        t = self.lookup(from_frame, to_frame)
-        return t.rotation_matrix() @ vec
+        tf_from = self.get_to_root(from_frame)
+        tf_to = self.get_to_root(to_frame)
+
+        r_from = tf_from.rotation_matrix()
+        r_to = tf_to.rotation_matrix()
+
+        world_vec = r_from @ vec
+        return np.asarray(r_to.T @ world_vec, dtype=float)
+
+    def get_to_root(self, name: str) -> Transform2D:
+        """Get transform from frame to root."""
+        tf = self.transforms[name]
+        parent = self.parents[name]
+
+        while parent is not None:
+            parent_tf = self.transforms[parent]
+            tf = self._compose(parent_tf, tf)
+            parent = self.parents[parent]
+
+        return tf
+
+    def _compose(self, a: Transform2D, b: Transform2D) -> Transform2D:
+        """Return transform a ∘ b."""
+        r = a.rotation_matrix()
+        t = r @ np.array([b.x, b.y]) + np.array([a.x, a.y])
+
+        c = a.c * b.c - a.s * b.s
+        s = a.s * b.c + a.c * b.s
+
+        return Transform2D(t[0], t[1], c, s)
