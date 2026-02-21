@@ -39,17 +39,7 @@ class BasicRudder(Foil):
                                 [state.v]])
         local_track_vector = utils.global_to_local(global_track_vector, state.psi)
 
-        """
-        #Rotation matrix: local to rudder frame
-        rotate_into_rudder = np.array([
-        [np.cos(np.radians(angle_input)), -1 * np.sin(np.radians(angle_input))],
-        [np.sin(np.radians(angle_input)), np.cos(np.radians(angle_input))],
-        ])
-        """
-
-
         #angle of attack is angle of vector of negative track in rudder frame
-        #rudder_frame_track = rotate_into_rudder @ local_track_vector
         rudder_frame_track = tf_tree.vector_to_frame(local_track_vector, "boat", "rudder")
         angle_of_attack = -1*np.arctan2(rudder_frame_track[1, 0] , rudder_frame_track[0, 0])
 
@@ -77,14 +67,6 @@ class BasicRudder(Foil):
             [np.cos(-1 * angle_of_attack), np.sin(-1 * angle_of_attack)],
         [-1* np.sin(-1 * angle_of_attack), np.cos(-1 * angle_of_attack)],
         ])
-
-        """
-        # convert rudder frame to local frame
-        rotate_into_local = np.array([
-        [np.cos(np.radians(angle_input)), np.sin(np.radians(angle_input))],
-        [-1* np.sin(np.radians(angle_input)), np.cos(np.radians(angle_input))],
-        ])
-        """
 
         # rotate lift and drag fluid --> rudder --> local frame
         f_prime = rotate_into_rudder @ np.array([[fx],[fy]])

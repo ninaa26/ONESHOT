@@ -26,3 +26,13 @@ rudder:
   alpha_max: 25
   res: [1e5]
   area: 0.3    # [m²]    planform area (fin + bulb strut)
+
+hull:
+  Xu1: 12.0
+  Yv1: 60.0
+  Nr1: 200.0
+
+quadratic_hull:
+  Xu2: 8.0
+  Yv2: 120.0
+  Nr2: 250.0

@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
 from sailbench.utils.coordinate_helper import get_local_track
 
@@ -9,7 +10,7 @@ from sailbench.utils.coordinate_helper import get_local_track
 class LinearHydroModel(Model):
     """Linear viscous drag hydrodynamic hull model."""
 
-    def compute(self, state: State) -> np.ndarray:
+    def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute forces on hull model.
 
         Args:

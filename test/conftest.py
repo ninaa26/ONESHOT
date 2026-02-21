@@ -10,8 +10,7 @@ from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 from sailbench.foils.basic_rudder import BasicRudder
-from sailbench.foils.basic_sail import BasicSail
-from sailbench.tf.tf_tree import TFTree2D, Transform2D
+from sailbench.dynamics.linear_hydro import LinearHydroModel
 
 
 @pytest.fixture
@@ -50,3 +49,7 @@ def rudder(config: dict[str, Any]) -> BasicRudder:
     """Generate a BasicRudder instance for testing."""
     rudder_cfg = config["rudder"]
     return BasicRudder(rudder_cfg)
+@pytest.fixture
+def hull(config: dict[str,Any]) -> LinearHydroModel:
+    hull_cfg = config["hull"]
+    return LinearHydroModel(hull_cfg)
