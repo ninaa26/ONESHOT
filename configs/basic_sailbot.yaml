@@ -1,3 +1,10 @@
+simulation:
+  dt: 0.02  # [s] solver step
+
+boat:
+  mass: 27.0       # [kg]
+  inertia_z: 10.0  # [kg·m²] yaw inertia
+
 # Keel foil
 keel:
   airfoil_name: NACA0012
