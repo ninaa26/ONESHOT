@@ -10,6 +10,8 @@ from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_sail import BasicSail
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 
 @pytest.fixture
@@ -26,6 +28,8 @@ def tf_tree() -> TFTree2D:
     tf.add_frame(name="boat", parent="world", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     tf.add_frame(name="keel", parent="boat", transform=Transform2D(x=0.0, y=-0.5, c=1.0, s=0.0))
     tf.add_frame(name="fluid", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
+    tf.add_frame(name="rudder", parent="boat", transform = Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
+    tf.add_frame(name="sail", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     return tf
 
 
@@ -35,12 +39,12 @@ def keel(config: dict[str, Any]) -> BasicKeel:
     keel_cfg = config["keel"]
     return BasicKeel(keel_cfg)
 
-
 @pytest.fixture
 def sail(config: dict[str, Any]) -> BasicSail:
     """Create a basic sail with fixed wind."""
     sail_cfg = config["sail"]
     return BasicSail(sail_cfg)
+    
 @pytest.fixture
 def rudder(config: dict[str, Any]) -> BasicRudder:
     """Generate a BasicRudder instance for testing."""
