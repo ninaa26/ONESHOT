@@ -4,10 +4,10 @@ from typing import Any
 
 import numpy as np
 
-from sailbench.tf.tf_tree import TFTree2D
 import sailbench.utils.coordinate_helper as utils
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
+from sailbench.tf.tf_tree import TFTree2D
 
 
 class BasicKeel(Foil):

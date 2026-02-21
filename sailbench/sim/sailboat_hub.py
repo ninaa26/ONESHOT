@@ -53,7 +53,8 @@ class SailboatHub:
             transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # fluid frame starts aligned with boat frame
         )
 
-        # Instantiate fixed component frames in tf tree
+        # Instantiate component frames in tf tree
+        # Keel is fixed
         self.tf.add_frame(
             name="keel",
             parent="boat",
@@ -77,7 +78,19 @@ class SailboatHub:
             )
         )
 
-    def step(self, state: State, dt: float, solver: Callable, rudder_angle: float = 0.0) -> State:
+        # Sail is updated per step
+        self.tf.add_frame(
+            name="sail",
+            parent="boat",
+            transform=Transform2D(
+                x=self.sail_cfg.get("x_pos", 0.0), 
+                y=self.sail_cfg.get("y_pos", 0.0),
+                c=1.0, 
+                s=0.0
+        ),
+    )
+
+    def step(self, state: State, dt: float, solver: Callable, sail_angle: float = 0.0) -> State:
         """Sail the boat."""
 
         def dynamics(arr: np.ndarray) -> np.ndarray:
@@ -111,6 +124,18 @@ class SailboatHub:
             name="boat",
             parent="world",
             transform=Transform2D(x=next_arr[0], y=next_arr[1], c=next_arr[2], s=next_arr[3]),
+        )
+
+        # update sail frame with new sail angle
+        self.tf.add_frame(
+            name="sail",
+            parent="boat",
+            transform=Transform2D(
+                x=self.sail_cfg.get("x_pos", 0.0), 
+                y=self.sail_cfg.get("y_pos", 0.0), 
+                c=np.cos(sail_angle), 
+                s=np.sin(sail_angle)
+            ),
         )
 
         local_track = self.tf.vector_to_frame(np.array([next_arr[4], next_arr[5]]), "world", "boat")

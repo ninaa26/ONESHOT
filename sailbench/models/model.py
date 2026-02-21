@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from sailbench.tf.tf_tree import TFTree2D
+
 
 @dataclass
 class State:
