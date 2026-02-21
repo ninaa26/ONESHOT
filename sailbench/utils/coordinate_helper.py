@@ -39,6 +39,12 @@ def get_local_track(state: State) -> float:
     # wrap to [-180, 180]
     return ((diff + 180.0) % 360.0) - 180.0
 
+def get_local_track_vector(state: State) -> np.ndarray:
+    """Return unit track vector in boat frame."""
+    vec = np.array([state.u, state.v], dtype=np.float64)
+    mag = np.linalg.norm(vec)
+
+    return vec / mag
 
 def get_velocity_magnitude(state: State) -> float:
     """Get the boat's velocity magnitude.
@@ -86,3 +92,11 @@ def global_to_local(vec_global: np.ndarray, psi: tuple[float, float]) -> np.ndar
     )
 
     return np.ndarray(rot_t @ vec_global)
+
+def wind_to_vector(speed, angle_deg):
+    """Convert wind speed and angle to vector components."""
+    angle_rad = math.radians(angle_deg)
+    x = speed * math.cos(angle_rad)
+    y = speed * math.sin(angle_rad)
+    return x, y
+

@@ -8,6 +8,7 @@ import yaml
 
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.models.model import State
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 CONFIG_PATH = "configs/"
 
@@ -26,12 +27,43 @@ class SailboatHub:
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
 
+        self.tf = TFTree2D()
+
         self.boat_factory()
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.keel]
+
+        self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
+        self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 10.0))
+
+        # TODO: Change starting position and heading from config
+        self.tf.add_frame(
+            name="boat",
+            parent="world",
+            transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # boat frame starts aligned with world frame
+        )
+
+        # How the boat is traveling through the water (local track)
+        self.tf.add_frame(
+            name="fluid",
+            parent="boat",
+            transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # fluid frame starts aligned with boat frame
+        )
+
+        # Instantiate fixed component frames in tf tree
+        self.tf.add_frame(
+            name="keel",
+            parent="boat",
+            transform=Transform2D(
+                x=self.keel_cfg.get("x_pos", 0.0),
+                y=self.keel_cfg.get("y_pos", 0.0),
+                c=1,  # Keel is inline with boat axis
+                s=0,
+            ),
+        )
 
     def step(self, state: State, dt: float, solver: Callable) -> State:
         """Sail the boat."""
@@ -41,16 +73,13 @@ class SailboatHub:
             state_vec = State.from_array(arr)
             fx, fy, mz = self._forces(state_vec)
 
-            m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
-            iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 10.0))
-
             c, s = arr[2], arr[3]  # Heading cosine, sine
             u, v, r = arr[4], arr[5], arr[6]
 
             # --- body-frame accelerations ---
-            du = fx / m + r * v
-            dv = fy / m - r * u
-            dr = mz / iz
+            du = fx / self.m + r * v
+            dv = fy / self.m - r * u
+            dr = mz / self.iz
 
             # --- world-frame position rates ---
             dx = u * c - v * s
@@ -65,6 +94,21 @@ class SailboatHub:
         # --- integrate ---
         next_arr = solver(dynamics, state.to_array(), dt)
 
+        # --- update tf tree with dynamic components ---
+        self.tf.add_frame(
+            name="boat",
+            parent="world",
+            transform=Transform2D(x=next_arr[0], y=next_arr[1], c=next_arr[2], s=next_arr[3]),
+        )
+
+        local_track = self.tf.vector_to_frame(np.array([next_arr[4], next_arr[5]]), "world", "boat")
+        c, s = (local_track / np.linalg.norm(local_track)) if np.linalg.norm(local_track) > 1e-6 else (1.0, 0.0)
+        self.tf.add_frame(
+            name="fluid",
+            parent="boat",
+            transform=Transform2D(x=0.0, y=0.0, c=c, s=s),
+        )
+
         # --- rebuild state ---
         return State.from_array(next_arr)
 
@@ -76,14 +120,14 @@ class SailboatHub:
         mz_total = 0.0
 
         for component in self.components:
-            fx, fy = component.compute(state)
+            fx, fy = component.compute(state, self.tf)
 
             # Sum forces
             fx_total += fx
             fy_total += fy
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
-            x_pos = component.p.get("x_pos", component.p.get("x_k", component.p.get("x_r", 0.0)))
+            x_pos = component.p.get("x_pos", 0.0)
             y_pos = component.p.get("y_pos", 0.0)
             mz = x_pos * fy - y_pos * fx
             mz_total += mz
