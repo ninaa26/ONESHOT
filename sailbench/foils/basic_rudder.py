@@ -1,5 +1,7 @@
 """Basic rudder foil model."""
 
+from typing import Any
+
 import numpy as np
 
 import sailbench.utils.coordinate_helper as utils
@@ -10,7 +12,7 @@ from sailbench.models.model import State
 class BasicRudder(Foil):
     """Basic rudder foil model."""
 
-    def __init__(self, params: dict) -> None:
+    def __init__(self, params: dict[str,Any]) -> None:
         """Initialize the BasicRudder model.
 
         Args:
@@ -34,8 +36,6 @@ class BasicRudder(Foil):
         global_track_vector = np.array([[state.u],
                                 [state.v]])
         local_track_vector = utils.global_to_local(global_track_vector, state.psi)
-        
-
 
         #Rotation matrix: local to rudder frame
         rotate_into_rudder = np.array([
@@ -43,13 +43,13 @@ class BasicRudder(Foil):
         [np.sin(np.radians(angle_input)), np.cos(np.radians(angle_input))],
         ])
 
-        rudder_frame_track = rotate_into_rudder @ local_track_vector
 
-        #angle of attack is angle of vector of track in rudder frame
-        angle_of_track = np.arctan2(rudder_frame_track[1, 0] , rudder_frame_track[0, 0])
-        
+        #angle of attack is angle of vector of negative track in rudder frame
+        rudder_frame_track = rotate_into_rudder @ local_track_vector
+        angle_of_attack = -1*np.arctan2(rudder_frame_track[1, 0] , rudder_frame_track[0, 0])
+
         # get lift and drag coefficients
-        cl, cd = self.cl_cd(angle_of_track, re=self.p.get("re", 1e5))
+        cl, cd = self.cl_cd(angle_of_attack, re=self.p.get("re", 1e5))
 
         # compute dynamic pressure
         rho = self.p.get("water_density", 1000.0)  # kg/m^3
@@ -60,18 +60,18 @@ class BasicRudder(Foil):
 
         # compute forces
         s = self.p.get("area", 1.0)  # m^2
-    
+
         drag = cd * q * s
         lift = cl * q * s
 
-        # return forces in fluid frame (X forward, Y starboard)
         fx = -drag
         fy = lift
 
         rotate_into_rudder = np.array([
-            [np.cos(angle_of_track), np.sin(angle_of_track)],
-        [-1* np.sin(angle_of_track), np.cos(angle_of_track)],
+            [np.cos(-1 * angle_of_attack), np.sin(-1 * angle_of_attack)],
+        [-1* np.sin(-1 * angle_of_attack), np.cos(-1 * angle_of_attack)],
         ])
+
         # convert rudder frame to local frame
         rotate_into_local = np.array([
         [np.cos(np.radians(angle_input)), np.sin(np.radians(angle_input))],
@@ -79,6 +79,9 @@ class BasicRudder(Foil):
         ])
 
         # rotate lift and drag fluid --> rudder --> local frame
-        f_prime = (rotate_into_local) @ (rotate_into_rudder) @ np.array([[fx],[fy]])
+        f_prime = rotate_into_rudder @ np.array([[fx],[fy]])
 
-        return np.asarray([f_prime[0,0], f_prime[1,0]])
+        f_prime2 = rotate_into_local @ f_prime
+
+
+        return np.asarray([f_prime2[0,0], f_prime2[1,0]])

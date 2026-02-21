@@ -85,4 +85,4 @@ def global_to_local(vec_global: np.ndarray, psi: tuple[float, float]) -> np.ndar
         ]
     )
 
-    return np.ndarray(rot_t @ vec_global)
+    return rot_t @ vec_global

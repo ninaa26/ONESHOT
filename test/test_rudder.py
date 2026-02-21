@@ -45,12 +45,12 @@ class TestRudder:
     def test_angle90_print_test(self, rudder:BasicRudder) -> None:
         """Rudder set at 90 degrees."""
         state = make_state(u = 5.0)
-        fx, fy = rudder.compute(state, 0)
-        print ("fx: " + str(fx) + ", fy: " + str(fy))
+        fx, fy = rudder.compute(state, 25)
+        #print ("fx: " + str(fx) + ", fy: " + str(fy))
 
-        fx90, fy90 = rudder.compute(state, 35)
-        print ("fx90: " + str(fx90) + ", fy90: " + str(fy90))
-        #assert 1 < 0
+        fx90, fy90 = rudder.compute(state, -25)
+        #print ("fx90: " + str(fx90) + ", fy90: " + str(fy90))
+        assert 1 < 0
 
     @pytest.mark.parametrize(
         ("u", "v"),
@@ -66,7 +66,7 @@ class TestRudder:
         state = make_state(u=u, v=v)
 
         fx, fy = rudder.compute(state,0)
-        print(fx, fy)
+        #print(fx, fy)
 
         # Drag should be negative in forward flow and positive in reverse flow
         if u > 0:
