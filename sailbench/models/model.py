@@ -10,17 +10,22 @@ import numpy as np
 class State:
     """State class."""
 
-    x:float
-    y:float
-    psi:tuple[float,float] # angle is cosine (tuple[0]) + i*sine (tuple[1])
-    u: float # x velocity in global frame
-    v: float # y velocity in global frame
-    r: float # angular velocity
+    x: float
+    y: float
+    psi: tuple[float, float]  # angle is cosine (tuple[0]) + i*sine (tuple[1])
+    u: float  # x velocity in global frame
+    v: float  # y velocity in global frame
+    r: float  # angular velocity
 
     @property
     def get_heading(self) -> float:
         """Returns angle in degress."""
         return float(np.degrees(np.arctan2(self.psi[1], self.psi[0])))
+
+    @property
+    def get_heading_rad(self) -> float:
+        """Returns angle in radians."""
+        return float(np.arctan2(self.psi[1], self.psi[0]))
 
     def to_array(self) -> np.ndarray:
         """Convert State to array."""
@@ -68,11 +73,12 @@ class Model(ABC):
         self.p = params
 
     @abstractmethod
-    def compute(self, state: State) -> np.ndarray:
+    def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute the outputted force vector produced by the component.
 
         Args:
-            state (np.ndarray): Current body state of the sailboat -> [x, y, psi, u, v, r]
+            state (State): Current body state of the sailboat -> [x, y, psi, u, v, r]
+            tf_tree (TFTree2D): The transform tree for the sailboat
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within component frame)
