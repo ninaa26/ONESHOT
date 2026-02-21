@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 
+from sailbench.tf.tf_tree import TFTree2D
 import sailbench.utils.coordinate_helper as utils
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
@@ -21,7 +22,7 @@ class BasicRudder(Foil):
         """
         super().__init__(params)
 
-    def compute(self, state: State, angle_input: float = 0.0) -> np.ndarray:
+    def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute the lift and drag coefficients for the rudder.
 
         Args:
@@ -31,21 +32,15 @@ class BasicRudder(Foil):
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within rudder frame)
 
+        
         """
         # get local track vector
         global_track_vector = np.array([[state.u],
                                 [state.v]])
         local_track_vector = utils.global_to_local(global_track_vector, state.psi)
 
-        #Rotation matrix: local to rudder frame
-        rotate_into_rudder = np.array([
-        [np.cos(np.radians(angle_input)), -1 * np.sin(np.radians(angle_input))],
-        [np.sin(np.radians(angle_input)), np.cos(np.radians(angle_input))],
-        ])
-
-
         #angle of attack is angle of vector of negative track in rudder frame
-        rudder_frame_track = rotate_into_rudder @ local_track_vector
+        rudder_frame_track = tf_tree.vector_to_frame(local_track_vector, "boat", "rudder")
         angle_of_attack = -1*np.arctan2(rudder_frame_track[1, 0] , rudder_frame_track[0, 0])
 
         # get lift and drag coefficients
@@ -67,21 +62,15 @@ class BasicRudder(Foil):
         fx = -drag
         fy = lift
 
+
         rotate_into_rudder = np.array([
             [np.cos(-1 * angle_of_attack), np.sin(-1 * angle_of_attack)],
         [-1* np.sin(-1 * angle_of_attack), np.cos(-1 * angle_of_attack)],
         ])
 
-        # convert rudder frame to local frame
-        rotate_into_local = np.array([
-        [np.cos(np.radians(angle_input)), np.sin(np.radians(angle_input))],
-        [-1* np.sin(np.radians(angle_input)), np.cos(np.radians(angle_input))],
-        ])
-
         # rotate lift and drag fluid --> rudder --> local frame
         f_prime = rotate_into_rudder @ np.array([[fx],[fy]])
-
-        f_prime2 = rotate_into_local @ f_prime
+        f_prime2 = tf_tree.vector_to_frame(f_prime, "rudder", "boat")
 
 
         return np.asarray([f_prime2[0,0], f_prime2[1,0]])

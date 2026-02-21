@@ -53,7 +53,8 @@ class SailboatHub:
             transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # fluid frame starts aligned with boat frame
         )
 
-        # Instantiate fixed component frames in tf tree
+        # Instantiate component frames in tf tree
+        # Keel is fixed
         self.tf.add_frame(
             name="keel",
             parent="boat",
@@ -64,8 +65,32 @@ class SailboatHub:
                 s=0,
             ),
         )
+        
+        # Set up rudder frame
+        self.tf.add_frame(
+            name = "rudder",
+            parent = "boat",
+            transform = Transform2D(
+                x = self.rudder_cfg.get("x_pos", 0.0),
+                y = self.rudder_cfg.get("y_pos", 0.0),
+                c = 1,
+                s = 0,
+            )
+        )
 
-    def step(self, state: State, dt: float, solver: Callable) -> State:
+        # Sail is updated per step
+        self.tf.add_frame(
+            name="sail",
+            parent="boat",
+            transform=Transform2D(
+                x=self.sail_cfg.get("x_pos", 0.0), 
+                y=self.sail_cfg.get("y_pos", 0.0),
+                c=1.0, 
+                s=0.0
+        ),
+    )
+
+    def step(self, state: State, dt: float, solver: Callable, sail_angle: float = 0.0) -> State:
         """Sail the boat."""
 
         def dynamics(arr: np.ndarray) -> np.ndarray:
@@ -101,12 +126,35 @@ class SailboatHub:
             transform=Transform2D(x=next_arr[0], y=next_arr[1], c=next_arr[2], s=next_arr[3]),
         )
 
+        # update sail frame with new sail angle
+        self.tf.add_frame(
+            name="sail",
+            parent="boat",
+            transform=Transform2D(
+                x=self.sail_cfg.get("x_pos", 0.0), 
+                y=self.sail_cfg.get("y_pos", 0.0), 
+                c=np.cos(sail_angle), 
+                s=np.sin(sail_angle)
+            ),
+        )
+
         local_track = self.tf.vector_to_frame(np.array([next_arr[4], next_arr[5]]), "world", "boat")
         c, s = (local_track / np.linalg.norm(local_track)) if np.linalg.norm(local_track) > 1e-6 else (1.0, 0.0)
         self.tf.add_frame(
             name="fluid",
             parent="boat",
             transform=Transform2D(x=0.0, y=0.0, c=c, s=s),
+        )
+
+        self.tf.add_frame(
+            name = "rudder",
+            parent = "boat",
+            transform = Transform2D(
+                x = self.rudder_cfg.get("x_pos", 0.0),
+                y = self.rudder_cfg.get("y_pos", 0.0),
+                c = np.cos(np.radians(rudder_angle)),
+                s = np.sin(np.radians(rudder_angle)),
+            )
         )
 
         # --- rebuild state ---

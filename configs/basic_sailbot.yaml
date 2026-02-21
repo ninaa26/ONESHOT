@@ -19,11 +19,10 @@ keel:
 sail:
   airfoil_name: NACA0012
   model_type: sail
-  alpha_min: -90
-  alpha_max: 90
+  alpha_min: -25  
+  alpha_max: 25  
   res: [1e5]
   area: 5.0
-  # TODO: remove after global wind speed/wind dir is created
   wind_speed: 0.
   wind_dir_deg: 0.
   
