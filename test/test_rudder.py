@@ -25,32 +25,31 @@ def make_state(u: float = 0.0, v: float = 0.0, r: float = 0.0) -> State:
 class TestRudder:
     """Keel model physics tests."""
 
-    def test_zero_flow_zero_force(self, rudder: BasicRudder) -> None:
+    def test_zero_flow_zero_force(self, rudder: BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder should produce zero force with zero velocity."""
         state = make_state()
 
-        fx, fy = rudder.compute(state,0)
+        fx, fy = rudder.compute(state,tf_tree)
 
         assert abs(fx) < 1e-6
         assert abs(fy) < 1e-6
 
-    def test_forward_flow(self, rudder: BasicRudder) -> None:
+    def test_forward_flow(self, rudder: BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder should produce drag in forward flow."""
         state = make_state(u=5.0)
 
-        fx, fy = rudder.compute(state, 0)
+        fx, fy = rudder.compute(state, tf_tree)
         assert fx < -10.0  # Drag should be negative in forward flow
         assert abs(fy) < 0.5  # Minimal lift expected in straight flow
 
-    def test_angle90_print_test(self, rudder:BasicRudder) -> None:
+    def test_angle90_print_test(self, rudder:BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder set at 90 degrees."""
         state = make_state(u = 5.0)
-        fx, fy = rudder.compute(state, 25)
+        fx, fy = rudder.compute(state, tf_tree)
         #print ("fx: " + str(fx) + ", fy: " + str(fy))
 
-        fx90, fy90 = rudder.compute(state, -25)
+        fx90, fy90 = rudder.compute(state, tf_tree)
         #print ("fx90: " + str(fx90) + ", fy90: " + str(fy90))
-        assert 1 < 0
 
     @pytest.mark.parametrize(
         ("u", "v"),
@@ -61,12 +60,12 @@ class TestRudder:
             # (-5.0, -5.0),
         ],
     )
-    def test_quadrant_flow(self, rudder: BasicRudder, u: float, v: float) -> None:
+    def test_quadrant_flow(self, rudder: BasicRudder, u: float, v: float, tf_tree: TFTree2D) -> None:
         """Keel lateral force should oppose lateral flow direction."""
         state = make_state(u=u, v=v)
 
-        fx, fy = rudder.compute(state,0)
-        #print(fx, fy)
+        fx, fy = rudder.compute(state,tf_tree)
+        print(fx, fy)
 
         # Drag should be negative in forward flow and positive in reverse flow
         if u > 0:
@@ -80,16 +79,3 @@ class TestRudder:
         # Lift should oppose lateral velocity (restoring force)
         if abs(v) > 1e-6:
             assert np.sign(fy) == -np.sign(v)
-
-'''
-    @pytest.mark.parametrize(
-            ("angle_input"),
-            [
-                -90,
-                -45,
-                0,
-                45,
-                90,
-            ],
-    )
-    '''
