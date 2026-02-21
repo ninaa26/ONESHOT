@@ -64,8 +64,20 @@ class SailboatHub:
                 s=0,
             ),
         )
+        
+        # Set up rudder frame
+        self.tf.add_frame(
+            name = "rudder",
+            parent = "boat",
+            transform = Transform2D(
+                x = self.rudder_cfg.get("x_pos", 0.0),
+                y = self.rudder_cfg.get("y_pos", 0.0),
+                c = 1,
+                s = 0,
+            )
+        )
 
-    def step(self, state: State, dt: float, solver: Callable) -> State:
+    def step(self, state: State, dt: float, solver: Callable, rudder_angle: float = 0.0) -> State:
         """Sail the boat."""
 
         def dynamics(arr: np.ndarray) -> np.ndarray:
@@ -107,6 +119,17 @@ class SailboatHub:
             name="fluid",
             parent="boat",
             transform=Transform2D(x=0.0, y=0.0, c=c, s=s),
+        )
+
+        self.tf.add_frame(
+            name = "rudder",
+            parent = "boat",
+            transform = Transform2D(
+                x = self.rudder_cfg.get("x_pos", 0.0),
+                y = self.rudder_cfg.get("y_pos", 0.0),
+                c = np.cos(np.radians(rudder_angle)),
+                s = np.sin(np.radians(rudder_angle)),
+            )
         )
 
         # --- rebuild state ---
