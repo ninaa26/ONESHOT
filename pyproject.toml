@@ -9,6 +9,7 @@ dependencies = [
     "aerosandbox==4.2.8",
     "pyyaml>=6.0.3",
     "pytest>=9.0.2",
+    "pygame>=2.6.1",
 ]
 
 [dependency-groups]
