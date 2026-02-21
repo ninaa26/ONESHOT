@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 
 from sailbench.models.foil import Foil
+from sailbench.models.model import State
 import sailbench.utils.coordinate_helper as utils
 
 
@@ -41,12 +42,10 @@ class BasicSail(Foil):
             [np.sin(sail_angle_radians), np.cos(sail_angle_radians)],
         ])
 
-        # Calculate track in sail frame (global -> local -> sail)
-        v_global = np.ndarray(state.u, state.v)
-        # Convert to local frame
+        # Calculate boat velocity in sail frame (global -> local -> sail)
+        v_global = np.array([state.u, state.v])
         v_local = utils.global_to_local(v_global, state.psi)
-        # Convert to sail frame
-        v_sail = R_local_to_sail  @ v_local
+        v_sail = R_local_to_sail @ v_local
 
         # Calculate wind angle in sail frame (global -> local -> sail)
         wind_global = utils.wind_to_vector(WIND_SPEED, WIND_ANGLE_DEG)
@@ -62,14 +61,15 @@ class BasicSail(Foil):
 
         # Compute forces
         rho = self.p.get("air_density", 1.225)  # kg/m^3
-        q = 0.5 * rho * WIND_SPEED**2
+
+        V = np.linalg.norm(apparent_wind)
+        q = 0.5 * rho * V**2
         s = self.p.get("area", 1.0)  # m^2
         lift = cl * q * s
         drag = cd * q * s
 
-        # Forces in the fluid frame
+        # Forces in fluid frame; convert to boat frame using apparent wind angle in boat frame
         f_fluid = np.array([-drag, lift])
-        
-        # Need to convert from fluid frame to sail frame first before converting to local frame
-        f_fluid_sail = np.ndarray(R_local_to_sail @ f_fluid)
-        return utils.fluid_frame_to_body_frame(f_fluid_sail, v_local)
+        apparent_wind_boat = wind_local - v_local
+        flow_angle_boat_deg = np.degrees(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
+        return utils.fluid_frame_to_body_frame(f_fluid, flow_angle_boat_deg)
