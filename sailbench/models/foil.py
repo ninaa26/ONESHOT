@@ -38,10 +38,16 @@ class Foil(Model):
         # build or load polar
         if not self.cache_file.exists():
             # First time: run XFoil and write cache
+            res_raw = self.p.get("res", 1e5)
+            Res = np.atleast_1d(np.asarray(res_raw, dtype=float))
             self.foil.generate_polars(
                 alphas=self.alphas_deg,
-                Res=np.array(self.p.get("res", 1e5)),
+                Res=Res,
                 cache_filename=str(self.cache_file),
+                xfoil_kwargs={
+                    "timeout": 120,
+                    "max_iter": 1000,
+                }
             )
         else:
             # Load existing cache (attaches CL_function/CD_function)

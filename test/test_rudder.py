@@ -3,6 +3,7 @@ import pytest
 
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.models.model import State
+from sailbench.tf.tf_tree import TFTree2D
 
 
 def make_state(u: float = 0.0, v: float = 0.0, r: float = 0.0) -> State:
