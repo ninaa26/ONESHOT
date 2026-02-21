@@ -6,7 +6,7 @@ import numpy as np
 
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
-import sailbench.utils.coordinate_helper as utils
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 
 class BasicSail(Foil):
@@ -21,55 +21,59 @@ class BasicSail(Foil):
         """
         super().__init__(params)
 
-    def compute(self, state: State, sail_angle: float = 0.0) -> np.ndarray:
-        """Compute the lift and drag coefficients for the sail.
+    def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
+        """Compute lift and drag forces for the sail.
 
-        Assume the sail is parallel to the axis of the boat.
+        Uses tf_tree for all coordinate transforms. Sail angle comes from the
+        "sail" frame. Adds/updates "aero_fluid" frame (aligned with apparent wind).
 
         Args:
-            state (np.ndarray): Current boat state.
-            sail_angle (float): Angle of the sail relative to local frame. 
+            state (State): Current boat state.
+            tf_tree (TFTree2D): Transform tree with boat and sail frames.
 
         Returns:
-            np.ndarray: Returns X and Y forces in newtons (within the boat frame)
+            np.ndarray: X and Y forces in newtons (boat frame).
 
         """
-        WIND_SPEED, WIND_ANGLE_DEG = self.p.get("wind_speed"), self.p.get("wind_dir_deg")
+        wind_speed = self.p.get("wind_speed", 0.0)
+        wind_angle_deg = self.p.get("wind_dir_deg", 0.0)
 
-        sail_angle_radians = np.radians(sail_angle)
-        R_local_to_sail  = np.array([
-            [np.cos(sail_angle_radians), -np.sin(sail_angle_radians)],
-            [np.sin(sail_angle_radians), np.cos(sail_angle_radians)],
+        # Wind vector in world frame
+        wind_rad = np.radians(wind_angle_deg)
+        wind_global = np.array([
+            wind_speed * np.cos(wind_rad),
+            wind_speed * np.sin(wind_rad),
         ])
+        v_world = np.array([state.u, state.v])
 
-        # Calculate boat velocity in sail frame (global -> local -> sail)
-        v_global = np.array([state.u, state.v])
-        v_local = utils.global_to_local(v_global, state.psi)
-        v_sail = R_local_to_sail @ v_local
+        # Compute apparent wind in sail frame
+        apparent_wind_global = wind_global - v_world
+        apparent_wind_sail = tf_tree.vector_to_frame(apparent_wind_global, "world", "sail")
 
-        # Calculate wind angle in sail frame (global -> local -> sail)
-        wind_global = utils.wind_to_vector(WIND_SPEED, WIND_ANGLE_DEG)
-        wind_local = utils.global_to_local(wind_global, state.psi)
-        wind_sail = R_local_to_sail  @ wind_local
+        aoa = np.degrees(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
 
-        # Calculate apparent wind vector in sail frame, this is the AoA
-        apparent_wind = wind_sail - v_sail
-        aoa = np.degrees(np.arctan2(apparent_wind[1], apparent_wind[0]))
-
-        # Get lift and drag coefficients
         cl, cd = self.cl_cd(np.radians(-aoa), re=self.p.get("re", 1e5))
 
-        # Compute forces
-        rho = self.p.get("air_density", 1.225)  # kg/m^3
-
-        V = np.linalg.norm(apparent_wind)
+        rho = self.p.get("air_density", 1.225)  # kg/m³
+        V = np.linalg.norm(apparent_wind_sail)
         q = 0.5 * rho * V**2
-        s = self.p.get("area", 1.0)  # m^2
+        s = self.p.get("area", 1.0)  # m²
         lift = cl * q * s
         drag = cd * q * s
 
-        # Forces in fluid frame; convert to boat frame using apparent wind angle in boat frame
+        # Force in fluid frame
         f_fluid = np.array([-drag, lift])
-        apparent_wind_boat = wind_local - v_local
-        flow_angle_boat_deg = np.degrees(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
-        return utils.fluid_frame_to_body_frame(f_fluid, flow_angle_boat_deg)
+
+        # Rotate fluid → sail
+        aoa_rad = np.radians(aoa)
+        R = np.array([
+            [np.cos(aoa_rad), -np.sin(aoa_rad)],
+            [np.sin(aoa_rad),  np.cos(aoa_rad)]
+        ])
+
+        f_sail = R @ f_fluid
+
+        # Rotate sail → boat using tf_tree
+        f_boat = tf_tree.vector_to_frame(f_sail, "sail", "boat")
+
+        return f_boat
