@@ -16,8 +16,8 @@ sail:
   res:
   - 100000.0
   area: 5.0
-  wind_speed: 0.0
-  wind_dir_deg: 0.0
+  wind_speed: 0
+  wind_dir_deg: 0
 rudder:
   airfoil_name: NACA0012
   model_type: rudder
@@ -34,3 +34,26 @@ quadratic_hull:
   Xu2: 8.0
   Yv2: 120.0
   Nr2: 250.0
+boat:
+  m: 27.0
+  Iz: 10.0
+  Xu1: 20.0
+  Yv1: 40.0
+  Nr1: 15.0
+  Xu2: 8.0
+  Yv2: 15.0
+  Nr2: 5.0
+  A_uu: 5.0
+  A_vv: 8.0
+  A_rr: 2.0
+  rho_water: 1000
+  S_lat: 0.08
+  CY_beta: 1.0
+  beta_lim_deg: 10
+  x_CLR: -0.1
+simulation:
+  dt: 0.02
+  t_final: 30.0
+environment:
+  wind_speed: 4.0
+  wind_dir_deg: 0.0

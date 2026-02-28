@@ -15,9 +15,9 @@ def save_config(config: dict[str, Any]) -> None:
 
 def load_config() -> dict[str, Any]:
     """Load a previously saved boat configuration, if it exists."""
-    if not CONFIG_PATH.exists():
+    if not TEMPLATE_PATH.exists():
         return {}
-    with CONFIG_PATH.open() as file:
+    with TEMPLATE_PATH.open() as file:
         loaded: dict[str, Any] | None = yaml.safe_load(file)
         return loaded or {}
 
@@ -29,3 +29,11 @@ def load_template_config() -> dict[str, Any]:
     with TEMPLATE_PATH.open() as file:
         template: dict[str, Any] | None = yaml.safe_load(file)
         return template or {}
+    
+def set_config_path(path: str) -> None:
+    global CONFIG_PATH
+    CONFIG_PATH = Path(path)
+
+def set_template_path(path: str) -> None:
+    global TEMPLATE_PATH
+    TEMPLATE_PATH = Path(path)
