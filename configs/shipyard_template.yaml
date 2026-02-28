@@ -1,0 +1,143 @@
+# ===================================================================
+# Shipyard – Canonical Sailboat Configuration Template
+# 
+# This file is intended to be the **source of truth** for configs
+# edited via the Shipyard Textual UI and consumed by sailbench.
+# 
+# Conventions:
+# - Units are SI (m, kg, s, rad, N, N·m) unless otherwise stated.
+# - Angles in this file are in **degrees** unless noted as radians.
+# - Sections:
+#     simulation : integrator / time horizon defaults
+#     boat       : mass, inertia and global hull damping
+#     hull       : linear hull damping coefficients
+#     quadratic_hull : quadratic hull damping coefficients
+#     keel       : underwater foil (used for polars + dynamics)
+#     rudder     : steering foil
+#     sail       : aerodynamic sail model
+#     environment: wind defaults for sail forces
+# 
+# Shipyard primarily edits the foil-related fields (`airfoil_name`,
+# `alpha_min`, `alpha_max`, `res`, `area`, `wind_*`), but the rest of
+# the structure is preserved when saving/loading.
+# ===================================================================
+
+simulation:
+  dt:       0.02        # [s] solver step (50 Hz)
+  t_final:  30.0        # [s] default sim length
+
+# ─────────────────────────── Boat Mass & Hull ──────────────────────
+boat:
+  # — Mass properties —
+  m:        27.0         # [kg]       dry + ballast
+  Iz:       10.0         # [kg·m²]    yaw inertia
+
+  # — Linear viscous drag (global hull behaviour) —
+  Xu1:      20.0         # [N·s/m]    surge
+  Yv1:      40.0         # [N·s/m]    sway
+  Nr1:      15.0         # [N·m·s/rad] yaw
+
+  # — Quadratic (form + wave) drag —
+  Xu2:      8.0          # [N·s²/m²]
+  Yv2:      15.0
+  Nr2:      5.0
+
+  # — Added mass (small but non-zero) —
+  A_uu:     5.0          # [kg]
+  A_vv:     8.0
+  A_rr:     2.0          # [kg·m²]
+
+  # — Hull leeway lift (keel carries main load) —
+  rho_water: 1000        # [kg/m³] water density
+  S_lat:     0.08        # [m²] lateral hull area (excl. keel)
+  CY_beta:   1.0         # [-]   small lift slope
+  beta_lim_deg: 10       # [deg] hull stall
+  x_CLR:    -0.10        # [m]   CLR ~10 cm aft of CG
+
+# Backwards-compatible hull sections used by some utilities
+hull:
+  Xu1: 12.0              # [N·s/m] simplified linear surge damping
+  Yv1: 60.0              # [N·s/m] simplified linear sway damping
+  Nr1: 200.0             # [N·m·s/rad] simplified yaw damping
+
+quadratic_hull:
+  Xu2: 8.0               # [N·s²/m²] simplified quadratic surge damping
+  Yv2: 120.0             # [N·s²/m²] simplified quadratic sway damping
+  Nr2: 250.0             # [N·s²/m²] simplified quadratic yaw damping
+
+# ─────────────────────────── Keel Foil ─────────────────────────────
+keel:
+  # --- Polar / Shipyard fields ---
+  airfoil_name: NACA0012
+  model_type: keel
+  alpha_min: -25          # [deg] AoA range for polars
+  alpha_max: 25           # [deg]
+  res: [1e5]              # Reynolds numbers used for polars
+  area: 0.5               # [m²] planform area (fin + bulb strut)
+  x_pos: -0.25            # [m] position wrt boat CoR (aft negative)
+  y_pos: 0.0              # [m] lateral offset wrt boat CoR
+
+  # --- Dynamic model helpers (optional consumers) ---
+  rho_water: 1000
+  S_k:       0.15         # [m²]    hydrodynamic reference area
+  x_k:      -0.25         # [m]     force application arm
+  stall_deg: 15
+  CL_max:    1.0
+  CD0:       0.01
+  k_ind:     0.02
+
+# ─────────────────────────── Rudder Foil ───────────────────────────
+rudder:
+  # --- Polar / Shipyard fields ---
+  airfoil_name: NACA0012
+  model_type: rudder
+  alpha_min: -25          # [deg] AoA range for polars
+  alpha_max: 25
+  res: [1e5]
+  area: 0.3               # [m²] rudder planform area
+  x_pos: -1.0             # [m] position wrt boat CoR (aft negative)
+  y_pos: 0.0
+
+  # --- Dynamic model helpers ---
+  rho_water: 1000
+  S_r:       0.05         # [m²] hydrodynamic reference area
+  x_r:      -1.00         # [m] distance CG→rudder (aft)
+  delta_max_deg: 30
+  stall_deg: 20
+  CL_max:    1.0
+  CD0_r:     0.02
+  k_ind_r:   0.9
+
+# ─────────────────────────── Sail Model ────────────────────────────
+sail:
+  # --- Polar / Shipyard fields (for aero polars) ---
+  airfoil_name: NACA0012
+  model_type: sail
+  alpha_min: -25          # [deg] AoA range for polars
+  alpha_max: 25
+  res: [1e5]
+  area: 5.0               # [m²] projected sail area
+  wind_speed: 4.0         # [m/s] default true wind speed
+  wind_dir_deg: 0.0       # [deg] wind from +x (east) in N–E frame
+
+  # --- Blade-element / aerodynamic model (simulation) ---
+  rho_air: 1.225
+  S_s: 1.2                # [m²] rig reference area
+  x_s: 0.30               # [m] CG→sail centre (fwd positive)
+  AR: 4.0                 # [-] aspect ratio (≈ b² / S)
+  span: 2.2               # [m] optional; if omitted, derived from AR and S
+  nel: 12                 # [-] blade elements
+  CL_alpha: 6.0           # [1/rad] lift slope
+  stall_deg: 25
+  CD0: 0.02
+  k_prof: 0.01
+  e_oswald: 0.8
+  twist_root_deg: 0
+  twist_tip_deg: 12
+  delta_max_deg: 85
+
+# ─────────────────────────── Environment Defaults ──────────────────
+environment:
+  wind_speed:   4.0       # [m/s] (≈ 8 kts)
+  wind_dir_deg: 0.0       # [deg] from +x (east) in N–E frame
+

@@ -1,0 +1,36 @@
+keel:
+  airfoil_name: NACA0012
+  model_type: keel
+  alpha_min: -25
+  alpha_max: 25
+  res:
+  - 100000.0
+  area: 0.5
+  x_pos: 0.0
+  y_pos: 0.0
+sail:
+  airfoil_name: NACA0012
+  model_type: sail
+  alpha_min: -25
+  alpha_max: 25
+  res:
+  - 100000.0
+  area: 5.0
+  wind_speed: 0.0
+  wind_dir_deg: 0.0
+rudder:
+  airfoil_name: NACA0012
+  model_type: rudder
+  alpha_min: -25
+  alpha_max: 25
+  res:
+  - 100000.0
+  area: 0.3
+hull:
+  Xu1: 12.0
+  Yv1: 60.0
+  Nr1: 200.0
+quadratic_hull:
+  Xu2: 8.0
+  Yv2: 120.0
+  Nr2: 250.0
