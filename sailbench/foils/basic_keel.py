@@ -35,8 +35,8 @@ class BasicKeel(Foil):
             np.ndarray: Returns X and Y forces in newtons (within keel frame)
 
         """
-        local_track_vector = tf_tree.vector_to_frame(np.array([state.u, state.v]), "world", "boat")
-        local_track = np.degrees(np.arctan2(local_track_vector[1], local_track_vector[0]))
+        # (u, v) are body-frame velocity (surge, sway)
+        local_track = np.degrees(np.arctan2(state.v, state.u))
         aoa = -local_track  # Keel angle of attack is negative of local track
 
         # get lift and drag coefficients
@@ -49,6 +49,6 @@ class BasicKeel(Foil):
         s = self.p.get("area", 1.0)  # m^2
         lift = cl * q * s
         drag = cd * q * s
-        # Fluid-frame force
-        f_fluid = np.array([-drag, lift])
+        # Fluid-frame force (fluid x = flow direction; drag opposes motion => +drag along flow)
+        f_fluid = np.array([drag, lift])
         return tf_tree.vector_to_frame(f_fluid, "fluid", "boat")

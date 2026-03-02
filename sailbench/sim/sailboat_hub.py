@@ -6,7 +6,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.foils.basic_keel import BasicKeel
+from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_sail import BasicSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -23,6 +26,7 @@ class SailboatHub:
 
         self.simulation_cfg = cfg["simulation"]
         self.boat_cfg = cfg["boat"]
+        self.hull_cfg = cfg["hull"]
         self.keel_cfg = cfg["keel"]
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
@@ -33,11 +37,14 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
+       # self.keel = BasicKeel(self.keel_cfg)
+        self.sail = BasicSail(self.sail_cfg)
+        self.rudder = BasicRudder(self.rudder_cfg)
+        self.hull = LinearHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.keel]
-
+        self.components = [self.rudder,self.keel, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
-        self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 10.0))
+        self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
         # TODO: Change starting position and heading from config
         self.tf.add_frame(
@@ -65,32 +72,34 @@ class SailboatHub:
                 s=0,
             ),
         )
-        
+
         # Set up rudder frame
         self.tf.add_frame(
-            name = "rudder",
-            parent = "boat",
-            transform = Transform2D(
-                x = self.rudder_cfg.get("x_pos", 0.0),
-                y = self.rudder_cfg.get("y_pos", 0.0),
-                c = 1,
-                s = 0,
-            )
+            name="rudder",
+            parent="boat",
+            transform=Transform2D(
+                x=self.rudder_cfg.get("x_pos", 0.0),
+                y=self.rudder_cfg.get("y_pos", 0.0),
+                c=1,
+                s=0,
+            ),
         )
 
         # Sail is updated per step
         self.tf.add_frame(
             name="sail",
             parent="boat",
-            transform=Transform2D(
-                x=self.sail_cfg.get("x_pos", 0.0), 
-                y=self.sail_cfg.get("y_pos", 0.0),
-                c=1.0, 
-                s=0.0
-        ),
-    )
+            transform=Transform2D(x=self.sail_cfg.get("x_pos", 0.0), y=self.sail_cfg.get("y_pos", 0.0), c=1.0, s=0.0),
+        )
 
-    def step(self, state: State, dt: float, solver: Callable, sail_angle: float = 0.0) -> State:
+    def step(
+        self,
+        state: State,
+        dt: float,
+        solver: Callable,
+        sail_angle: float = 0.0,
+        rudder_angle: float = 0.0,
+    ) -> State:
         """Sail the boat."""
 
         def dynamics(arr: np.ndarray) -> np.ndarray:
@@ -106,7 +115,7 @@ class SailboatHub:
             dv = fy / self.m - r * u
             dr = mz / self.iz
 
-            # --- world-frame position rates ---
+            # --- world-frame position rates (transform body velocity to world) ---
             dx = u * c - v * s
             dy = u * s + v * c
 
@@ -131,15 +140,20 @@ class SailboatHub:
             name="sail",
             parent="boat",
             transform=Transform2D(
-                x=self.sail_cfg.get("x_pos", 0.0), 
-                y=self.sail_cfg.get("y_pos", 0.0), 
-                c=np.cos(sail_angle), 
-                s=np.sin(sail_angle)
+                x=self.sail_cfg.get("x_pos", 0.0),
+                y=self.sail_cfg.get("y_pos", 0.0),
+                c=np.cos(sail_angle),
+                s=np.sin(sail_angle),
             ),
         )
 
-        local_track = self.tf.vector_to_frame(np.array([next_arr[4], next_arr[5]]), "world", "boat")
-        c, s = (local_track / np.linalg.norm(local_track)) if np.linalg.norm(local_track) > 1e-6 else (1.0, 0.0)
+        # (u, v) are body-frame; flow direction is opposite to velocity
+        u, v = next_arr[4], next_arr[5]
+        norm = np.hypot(u, v)
+        if norm > 1e-6:
+            c, s = -u / norm, -v / norm
+        else:
+            c, s = 1.0, 0.0
         self.tf.add_frame(
             name="fluid",
             parent="boat",
@@ -147,14 +161,14 @@ class SailboatHub:
         )
 
         self.tf.add_frame(
-            name = "rudder",
-            parent = "boat",
-            transform = Transform2D(
-                x = self.rudder_cfg.get("x_pos", 0.0),
-                y = self.rudder_cfg.get("y_pos", 0.0),
-                c = np.cos(np.radians(rudder_angle)),
-                s = np.sin(np.radians(rudder_angle)),
-            )
+            name="rudder",
+            parent="boat",
+            transform=Transform2D(
+                x=self.rudder_cfg.get("x_pos", 0.0),
+                y=self.rudder_cfg.get("y_pos", 0.0),
+                c=np.cos(np.radians(rudder_angle)),
+                s=np.sin(np.radians(rudder_angle)),
+            ),
         )
 
         # --- rebuild state ---
@@ -168,16 +182,18 @@ class SailboatHub:
         mz_total = 0.0
 
         for component in self.components:
-            fx, fy = component.compute(state, self.tf)
-
-            # Sum forces
-            fx_total += fx
-            fy_total += fy
+            result = np.atleast_1d(component.compute(state, self.tf))
+            fx, fy = float(result[0]), float(result[1])
+            mz_direct = float(result[2]) if len(result) > 2 else 0.0
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
             x_pos = component.p.get("x_pos", 0.0)
             y_pos = component.p.get("y_pos", 0.0)
-            mz = x_pos * fy - y_pos * fx
+            mz = x_pos * fy - y_pos * fx + mz_direct
+
+            # Sum forces
+            fx_total += fx
+            fy_total += fy
             mz_total += mz
 
         return fx_total, fy_total, mz_total
