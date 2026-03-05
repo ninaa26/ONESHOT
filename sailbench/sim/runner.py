@@ -107,14 +107,6 @@ def run() -> None:
     RUDDER_COLOR = (60, 60, 100)
     SAIL_COLOR = (240, 240, 255)
 
-    try:
-        font = pygame.font.Font(None, 28)
-    except (NotImplementedError, ImportError, OSError):
-        try:
-            font = pygame.font.SysFont("Arial", 28)
-        except (NotImplementedError, ImportError, OSError):
-            font = None  # pygame.font not available (e.g. on some Python/pygame combos)
-
     running = True
     while running:
         elapsed = clock.tick(fps) / 1000.0
@@ -239,16 +231,6 @@ def run() -> None:
                 cam_x,
                 cam_y,
             )
-        # HUD text (skip if font module unavailable)
-        if font is not None:
-            hud_lines = [
-                f"Fx={fx:.0f} N  Fy={fy:.0f} N  Mz={mz:.1f} Nm",
-                f"Wind: {wind_dir_deg:.0f} deg @ {wind_speed:.1f} m/s",
-            ]
-            for i, line in enumerate(hud_lines):
-                text_surf = font.render(line, True, HUD_COLOR)
-                screen.blit(text_surf, (10, 10 + i * 22))
-
         pygame.display.flip()
 
     pygame.quit()
@@ -257,4 +239,3 @@ def run() -> None:
 if __name__ == "__main__":
     run()
 
-    run()
