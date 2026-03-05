@@ -13,6 +13,9 @@ hull:
   xu1:      20.0         # [N·s/m]    surge
   yv1:      40.0         # [N·s/m]    sway
   nr1:      15.0         # [N·m·s/rad] yaw
+  xu2:      4.0          # [N·s²/m²]
+  yv2:      20.0
+  nr2:      10.0
 
 keel:
   airfoil_name: NACA0012
@@ -33,7 +36,7 @@ sail:
   area: 5.0
   wind_speed: 4
   wind_dir_deg: 90
-  x_pos: 0.2
+  x_pos: 0.0
   y_pos: 0.0
   
 rudder:

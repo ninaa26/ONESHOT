@@ -1,5 +1,11 @@
 import * as THREE from "three";
-import { setSpeed, setHeading, setSailAngle, setRudderAngle } from "./hud.js";
+import {
+  setSpeed,
+  setHeading,
+  setSailAngle,
+  setRudderAngle,
+  setSailForce,
+} from "./hud.js";
 
 export const WORLD_SCALE = 1.0;
 
@@ -19,7 +25,8 @@ export function createBoat(scene) {
     bevelEnabled: false,
   });
   hullGeom.rotateX(-Math.PI / 2);
-  hullGeom.translate(0, 0.0, 0);
+  // Lower hull so that it's roughly half submerged at the water plane (y = 0)
+  hullGeom.translate(0, -0.2, 0);
 
   const hullMat = new THREE.MeshStandardMaterial({
     color: 0xe6f1ff,
@@ -33,7 +40,7 @@ export function createBoat(scene) {
 
   // Rudder
   const rudderGroup = new THREE.Group();
-  rudderGroup.position.set(-1.0, 0.25, 0.0);
+  rudderGroup.position.set(-1.0, -0.1, 0.0);
   boatGroup.add(rudderGroup);
 
   const rudderGeom = new THREE.BoxGeometry(0.5, 0.5, 0.04);
@@ -157,6 +164,7 @@ export function updateBoatFromState(
   const heading = boat.heading;
   const velBody = boat.velocity_body;
   const wind = msg.wind;
+  const sailForce = msg.sail_force;
 
   boatGroup.position.set(
     pos.x * WORLD_SCALE,
@@ -175,9 +183,12 @@ export function updateBoatFromState(
   setHeading(heading.deg);
   setSailAngle(sailDeg);
   setRudderAngle(rudderDeg);
+  if (sailForce) {
+    setSailForce(sailForce.fx, sailForce.fy);
+  }
 
   sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailDeg);
-  rudderGroup.rotation.y = THREE.MathUtils.degToRad(rudderDeg);
+  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
 
   return wind || null;
 }

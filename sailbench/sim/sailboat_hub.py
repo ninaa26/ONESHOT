@@ -7,6 +7,7 @@ import numpy as np
 import yaml
 
 from sailbench.dynamics.linear_hydro import LinearHydroModel
+from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
@@ -32,6 +33,8 @@ class SailboatHub:
         self.sail_cfg = cfg["sail"]
 
         self.tf = TFTree2D()
+        # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
+        self.last_sail_force: tuple[float, float] = (0.0, 0.0)
 
         self.boat_factory()
 
@@ -40,9 +43,9 @@ class SailboatHub:
        # self.keel = BasicKeel(self.keel_cfg)
         self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
-        self.hull = LinearHydroModel(self.hull_cfg)
+        self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.rudder,self.keel, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
+        self.components = [self.keel, self.rudder, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -185,6 +188,10 @@ class SailboatHub:
             result = np.atleast_1d(component.compute(state, self.tf))
             fx, fy = float(result[0]), float(result[1])
             mz_direct = float(result[2]) if len(result) > 2 else 0.0
+
+            # Track sail contribution for visualization.
+            if component is self.sail:
+                self.last_sail_force = (fx, fy)
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
             x_pos = component.p.get("x_pos", 0.0)

@@ -58,6 +58,13 @@ class WindPayload(TypedDict, total=False):
     dir_deg: float  # [deg] from +x axis, in world frame
 
 
+class SailForcePayload(TypedDict, total=False):
+    """Sail force resolved in the boat frame."""
+
+    fx: float  # [N] surge (along +x boat axis)
+    fy: float  # [N] sway  (along +y boat axis)
+
+
 class StateMessagePayload(TypedDict, total=False):
     """Top-level state message sent from Python to the browser."""
 
@@ -65,6 +72,7 @@ class StateMessagePayload(TypedDict, total=False):
     t: float
     boat: BoatKinematicsPayload
     wind: WindPayload
+    sail_force: SailForcePayload
 
 
 @dataclass(slots=True)
@@ -88,6 +96,7 @@ def make_state_message(
     t: float,
     wind_speed: float | None = None,
     wind_dir_deg: float | None = None,
+    sail_force: tuple[float, float] | None = None,
 ) -> StateMessagePayload:
     """Convert an internal State into a JSON-ready state message.
 
@@ -133,6 +142,13 @@ def make_state_message(
         msg["wind"] = {
             "speed": float(wind_speed or 0.0),
             "dir_deg": float(wind_dir_deg or 0.0),
+        }
+
+    if sail_force is not None:
+        fx, fy = sail_force
+        msg["sail_force"] = {
+            "fx": float(fx),
+            "fy": float(fy),
         }
 
     return msg

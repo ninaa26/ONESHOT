@@ -100,7 +100,14 @@ async def hub_simulation_loop(
             sim.step()
             wind_speed = float(sim.hub.sail_cfg.get("wind_speed", 0.0))
             wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 0.0))
-            msg = make_state_message(sim.state, sim.t, wind_speed=wind_speed, wind_dir_deg=wind_dir_deg)
+            sail_force = getattr(sim.hub, "last_sail_force", (0.0, 0.0))
+            msg = make_state_message(
+                sim.state,
+                sim.t,
+                wind_speed=wind_speed,
+                wind_dir_deg=wind_dir_deg,
+                sail_force=sail_force,
+            )
             await ws.send(json.dumps(msg))
             await asyncio.sleep(sim.dt)
     finally:

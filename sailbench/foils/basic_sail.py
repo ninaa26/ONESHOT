@@ -70,6 +70,5 @@ class BasicSail(Foil):
         R = np.array([[np.cos(aoa_rad), -np.sin(aoa_rad)], [np.sin(aoa_rad), np.cos(aoa_rad)]])
 
         f_sail = R @ f_fluid
-
         # Rotate sail → boat using tf_tree
         return tf_tree.vector_to_frame(f_sail, "sail", "boat")

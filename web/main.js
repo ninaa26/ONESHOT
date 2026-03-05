@@ -237,7 +237,7 @@ function animate(now) {
   sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailDeg);
 
   // Visually rotate rudder around its hinge at the stern
-  rudderGroup.rotation.y = THREE.MathUtils.degToRad(rudderDeg);
+  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
 
   // subtle bobbing while idle to keep the scene alive
   const t = now / 1000.0;
