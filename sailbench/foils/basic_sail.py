@@ -6,7 +6,7 @@ import numpy as np
 
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
-from sailbench.tf.tf_tree import TFTree2D, Transform2D
+from sailbench.tf.tf_tree import TFTree2D
 
 
 class BasicSail(Foil):
@@ -67,14 +67,9 @@ class BasicSail(Foil):
 
         # Rotate fluid → sail
         aoa_rad = np.radians(aoa)
-        R = np.array([
-            [np.cos(aoa_rad), -np.sin(aoa_rad)],
-            [np.sin(aoa_rad),  np.cos(aoa_rad)]
-        ])
+        R = np.array([[np.cos(aoa_rad), -np.sin(aoa_rad)], [np.sin(aoa_rad), np.cos(aoa_rad)]])
 
         f_sail = R @ f_fluid
 
         # Rotate sail → boat using tf_tree
-        f_boat = tf_tree.vector_to_frame(f_sail, "sail", "boat")
-
-        return f_boat
+        return tf_tree.vector_to_frame(f_sail, "sail", "boat")

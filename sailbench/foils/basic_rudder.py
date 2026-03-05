@@ -26,7 +26,7 @@ class BasicRudder(Foil):
 
         Args:
             state (np.ndarray): Current boat state.
-            angle_input (float): Angle of rudder in degrees.
+            tf_tree (TFTree2D): Current transform tree of the boat, used to get component positions.
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within rudder frame)
