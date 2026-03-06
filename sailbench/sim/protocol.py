@@ -65,6 +65,23 @@ class SailForcePayload(TypedDict, total=False):
     fy: float  # [N] sway  (along +y boat axis)
 
 
+class ComponentForcePayload(TypedDict):
+    """Per-component force in boat frame."""
+
+    fx: float
+    fy: float
+
+
+class ForcesPayload(TypedDict, total=False):
+    """Per-component and total forces for visualization."""
+
+    hull: ComponentForcePayload
+    keel: ComponentForcePayload
+    rudder: ComponentForcePayload
+    sail: ComponentForcePayload
+    total: ComponentForcePayload
+
+
 class StateMessagePayload(TypedDict, total=False):
     """Top-level state message sent from Python to the browser."""
 
@@ -73,6 +90,7 @@ class StateMessagePayload(TypedDict, total=False):
     boat: BoatKinematicsPayload
     wind: WindPayload
     sail_force: SailForcePayload
+    forces: ForcesPayload
 
 
 @dataclass(slots=True)
@@ -97,6 +115,7 @@ def make_state_message(
     wind_speed: float | None = None,
     wind_dir_deg: float | None = None,
     sail_force: tuple[float, float] | None = None,
+    forces: dict[str, tuple[float, float]] | None = None,
 ) -> StateMessagePayload:
     """Convert an internal State into a JSON-ready state message.
 
@@ -149,6 +168,12 @@ def make_state_message(
         msg["sail_force"] = {
             "fx": float(fx),
             "fy": float(fy),
+        }
+
+    if forces is not None:
+        msg["forces"] = {
+            name: {"fx": float(fx), "fy": float(fy)}
+            for name, (fx, fy) in forces.items()
         }
 
     return msg

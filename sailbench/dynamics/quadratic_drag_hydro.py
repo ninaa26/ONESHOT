@@ -20,9 +20,9 @@ class QuadraticHydroModel(Model):
         v_local = -state.psi[1] * u + state.psi[0] * v
 
         # Quadratic damping coefficients
-        xu2 = float(self.p.get("Xu2", 0.0))  # [N·s²/m²]
-        yv2 = float(self.p.get("Yv2", 0.0))  # [N·s²/m²]
-        nr2 = float(self.p.get("Nr2", 0.0))  # [N·m·s²/rad²]
+        xu2 = float(self.p.get("xu2", 0.0))  # [N·s²/m²]
+        yv2 = float(self.p.get("yv2", 0.0))  # [N·s²/m²]
+        nr2 = float(self.p.get("nr2", 0.0))  # [N·m·s²/rad²]
 
         # Quadratic drag
         x = -xu2 * u_local * abs(u_local)

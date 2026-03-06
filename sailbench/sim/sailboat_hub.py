@@ -35,6 +35,8 @@ class SailboatHub:
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
         self.last_sail_force: tuple[float, float] = (0.0, 0.0)
+        # Per-component forces (boat frame) for visualization.
+        self.last_forces: dict[str, tuple[float, float]] = {}
 
         self.boat_factory()
 
@@ -45,7 +47,7 @@ class SailboatHub:
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.keel, self.rudder, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
+        self.components = [self.sail, self.hull, self.keel, self.rudder]  # order matters for force summation (e.g. keel before sail)
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -183,6 +185,7 @@ class SailboatHub:
         fx_total = 0.0
         fy_total = 0.0
         mz_total = 0.0
+        self.last_forces = {}
 
         for component in self.components:
             result = np.atleast_1d(component.compute(state, self.tf))
@@ -192,6 +195,10 @@ class SailboatHub:
             # Track sail contribution for visualization.
             if component is self.sail:
                 self.last_sail_force = (fx, fy)
+
+            # Track per-component forces for visualization.
+            name = "hull" if component is self.hull else "keel" if component is self.keel else "rudder" if component is self.rudder else "sail"
+            self.last_forces[name] = (fx, fy)
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
             x_pos = component.p.get("x_pos", 0.0)
@@ -203,4 +210,5 @@ class SailboatHub:
             fy_total += fy
             mz_total += mz
 
+        self.last_forces["total"] = (fx_total, fy_total)
         return fx_total, fy_total, mz_total

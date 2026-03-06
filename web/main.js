@@ -3,7 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createScene, handleResize } from "./scene.js";
 import { createWind } from "./wind.js";
 import { createBoat, updateBoatFromState } from "./boat.js";
-import { setConnectionStatus } from "./hud.js";
+import { createForceArrows } from "./forces.js";
+import { setConnectionStatus, updateForcesChart } from "./hud.js";
 
 // --- Scene & environment ------------------------------------------------
 
@@ -18,6 +19,9 @@ const wind = createWind(scene);
 
 const { boatGroup, sailGroup, rudderGroup, updateTrace } = createBoat(scene);
 
+const { update: updateForceArrows } = createForceArrows(boatGroup);
+let showForces = false;
+let lastForces = null;
 
 // Camera & controls
 const cameraOffset = new THREE.Vector3(-10, 6, 14);
@@ -101,6 +105,11 @@ function makeWsUrl() {
         if (windPayload) {
           wind.setFromPayload(windPayload);
         }
+        if (msg.forces) {
+          lastForces = msg.forces;
+          updateForceArrows(msg.forces, showForces);
+          updateForcesChart(msg.forces);
+        }
       }
     } catch {
       // ignore malformed messages
@@ -166,10 +175,29 @@ window.addEventListener("keyup", (ev) => {
     case "KeyS":
       keyDown = false;
       break;
+    case "KeyF":
+      showForces = !showForces;
+      if (lastForces) {
+        updateForceArrows(lastForces, showForces);
+      }
+      ev.preventDefault();
+      break;
     default:
       break;
   }
 });
+
+// Forces section toggle
+const forcesSection = document.getElementById("forces-section");
+const forcesToggle = document.getElementById("forces-toggle");
+if (forcesSection && forcesToggle) {
+  forcesToggle.addEventListener("click", () => {
+    forcesSection.classList.toggle("collapsed");
+    forcesToggle.textContent = forcesSection.classList.contains("collapsed")
+      ? "Forces (Fx, Fy) ▶"
+      : "Forces (Fx, Fy) ▼";
+  });
+}
 
 let lastSentRudderDeg = rudderDeg;
 let lastSentSailDeg = sailDeg;

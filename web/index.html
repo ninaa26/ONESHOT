@@ -71,6 +71,74 @@
         font-size: 11px;
       }
 
+      .forces-section {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(120, 190, 255, 0.2);
+      }
+
+      .forces-section h2 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        color: #9cd5ff;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .forces-section h2:hover {
+        opacity: 0.9;
+      }
+
+      .forces-section.collapsed .forces-chart {
+        display: none;
+      }
+
+      .forces-chart {
+        font-size: 11px;
+      }
+
+      .forces-chart-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+
+      .forces-chart-label {
+        width: 48px;
+        flex-shrink: 0;
+      }
+
+      .forces-chart-bars {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .forces-chart-bar-wrap {
+        flex: 1;
+        height: 8px;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 2px;
+        overflow: hidden;
+        min-width: 20px;
+      }
+
+      .forces-chart-bar {
+        height: 100%;
+        transition: width 0.1s;
+      }
+
+      .forces-chart-val {
+        width: 28px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-size: 10px;
+      }
+
     </style>
   </head>
 
@@ -103,7 +171,13 @@
           <span class="hud-value" id="hud-conn">disconnected</span>
         </div>
         <div class="hud-help">
-          Rudder: ←/→ or A/D · Sail: ↑/↓ or W/S
+          Rudder: ←/→ or A/D · Sail: ↑/↓ or W/S · F: Toggle forces
+        </div>
+        <div class="forces-section" id="forces-section">
+          <h2 id="forces-toggle">Forces (Fx, Fy) ▼</h2>
+          <div class="forces-chart" id="hud-forces-chart">
+            <span class="hud-label">No forces</span>
+          </div>
         </div>
       </div>
     </div>
