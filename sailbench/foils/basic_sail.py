@@ -25,7 +25,7 @@ class BasicSail(Foil):
         """Compute lift and drag forces for the sail.
 
         Uses tf_tree for all coordinate transforms. Sail angle comes from the
-        "sail" frame. Adds/updates "aero_fluid" frame (aligned with apparent wind).
+        "sail" frame. Rotates fluid frame → sail frame, then sail → boat via tf_tree.
 
         Args:
             state (State): Current boat state.

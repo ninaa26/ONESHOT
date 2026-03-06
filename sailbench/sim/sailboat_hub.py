@@ -10,7 +10,7 @@ from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
-from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -43,11 +43,11 @@ class SailboatHub:
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
        # self.keel = BasicKeel(self.keel_cfg)
-        self.sail = BasicSail(self.sail_cfg)
+        self.sail = HybridSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.sail, self.hull, self.keel, self.rudder]  # order matters for force summation (e.g. keel before sail)
+        self.components = [self.keel, self.rudder, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 

@@ -28,16 +28,16 @@ keel:
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
 sail:
-  airfoil_name: NACA0012
   model_type: sail
-  alpha_min: -179  
-  alpha_max: 179  
-  res: [1e5]
-  area: 5.0
-  wind_speed: 4
-  wind_dir_deg: 90
+  area: 10.0
+  wind_speed: 10
+  wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   x_pos: 0.0
   y_pos: 0.0
+  # Hybrid aerodynamic model (CL_max, CD0, CD1)
+  CL_max: 1.2
+  CD0: 0.1
+  CD1: 1.0
   
 rudder:
   airfoil_name: NACA0012
@@ -48,3 +48,5 @@ rudder:
   area: 0.3    # [m²]    planform area (fin + bulb strut)
   x_pos: -0.5  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
+
+  

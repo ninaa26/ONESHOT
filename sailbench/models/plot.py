@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
-from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -21,7 +21,7 @@ params_keel = config["keel"].copy()
 params_rudder = config["rudder"].copy()
 params_hull = config["hull"].copy()
 
-sail = BasicSail(params_sail)
+sail = HybridSail(params_sail)
 keel = BasicKeel(params_keel)
 rudder = BasicRudder(params_rudder)
 hull = LinearHydroModel(params_hull)
