@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from sailbench.dynamics.dumb_rudder import DumbRudderModel
 from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
@@ -42,12 +43,11 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-       # self.keel = BasicKeel(self.keel_cfg)
         self.sail = HybridSail(self.sail_cfg)
-        self.rudder = BasicRudder(self.rudder_cfg)
+        self.rudder = DumbRudderModel(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.keel, self.rudder, self.hull, self.sail]  # order matters for force summation (e.g. keel before sail)
+        self.components = [self.hull, self.sail]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -187,6 +187,10 @@ class SailboatHub:
         mz_total = 0.0
         self.last_forces = {}
 
+        # Helpful for debugging runaway forces.
+        u, v, r = float(state.u), float(state.v), float(state.r)
+        speed = float(np.hypot(u, v))
+
         for component in self.components:
             result = np.atleast_1d(component.compute(state, self.tf))
             fx, fy = float(result[0]), float(result[1])
@@ -205,10 +209,45 @@ class SailboatHub:
             y_pos = component.p.get("y_pos", 0.0)
             mz = x_pos * fy - y_pos * fx + mz_direct
 
+            # Thresholded debug print so we can see who blows up.
+            if (
+                abs(fx) > 500.0
+                or abs(fy) > 500.0
+                or abs(mz) > 500.0
+                or speed > 5.0
+            ):
+                print(
+                    "[DEBUG] component force",
+                    f"comp={name}",
+                    f"u={u:.3f}",
+                    f"v={v:.3f}",
+                    f"r={r:.3f}",
+                    f"fx={fx:.1f}",
+                    f"fy={fy:.1f}",
+                    f"mz={mz:.1f}",
+                )
+
             # Sum forces
             fx_total += fx
             fy_total += fy
             mz_total += mz
+
+        # Final total forces / moment debug (also thresholded).
+        if (
+            abs(fx_total) > 500.0
+            or abs(fy_total) > 500.0
+            or abs(mz_total) > 500.0
+            or speed > 5.0
+        ):
+            print(
+                "[DEBUG] TOTAL force",
+                f"u={u:.3f}",
+                f"v={v:.3f}",
+                f"r={r:.3f}",
+                f"Fx={fx_total:.1f}",
+                f"Fy={fy_total:.1f}",
+                f"Mz={mz_total:.1f}",
+            )
 
         self.last_forces["total"] = (fx_total, fy_total)
         return fx_total, fy_total, mz_total

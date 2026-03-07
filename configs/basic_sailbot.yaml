@@ -14,7 +14,7 @@ hull:
   yv1:      40.0         # [N·s/m]    sway
   nr1:      15.0         # [N·m·s/rad] yaw
   xu2:      4.0          # [N·s²/m²]
-  yv2:      20.0
+  yv2:      100.0
   nr2:      10.0
 
 keel:
@@ -35,9 +35,9 @@ sail:
   x_pos: 0.0
   y_pos: 0.0
   # Hybrid aerodynamic model (CL_max, CD0, CD1)
-  CL_max: 1.2
+  CL_max: 2
   CD0: 0.1
-  CD1: 1.0
+  CD1: 0.8
   
 rudder:
   airfoil_name: NACA0012
