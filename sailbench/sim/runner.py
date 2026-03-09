@@ -124,6 +124,8 @@ def run() -> None:
             rudder_angle_deg = max(-RUDDER_MAX_DEG, rudder_angle_deg - rudder_delta)
         if pygame.key.get_pressed()[pygame.K_RIGHT]:
             rudder_angle_deg = min(RUDDER_MAX_DEG, rudder_angle_deg + rudder_delta)
+
+        # Up/down directly change sail angle (radians), clamped to ±SAIL_MAX_RAD.
         sail_delta = SAIL_RATE_RAD_PER_S * elapsed
         if pygame.key.get_pressed()[pygame.K_UP]:
             sail_angle_rad = min(SAIL_MAX_RAD, sail_angle_rad + sail_delta)
@@ -139,7 +141,7 @@ def run() -> None:
                 state,
                 dt_sec,
                 solver=rk4_step,
-                sail_angle=sail_angle_rad,
+                sail_angle_cmd_deg=math.degrees(sail_angle_rad),
                 rudder_angle=rudder_angle_deg,
             )
             time_accum -= dt_sec

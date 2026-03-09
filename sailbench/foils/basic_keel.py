@@ -40,7 +40,7 @@ class BasicKeel(Foil):
         aoa = -local_track  # Keel angle of attack is negative of local track
 
         # get lift and drag coefficients
-        cl, cd = self.cl_cd(np.radians(aoa), re=self.p.get("re", 1e5))
+        cl, cd = self.cl_cd(np.radians(aoa), re=self.get_reynolds())
         # compute dynamic pressure
         rho = self.p.get("water_density", 1000.0)  # kg/m^3
         v = utils.get_velocity_magnitude(state)

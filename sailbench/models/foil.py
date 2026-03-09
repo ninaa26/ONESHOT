@@ -20,6 +20,16 @@ class Foil(Model):
         self.alpha_min = self.p.get("alpha_min", -20)
         self.alpha_max = self.p.get("alpha_max", 20)
 
+    def get_reynolds(self) -> float:
+        """Get Reynolds number from config (supports 're' or 'res' list)."""
+        re = self.p.get("re")
+        if re is not None:
+            return float(re)
+        res = self.p.get("res")
+        if res is not None:
+            return float(res[0]) if isinstance(res, (list, tuple)) else float(res)
+        return 1e5
+
     # ------------------------
     # CL/CD Interface
     # ------------------------

@@ -41,7 +41,7 @@ class BasicRudder(Foil):
         angle_of_attack = -1 * np.arctan2(rudder_frame_track[1, 0], rudder_frame_track[0, 0])
 
         # get lift and drag coefficients
-        cl, cd = self.cl_cd(angle_of_attack, re=self.p.get("re", 1e5))
+        cl, cd = self.cl_cd(angle_of_attack, re=self.get_reynolds())
 
         # compute dynamic pressure
         rho = self.p.get("water_density", 1000.0)  # kg/m^3

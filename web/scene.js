@@ -43,7 +43,7 @@ export function createScene(appElement) {
   water.receiveShadow = true;
   scene.add(water);
 
-  // 1 m x 1 m grid
+  // Grid matches boat length (~1.5 m)
   const gridSize = 400;
   const gridDivisions = 400;
   const grid = new THREE.GridHelper(

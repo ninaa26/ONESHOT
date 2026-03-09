@@ -122,6 +122,7 @@ connectWebSocket();
 // --- local helm controls ----------------------------------------------
 
 let rudderDeg = 0.0;
+// Sail angle command from centerline (deg).
 let sailDeg = 0.0;
 
 const RUDDER_MAX_DEG = 35.0;
@@ -250,19 +251,18 @@ function animate(now) {
       rudderDeg - RUDDER_RATE_DEG * dt,
     );
   }
+  // Up/down directly change the sail angle command in degrees.
   if (keyUp) {
-    sailDeg = Math.max(-SAIL_MAX_DEG, sailDeg - SAIL_RATE_DEG * dt);
+    sailDeg = Math.min(SAIL_MAX_DEG, sailDeg + SAIL_RATE_DEG * dt);
   }
   if (keyDown) {
-    sailDeg = Math.min(SAIL_MAX_DEG, sailDeg + SAIL_RATE_DEG * dt);
+    sailDeg = Math.max(-SAIL_MAX_DEG, sailDeg - SAIL_RATE_DEG * dt);
   }
 
   maybeSendControls();
 
-  // Visually rotate sail around mast based on local sail angle (deg from centerline)
-  // Positive sailDeg now rotates the sail to starboard (right) when
-  // looking in the boat's forward direction.
-  sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailDeg);
+  // Visually rotate sail around mast based on last known sail angle from HUD.
+  // (Angle is updated in boat.js using data from the server.)
 
   // Visually rotate rudder around its hinge at the stern
   rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
