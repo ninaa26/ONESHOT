@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder

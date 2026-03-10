@@ -4,7 +4,6 @@ import numpy as np
 
 from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
-from sailbench.utils.coordinate_helper import get_local_track
 
 
 class QuadraticHydroModel(Model):
