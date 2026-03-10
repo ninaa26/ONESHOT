@@ -25,6 +25,21 @@
 4. **[Optional but recommended] Setup VSCode Extensions**   
     I would recommend utilizing VSCode for developing in this project. The two extensions to install are [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) (Python formatter and linter) as well as [MyPy](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) (Python type checker). This will help keep consistent code quality and style across sailbench.
 
+## Running the Web Simulation
+
+1. **Start the sim backend** (from the repository root):
+   ```bash
+   uv run python -m sailbench.sim.web_runner --config basic_sailbot.yaml --fps 60
+   ```
+
+2. **Start the frontend** (in a separate terminal, from the `web` directory):
+   ```bash
+   cd web
+   python -m http.server 8000
+   ```
+
+3. Open http://localhost:8000 in your browser.
+
 ### [DEPRECATED: sailbench now runs on neuralfoil] XFoil Integration (Instructions for Windows)
 If you are developing new models with new foil types / characteristics, you may run into an issue with Aerosandbox generating new polars:
 
