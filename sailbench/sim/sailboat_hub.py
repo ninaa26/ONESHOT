@@ -9,7 +9,6 @@ import yaml
 from sailbench.dynamics.dumb_rudder import DumbRudderModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
-from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
@@ -208,45 +207,10 @@ class SailboatHub:
             y_pos = component.p.get("y_pos", 0.0)
             mz = x_pos * fy - y_pos * fx + mz_direct
 
-            # Thresholded debug print so we can see who blows up.
-            if (
-                abs(fx) > 500.0
-                or abs(fy) > 500.0
-                or abs(mz) > 500.0
-                or speed > 5.0
-            ):
-                print(
-                    "[DEBUG] component force",
-                    f"comp={name}",
-                    f"u={u:.3f}",
-                    f"v={v:.3f}",
-                    f"r={r:.3f}",
-                    f"fx={fx:.1f}",
-                    f"fy={fy:.1f}",
-                    f"mz={mz:.1f}",
-                )
-
             # Sum forces
             fx_total += fx
             fy_total += fy
             mz_total += mz
-
-        # Final total forces / moment debug (also thresholded).
-        if (
-            abs(fx_total) > 500.0
-            or abs(fy_total) > 500.0
-            or abs(mz_total) > 500.0
-            or speed > 5.0
-        ):
-            print(
-                "[DEBUG] TOTAL force",
-                f"u={u:.3f}",
-                f"v={v:.3f}",
-                f"r={r:.3f}",
-                f"Fx={fx_total:.1f}",
-                f"Fy={fy_total:.1f}",
-                f"Mz={mz_total:.1f}",
-            )
 
         self.last_forces["total"] = (fx_total, fy_total)
         return fx_total, fy_total, mz_total
