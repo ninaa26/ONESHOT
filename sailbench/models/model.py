@@ -15,8 +15,8 @@ class State:
     x: float
     y: float
     psi: tuple[float, float]  # angle is cosine (tuple[0]) + i*sine (tuple[1])
-    u: float  # x velocity in global frame
-    v: float  # y velocity in global frame
+    u: float  # surge velocity (body x)
+    v: float  # sway velocity (body y)
     r: float  # angular velocity
 
     @property
@@ -65,6 +65,10 @@ class State:
             v=float(v),
             r=float(r),
         )
+
+    def __str__(self) -> str:
+        """Return string representation of State."""
+        return f"State(x={self.x:.2f}, y={self.y:.2f}, psi=({self.psi[0]:.2f}, {self.psi[1]:.2f}), u={self.u:.2f}, v={self.v:.2f}, r={self.r:.2f})"
 
 
 class Model(ABC):

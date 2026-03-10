@@ -40,13 +40,12 @@ class BasicSail(Foil):
 
         # Wind vector in world frame
         wind_rad = np.radians(wind_angle_deg)
-        wind_global = np.array(
-            [
-                wind_speed * np.cos(wind_rad),
-                wind_speed * np.sin(wind_rad),
-            ],
-        )
-        v_world = np.array([state.u, state.v])
+        wind_global = np.array([
+            wind_speed * np.cos(wind_rad),
+            wind_speed * np.sin(wind_rad),
+        ])
+        # Boat velocity: state.u, state.v are body-frame; convert to world
+        v_world = tf_tree.vector_to_frame(np.array([state.u, state.v]), "boat", "world")
 
         # Compute apparent wind in sail frame
         apparent_wind_global = wind_global - v_world
@@ -63,14 +62,13 @@ class BasicSail(Foil):
         lift = cl * q * s
         drag = cd * q * s
 
-        # Force in fluid frame
-        f_fluid = np.array([-drag, lift])
+        # Force in fluid frame (x = wind direction; drag opposes motion => +drag along flow)
+        f_fluid = np.array([drag, lift])
 
         # Rotate fluid → sail
         aoa_rad = np.radians(aoa)
         R = np.array([[np.cos(aoa_rad), -np.sin(aoa_rad)], [np.sin(aoa_rad), np.cos(aoa_rad)]])
 
         f_sail = R @ f_fluid
-
         # Rotate sail → boat using tf_tree
         return tf_tree.vector_to_frame(f_sail, "sail", "boat")

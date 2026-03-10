@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+"""WebSocket-based simulation runner using SailboatHub.
+
+This module keeps the physics core in Python (via SailboatHub) and exposes
+the kinematic state over a WebSocket connection so a browser (e.g. three.js)
+can render a 3D view and send rudder/sail controls.
+"""
+
+import argparse
+import asyncio
+import contextlib
+import json
+import math
+from dataclasses import dataclass
+
+from websockets.server import WebSocketServerProtocol, serve
+
+from sailbench.models.model import State
+from sailbench.sim.protocol import ControlInputs, make_state_message, parse_control_message
+from sailbench.sim.sailboat_hub import SailboatHub
+from sailbench.solvers.rk4 import rk4_step
+
+
+@dataclass(slots=True)
+class HubSimulationConfig:
+    """Configuration for SailboatHub-based WebSocket runner."""
+
+    config_file: str
+    fps: float | None = None
+
+
+@dataclass(slots=True)
+class HubSimulation:
+    """Wrapper around SailboatHub state and controls."""
+
+    hub: SailboatHub
+    state: State
+    dt: float
+    t: float = 0.0
+    rudder_deg: float = 0.0
+    sail_rad: float = 0.0
+    paused: bool = False
+
+    def step(self) -> None:
+        """Advance the simulation by one fixed step using current controls."""
+        if self.paused:
+            return
+
+        self.state = self.hub.step(
+            self.state,
+            self.dt,
+            solver=rk4_step,
+            sail_angle=self.sail_rad,
+            rudder_angle=self.rudder_deg,
+        )
+        self.t += self.dt
+
+    def apply_controls(self, controls: ControlInputs) -> None:
+        """Update control targets (rudder, sail, wind, pause/reset)."""
+        if controls.rudder_deg is not None:
+            self.rudder_deg = float(controls.rudder_deg)
+        if controls.sail_deg is not None:
+            self.sail_rad = math.radians(float(controls.sail_deg))
+
+        if controls.wind_speed is not None:
+            self.hub.sail_cfg["wind_speed"] = float(controls.wind_speed)
+        if controls.wind_dir_deg is not None:
+            self.hub.sail_cfg["wind_dir_deg"] = float(controls.wind_dir_deg)
+
+        if controls.paused is not None:
+            self.paused = controls.paused
+
+        if controls.reset:
+            self.state = State(x=0.0, y=0.0, psi=(1.0, 0.0), u=0.0, v=0.0, r=0.0)
+            self.t = 0.0
+            self.rudder_deg = 0.0
+            self.sail_rad = 0.0
+
+
+async def hub_simulation_loop(
+    ws: WebSocketServerProtocol,
+    sim: HubSimulation,
+) -> None:
+    """Drive SailboatHub in a fixed-step loop and stream state to client."""
+    controls = ControlInputs()
+
+    async def control_task() -> None:
+        nonlocal controls
+        while True:
+            raw_msg = await ws.recv()
+            data = json.loads(raw_msg)
+            controls = parse_control_message(data)
+            sim.apply_controls(controls)
+
+    ctrl_future = asyncio.create_task(control_task())
+
+    try:
+        while True:
+            sim.step()
+            wind_speed = float(sim.hub.sail_cfg.get("wind_speed", 0.0))
+            wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 0.0))
+            sail_force = getattr(sim.hub, "last_sail_force", (0.0, 0.0))
+            forces = getattr(sim.hub, "last_forces", {})
+            msg = make_state_message(
+                sim.state,
+                sim.t,
+                wind_speed=wind_speed,
+                wind_dir_deg=wind_dir_deg,
+                sail_force=sail_force,
+                forces=forces,
+            )
+            await ws.send(json.dumps(msg))
+            await asyncio.sleep(sim.dt)
+    finally:
+        ctrl_future.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await ctrl_future
+
+
+async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulationConfig) -> None:
+    """Handle a single WebSocket client using a dedicated SailboatHub instance."""
+    del path  # unused
+
+    hub = SailboatHub(config_file=cfg.config_file)
+    dt_cfg = float(hub.simulation_cfg.get("dt", 0.02))
+    fps = cfg.fps or (1.0 / dt_cfg if dt_cfg > 0 else 60.0)
+    dt = 1.0 / fps
+
+    sim = HubSimulation(
+        hub=hub,
+        state=State(x=0.0, y=0.0, psi=(1.0, 0.0), u=0.0, v=0.0, r=0.0),
+        dt=dt,
+    )
+
+    await hub_simulation_loop(ws, sim)
+
+
+async def run_server(host: str, port: int, config_file: str, fps: float | None) -> None:
+    """Run a WebSocket server that exposes SailboatHub to browser clients."""
+    cfg = HubSimulationConfig(config_file=config_file, fps=fps)
+
+    async with serve(
+        lambda ws, path: handle_client(ws, path, cfg),
+        host,
+        port,
+    ):
+        await asyncio.Future()  # run forever
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(description="SailBench SailboatHub WebSocket runner")
+    parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=8765, help="TCP port to listen on (default: 8765)")
+    parser.add_argument(
+        "--config",
+        default="basic_sailbot.yaml",
+        help="YAML config filename (relative to configs/)",
+    )
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=None,
+        help="Target simulation frames per second (overrides config dt if set)",
+    )
+
+    args = parser.parse_args(argv)
+    asyncio.run(run_server(args.host, args.port, args.config, args.fps))
+
+
+if __name__ == "__main__":
+    main()
+

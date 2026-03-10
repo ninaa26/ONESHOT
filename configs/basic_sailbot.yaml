@@ -1,9 +1,27 @@
-# Keel foil
+simulation:
+  dt: 0.02  # [s] solver step
+
+boat:
+  mass: 27.0       # [kg]
+  inertia_z: 10.0  # [kg·m²] yaw inertia
+
+hull:
+  rho_water: 1000
+  S_hull: 0.5  # [m²]    planform area (fin + bulb strut)
+  x_pos: 0.0  # [m]     x position relative to boat center of rotation
+  y_pos: 0.0  # [m]     y position relative to boat center of rotation
+  xu1:      20.0         # [N·s/m]    surge
+  yv1:      40.0         # [N·s/m]    sway
+  nr1:      15.0         # [N·m·s/rad] yaw
+  xu2:      4.0          # [N·s²/m²]
+  yv2:      20.0
+  nr2:      10.0
+
 keel:
   airfoil_name: NACA0012
   model_type: keel
-  alpha_min: -25 # Minimum and maximum angle of attack in degrees
-  alpha_max: 25
+  alpha_min: -179 # Minimum and maximum angle of attack in degrees
+  alpha_max: 179
   res: [1e5]
   area: 0.5    # [m²]    planform area (fin + bulb strut)
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
@@ -12,27 +30,21 @@ keel:
 sail:
   airfoil_name: NACA0012
   model_type: sail
-  alpha_min: -25  
-  alpha_max: 25  
+  alpha_min: -179  
+  alpha_max: 179  
   res: [1e5]
   area: 5.0
-  wind_speed: 0.
-  wind_dir_deg: 0.
+  wind_speed: 4
+  wind_dir_deg: 90
+  x_pos: 0.0
+  y_pos: 0.0
   
 rudder:
   airfoil_name: NACA0012
   model_type: keel
-  alpha_min: -25 # Minimum and maximum angle of attack in degrees
-  alpha_max: 25
+  alpha_min: -179 # Minimum and maximum angle of attack in degrees
+  alpha_max: 179
   res: [1e5]
   area: 0.3    # [m²]    planform area (fin + bulb strut)
-
-hull:
-  Xu1: 12.0
-  Yv1: 60.0
-  Nr1: 200.0
-
-quadratic_hull:
-  Xu2: 8.0
-  Yv2: 120.0
-  Nr2: 250.0
+  x_pos: -0.5  # [m]     x position relative to boat center of rotation
+  y_pos: 0.0  # [m]     y position relative to boat center of rotation
