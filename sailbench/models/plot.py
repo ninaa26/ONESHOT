@@ -3,10 +3,10 @@ import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sailbench.dynamics.linear_hydro import LinearHydroModel
+from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
-from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -21,10 +21,10 @@ params_keel = config["keel"].copy()
 params_rudder = config["rudder"].copy()
 params_hull = config["hull"].copy()
 
-sail = BasicSail(params_sail)
+sail = HybridSail(params_sail)
 keel = BasicKeel(params_keel)
 rudder = BasicRudder(params_rudder)
-hull = LinearHydroModel(params_hull)
+hull = QuadraticHydroModel(params_hull)
 
 # ----------------------------
 # Build transform tree (all component frames in boat frame)
@@ -237,4 +237,130 @@ plt.xlabel("Flow / track angle (deg)")
 plt.ylabel("Force Y (N)")
 plt.title("Keel force (boat frame) vs flow angle")
 plt.grid(True)
+plt.show()
+
+# ----------------------------
+# Hull: quadratic drag vs surge / sway speed
+# ----------------------------
+speeds = np.linspace(-3.0, 3.0, 200)
+hull_fx = []
+hull_fy = []
+
+for u_val in speeds:
+    state_surge = State(
+        u=u_val,
+        v=0.0,
+        r=0.0,
+        x=0.0,
+        y=0.0,
+        psi=(1.0, 0.0),
+    )
+    f = hull.compute(state_surge, tf_tree)
+    hull_fx.append(f[0])
+
+for v_val in speeds:
+    state_sway = State(
+        u=0.0,
+        v=v_val,
+        r=0.0,
+        x=0.0,
+        y=0.0,
+        psi=(1.0, 0.0),
+    )
+    f = hull.compute(state_sway, tf_tree)
+    hull_fy.append(f[1])
+
+hull_fx = np.array(hull_fx)
+hull_fy = np.array(hull_fy)
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+ax1.plot(speeds, hull_fx)
+ax1.axhline(0.0, color="k", linewidth=0.5)
+ax1.set_ylabel("Fx (N)")
+ax1.set_title("Hull quadratic drag vs surge / sway speed")
+ax1.grid(True)
+
+ax2.plot(speeds, hull_fy, color="C1")
+ax2.axhline(0.0, color="k", linewidth=0.5)
+ax2.set_xlabel("Speed (m/s)")
+ax2.set_ylabel("Fy (N)")
+ax2.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+# ----------------------------
+# Hull: drag / side force vs track angle
+# ----------------------------
+track_angles_deg = np.linspace(0.0, 360.0, 200, endpoint=False)
+track_angles_rad = np.radians(track_angles_deg)
+speed_track = 1.0  # [m/s] magnitude of boat speed
+
+drag_along_track = []
+side_force = []
+hull_fx_track = []
+hull_fy_track = []
+
+for ang in track_angles_rad:
+    u = speed_track * np.cos(ang)
+    v = speed_track * np.sin(ang)
+    state_track = State(
+        u=u,
+        v=v,
+        r=0.0,
+        x=0.0,
+        y=0.0,
+        psi=(1.0, 0.0),  # boat x-axis = 0 deg track
+    )
+    fx, fy, _ = hull.compute(state_track, tf_tree)
+    hull_fx_track.append(fx)
+    hull_fy_track.append(fy)
+
+    # Unit vectors along and normal to track direction
+    tx, ty = np.cos(ang), np.sin(ang)
+    nx, ny = -np.sin(ang), np.cos(ang)
+
+    # Force components in track frame
+    f_along = fx * tx + fy * ty
+    f_side = fx * nx + fy * ny
+
+    drag_along_track.append(f_along)
+    side_force.append(f_side)
+
+drag_along_track = np.array(drag_along_track)
+side_force = np.array(side_force)
+hull_fx_track = np.array(hull_fx_track)
+hull_fy_track = np.array(hull_fy_track)
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+ax1.plot(track_angles_deg, drag_along_track)
+ax1.axhline(0.0, color="k", linewidth=0.5)
+ax1.set_ylabel("F_along (N)")
+ax1.set_title("Hull force components vs track angle (track-frame)")
+ax1.grid(True)
+
+ax2.plot(track_angles_deg, side_force, color="C2")
+ax2.axhline(0.0, color="k", linewidth=0.5)
+ax2.set_xlabel("Track angle (deg, 0 = along +x)")
+ax2.set_ylabel("F_side (N)")
+ax2.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+# Also plot the same hull force in the boat frame (Fx, Fy).
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+ax1.plot(track_angles_deg, hull_fx_track)
+ax1.axhline(0.0, color="k", linewidth=0.5)
+ax1.set_ylabel("Fx (boat) [N]")
+ax1.set_title("Hull force in boat frame vs track angle")
+ax1.grid(True)
+
+ax2.plot(track_angles_deg, hull_fy_track, color="C3")
+ax2.axhline(0.0, color="k", linewidth=0.5)
+ax2.set_xlabel("Track angle (deg, 0 = along +x)")
+ax2.set_ylabel("Fy (boat) [N]")
+ax2.grid(True)
+
+plt.tight_layout()
 plt.show()

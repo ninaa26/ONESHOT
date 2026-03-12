@@ -91,6 +91,7 @@ class StateMessagePayload(TypedDict, total=False):
     wind: WindPayload
     sail_force: SailForcePayload
     forces: ForcesPayload
+    sail: dict
 
 
 @dataclass(slots=True)
@@ -98,7 +99,9 @@ class ControlInputs:
     """Parsed control inputs coming from the browser.
 
     All fields are optional; ``None`` means \"no change\" for that control.
-    Angles are in degrees, consistent with the higher-level config.
+
+    ``rudder_deg`` and ``sail_deg`` are angles in degrees, consistent with
+    the higher-level config and browser UI.
     """
 
     rudder_deg: float | None = None
@@ -116,6 +119,7 @@ def make_state_message(
     wind_dir_deg: float | None = None,
     sail_force: tuple[float, float] | None = None,
     forces: dict[str, tuple[float, float]] | None = None,
+    sail_angle_deg: float | None = None,
 ) -> StateMessagePayload:
     """Convert an internal State into a JSON-ready state message.
 
@@ -176,6 +180,11 @@ def make_state_message(
             for name, (fx, fy) in forces.items()
         }
 
+    if sail_angle_deg is not None:
+        msg["sail"] = {
+            "angle_deg": float(sail_angle_deg),
+        }
+
     return msg
 
 
@@ -206,8 +215,8 @@ def parse_control_message(data: Mapping[str, Any]) -> ControlInputs:
 
         {
             "type": "control",
-            "rudder_deg": float,     # optional
-            "sail_deg": float,       # optional
+            "rudder_deg": float,     # optional, degrees
+            "sail_deg": float,       # optional, degrees
             "wind_speed": float,     # optional, m/s
             "wind_dir_deg": float,   # optional, from +x, degrees
             "paused": bool,          # optional

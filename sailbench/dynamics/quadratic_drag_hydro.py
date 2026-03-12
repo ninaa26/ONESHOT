@@ -14,9 +14,6 @@ class QuadraticHydroModel(Model):
 
         u, v, r = state.u, state.v, state.r
 
-        # Transform into hull frame
-        u_local = state.psi[0] * u + state.psi[1] * v
-        v_local = -state.psi[1] * u + state.psi[0] * v
 
         # Quadratic damping coefficients
         xu2 = float(self.p.get("xu2", 0.0))  # [N·s²/m²]
@@ -24,8 +21,8 @@ class QuadraticHydroModel(Model):
         nr2 = float(self.p.get("nr2", 0.0))  # [N·m·s²/rad²]
 
         # Quadratic drag
-        x = -xu2 * u_local * abs(u_local)
-        y = -yv2 * v_local * abs(v_local)
+        x = -xu2 * u * abs(u)
+        y = -yv2 * v * abs(v)
         n = -nr2 * r * abs(r)
 
         return np.array([x, y, n], dtype=float)

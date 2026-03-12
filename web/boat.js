@@ -9,8 +9,14 @@ import {
 
 export const WORLD_SCALE = 1.0;
 
+// Hull model length (bow 1.6 to stern -1.0) = 2.6; scale so boat is 1.5 m in 1 m grid
+const BOAT_LENGTH_M = 1.5;
+const HULL_MODEL_LENGTH = 2.6;
+const BOAT_SCALE = BOAT_LENGTH_M / HULL_MODEL_LENGTH;
+
 export function createBoat(scene) {
   const boatGroup = new THREE.Group();
+  boatGroup.scale.setScalar(BOAT_SCALE);
   scene.add(boatGroup);
 
   // Hull: extruded triangle (bow +X, stern -X)
@@ -165,6 +171,7 @@ export function updateBoatFromState(
   const velBody = boat.velocity_body;
   const wind = msg.wind;
   const sailForce = msg.sail_force;
+  const sailState = msg.sail;
 
   boatGroup.position.set(
     pos.x * WORLD_SCALE,
@@ -181,13 +188,18 @@ export function updateBoatFromState(
   );
   setSpeed(speed);
   setHeading(heading.deg);
-  setSailAngle(sailDeg);
+  // Prefer actual sail angle from simulation if provided; fallback to local helm value.
+  const sailAngleDeg =
+    sailState && typeof sailState.angle_deg === "number"
+      ? sailState.angle_deg
+      : sailDeg;
+  setSailAngle(sailAngleDeg);
   setRudderAngle(rudderDeg);
   if (sailForce) {
     setSailForce(sailForce.fx, sailForce.fy);
   }
 
-  sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailDeg);
+  sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailAngleDeg);
   rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
 
   return wind || null;
