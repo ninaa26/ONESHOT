@@ -23,24 +23,30 @@ const { update: updateForceArrows } = createForceArrows(boatGroup);
 let showForces = false;
 let lastForces = null;
 
-// Camera & controls
-const cameraOffset = new THREE.Vector3(-10, 6, 14);
+// Follow camera: stays directly behind the boat, boat faces forward in view
+const FOLLOW_DISTANCE = 15;
+const FOLLOW_HEIGHT = 12;
+
+const boatPos = new THREE.Vector3();
+const forward = new THREE.Vector3();
+
+let cameraFollowMode = true;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-function updateCameraTarget() {
-  const target = new THREE.Vector3();
-  boatGroup.getWorldPosition(target);
-  // Keep a fixed offset from the boat for the initial view
-  if (!updateCameraTarget.hasInitialized) {
-    camera.position.copy(target).add(cameraOffset);
-    updateCameraTarget.hasInitialized = true;
-  }
-  // Always orbit around the boat's current position
-  controls.target.copy(target);
-}
+function updateFollowCamera() {
+  boatGroup.getWorldPosition(boatPos);
+  // Boat bow is along local +X; getWorldDirection returns Z. Use quaternion to get X axis.
+  forward.set(1, 0, 0);
+  forward.applyQuaternion(boatGroup.quaternion);
+  forward.y = 0;
+  forward.normalize();
 
-updateCameraTarget();
+  camera.position.copy(boatPos).addScaledVector(forward, -FOLLOW_DISTANCE);
+  camera.position.y = FOLLOW_HEIGHT;
+
+  camera.lookAt(boatPos.x, 0, boatPos.z);
+}
 
 // --- simulation state mapping -----------------------------------------
 
@@ -183,6 +189,10 @@ window.addEventListener("keyup", (ev) => {
       }
       ev.preventDefault();
       break;
+    case "KeyC":
+      cameraFollowMode = !cameraFollowMode;
+      ev.preventDefault();
+      break;
     default:
       break;
   }
@@ -274,8 +284,15 @@ function animate(now) {
   // Advect wind wisps and update wake
   wind.advect(dt, t);
   updateTrace();
-  updateCameraTarget();
-  controls.update();
+
+  if (cameraFollowMode) {
+    updateFollowCamera();
+  } else {
+    boatGroup.getWorldPosition(boatPos);
+    controls.target.copy(boatPos);
+    controls.update();
+  }
+
   renderer.render(scene, camera);
 }
 
