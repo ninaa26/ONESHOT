@@ -18,6 +18,22 @@ const wind = createWind(scene);
 // --- Boat ---------------------------------------------------------------
 
 const { boatGroup, sailGroup, rudderGroup, updateTrace } = createBoat(scene);
+const waypointMarker = new THREE.Group();
+const waypointPole = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.03, 0.03, 1.2, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffd54f }),
+);
+waypointPole.position.set(0, 0.6, 0);
+waypointMarker.add(waypointPole);
+const waypointFlag = new THREE.Mesh(
+  new THREE.ConeGeometry(0.25, 0.45, 3),
+  new THREE.MeshStandardMaterial({ color: 0xff6b6b }),
+);
+waypointFlag.rotation.z = Math.PI / 2;
+waypointFlag.position.set(0.22, 1.0, 0);
+waypointMarker.add(waypointFlag);
+waypointMarker.visible = false;
+scene.add(waypointMarker);
 
 const { update: updateForceArrows } = createForceArrows(boatGroup);
 let showForces = false;
@@ -115,6 +131,14 @@ function makeWsUrl() {
           lastForces = msg.forces;
           updateForceArrows(msg.forces, showForces);
           updateForcesChart(msg.forces);
+        }
+        if (msg.waypoint) {
+          waypointMarker.visible = true;
+          waypointMarker.position.set(
+            msg.waypoint.x,
+            0,
+            msg.waypoint.y,
+          );
         }
       }
     } catch {
