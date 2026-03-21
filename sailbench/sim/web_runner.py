@@ -121,7 +121,7 @@ class PolicyController:
         act = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         self.last_action = act
         rudder_deg = float(act[0] * self.cfg.max_rudder_deg)
-        sail_rad = float((act[1] + 1.0) * 0.5 * math.radians(self.cfg.max_sail_deg))
+        sail_rad = float(act[1] * math.radians(self.cfg.max_sail_deg))
         return rudder_deg, sail_rad
 
 
@@ -222,7 +222,9 @@ async def hub_simulation_loop(
                 sail_force=sail_force,
                 forces=forces,
                 sail_angle_deg=sail_angle_deg,
+                rudder_angle_deg=sim.rudder_deg,
                 waypoint=sim.policy.waypoint if sim.policy is not None else None,
+                control_mode="rl" if sim.policy is not None else "manual",
             )
             await ws.send(json.dumps(msg))
             await asyncio.sleep(sim.dt)

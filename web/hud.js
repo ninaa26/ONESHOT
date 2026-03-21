@@ -7,6 +7,8 @@ const hudHeadingEl = document.getElementById("hud-heading");
 /** @type {HTMLSpanElement | null} */
 const hudConnEl = document.getElementById("hud-conn");
 /** @type {HTMLSpanElement | null} */
+const hudControlModeEl = document.getElementById("hud-control-mode");
+/** @type {HTMLSpanElement | null} */
 const hudSailAngleEl = document.getElementById("hud-sail-angle");
 /** @type {HTMLSpanElement | null} */
 const hudRudderAngleEl = document.getElementById("hud-rudder-angle");
@@ -27,6 +29,11 @@ export function setHeading(deg) {
 export function setConnectionStatus(text) {
   if (!hudConnEl) return;
   hudConnEl.textContent = text;
+}
+
+export function setControlMode(mode) {
+  if (!hudControlModeEl) return;
+  hudControlModeEl.textContent = mode === "rl" ? "RL AUTOPILOT" : "MANUAL";
 }
 
 export function setSailAngle(deg) {

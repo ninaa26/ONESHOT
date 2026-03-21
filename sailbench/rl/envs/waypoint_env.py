@@ -35,10 +35,10 @@ class WaypointEnvConfig:
     speed_scale: float = 6.0
     yaw_rate_scale: float = 2.0
     wind_speed_scale: float = 15.0
-    progress_reward_coeff: float = 3.0
-    heading_reward_coeff: float = 0.05
-    control_delta_penalty_coeff: float = 0.01
-    control_effort_penalty_coeff: float = 0.002
+    vmg_multiplier: float = 1.0
+    joint_penalty: float = 0.0
+    dist_multiplier: float = 5.0
+    time_penalty: float = 3.0
     success_reward: float = 25.0
     failure_penalty: float = -10.0
 
@@ -87,13 +87,23 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         self.waypoint = self._sample_waypoint(start)
         self.prev_distance = self._distance_to_waypoint()
 
-        return self._get_observation(), self._build_info(0.0, 0.0, 0.0, 0.0, False, False)
+        return self._get_observation(), self._build_info(
+            vmg=0.0,
+            vmg_term=0.0,
+            joint_delta=0.0,
+            joint_penalty_term=0.0,
+            dist_delta=0.0,
+            dist_term=0.0,
+            time_penalty_term=0.0,
+            success=False,
+            failure=False,
+        )
 
     def step(self, action: NDArray[np.float64]) -> tuple[NDArray[np.float32], float, bool, bool, dict[str, Any]]:
         """Advance simulation with normalized rudder/sail actions."""
         clipped = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         rudder_deg = float(clipped[0] * self.cfg.max_rudder_deg)
-        sail_rad = float((clipped[1] + 1.0) * 0.5 * self.max_sail_rad)
+        sail_rad = float(clipped[1] * self.max_sail_rad)
 
         self.state = self.hub.step(
             state=self.state,
@@ -106,13 +116,13 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         self.t += self.dt
 
         distance = self._distance_to_waypoint()
-        progress_reward = self.cfg.progress_reward_coeff * (self.prev_distance - distance)
-        heading_alignment = self._heading_alignment()
-        heading_reward = self.cfg.heading_reward_coeff * heading_alignment * math.exp(
-            -distance / max(self.cfg.waypoint_max_radius_m, 1e-6),
-        )
-        control_delta_penalty = self.cfg.control_delta_penalty_coeff * float(np.sum(np.abs(clipped - self.prev_action)))
-        control_effort_penalty = self.cfg.control_effort_penalty_coeff * float(np.sum(np.abs(clipped)))
+        vmg = self._velocity_made_good_to_waypoint()
+        vmg_term = self.cfg.vmg_multiplier * (vmg**3)
+        joint_delta = float(np.sum(np.abs(clipped - self.prev_action)))
+        joint_penalty_term = self.cfg.joint_penalty * joint_delta
+        dist_delta = self.prev_distance - distance
+        dist_term = self.cfg.dist_multiplier * dist_delta
+        time_penalty_term = self.cfg.time_penalty
 
         terminated = False
         truncated = self.steps >= self.cfg.max_episode_steps
@@ -127,27 +137,36 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             terminated = True
             terminal_reward = self.cfg.failure_penalty
 
-        reward = (
-            progress_reward
-            + heading_reward
-            - control_delta_penalty
-            - control_effort_penalty
-            + terminal_reward
-        )
+        reward = vmg_term - joint_penalty_term + dist_term - time_penalty_term + terminal_reward
 
         self.prev_distance = distance
         self.prev_action = clipped
         self.last_action = clipped
 
         info = self._build_info(
-            progress_reward=progress_reward,
-            heading_reward=heading_reward,
-            control_delta_penalty=control_delta_penalty,
-            control_effort_penalty=control_effort_penalty,
+            vmg=vmg,
+            vmg_term=vmg_term,
+            joint_delta=joint_delta,
+            joint_penalty_term=joint_penalty_term,
+            dist_delta=dist_delta,
+            dist_term=dist_term,
+            time_penalty_term=time_penalty_term,
             success=success,
             failure=failure,
         )
         return self._get_observation(), float(reward), terminated, truncated, info
+
+    def _velocity_made_good_to_waypoint(self) -> float:
+        dx = self.waypoint[0] - self.state.x
+        dy = self.waypoint[1] - self.state.y
+        distance = max(math.hypot(dx, dy), 1e-9)
+        goal_dir_x = dx / distance
+        goal_dir_y = dy / distance
+
+        c, s = self.state.psi
+        vx = c * self.state.u - s * self.state.v
+        vy = s * self.state.u + c * self.state.v
+        return float(vx * goal_dir_x + vy * goal_dir_y)
 
     def _sample_start(self) -> State:
         theta = float(self.np_random.uniform(-math.pi, math.pi))
@@ -236,10 +255,13 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
 
     def _build_info(
         self,
-        progress_reward: float,
-        heading_reward: float,
-        control_delta_penalty: float,
-        control_effort_penalty: float,
+        vmg: float,
+        vmg_term: float,
+        joint_delta: float,
+        joint_penalty_term: float,
+        dist_delta: float,
+        dist_term: float,
+        time_penalty_term: float,
         success: bool,
         failure: bool,
     ) -> dict[str, Any]:
@@ -249,10 +271,13 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             "waypoint_y": float(self.waypoint[1]),
             "sim_time_s": self.t,
             "step_count": self.steps,
-            "reward_progress": progress_reward,
-            "reward_heading": heading_reward,
-            "penalty_control_delta": control_delta_penalty,
-            "penalty_control_effort": control_effort_penalty,
+            "vmg": vmg,
+            "reward_vmg": vmg_term,
+            "joint_delta": joint_delta,
+            "penalty_joint": joint_penalty_term,
+            "dist_delta": dist_delta,
+            "reward_dist": dist_term,
+            "penalty_time": time_penalty_term,
             "success": success,
             "failure": failure,
         }

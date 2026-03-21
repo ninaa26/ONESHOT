@@ -162,8 +162,6 @@ export function updateBoatFromState(
   boatGroup,
   sailGroup,
   rudderGroup,
-  sailDeg,
-  rudderDeg,
 ) {
   const boat = msg.boat;
   const pos = boat.position;
@@ -172,6 +170,7 @@ export function updateBoatFromState(
   const wind = msg.wind;
   const sailForce = msg.sail_force;
   const sailState = msg.sail;
+  const rudderState = msg.rudder;
 
   boatGroup.position.set(
     pos.x * WORLD_SCALE,
@@ -192,16 +191,24 @@ export function updateBoatFromState(
   const sailAngleDeg =
     sailState && typeof sailState.angle_deg === "number"
       ? sailState.angle_deg
-      : sailDeg;
+      : 0.0;
+  const rudderAngleDeg =
+    rudderState && typeof rudderState.angle_deg === "number"
+      ? rudderState.angle_deg
+      : 0.0;
   setSailAngle(sailAngleDeg);
-  setRudderAngle(rudderDeg);
+  setRudderAngle(rudderAngleDeg);
   if (sailForce) {
     setSailForce(sailForce.fx, sailForce.fy);
   }
 
   sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailAngleDeg);
-  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
+  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderAngleDeg);
 
-  return wind || null;
+  return {
+    wind: wind || null,
+    sailAngleDeg,
+    rudderAngleDeg,
+  };
 }
 
