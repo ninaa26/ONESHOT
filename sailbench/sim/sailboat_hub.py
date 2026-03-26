@@ -34,6 +34,8 @@ class SailboatHub:
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
         self.last_sail_force: tuple[float, float] = (0.0, 0.0)
+        # Last resolved sail angle in radians after sheet-limit + wind logic.
+        self.last_sail_angle_rad: float = 0.0
         # Per-component forces (boat frame) for visualization.
         self.last_forces: dict[str, tuple[float, float]] = {}
 
@@ -103,11 +105,16 @@ class SailboatHub:
         sail_angle: float = 0.0,
         rudder_angle: float = 0.0,
     ) -> State:
-        """Sail the boat."""
+        """Sail the boat.
+
+        `sail_angle` is treated as sheet limit (max |sail angle| from centerline),
+        not as a rigid commanded sail angle.
+        """
 
         def dynamics(arr: np.ndarray) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
+
             fx, fy, mz = self._forces(state_vec)
 
             c, s = arr[2], arr[3]  # Heading cosine, sine
@@ -130,52 +137,81 @@ class SailboatHub:
 
         # --- integrate ---
         next_arr = solver(dynamics, state.to_array(), dt)
+        next_state = State.from_array(next_arr)
 
         # --- update tf tree with dynamic components ---
+        self._update_dynamic_frames(
+            state=next_state,
+            sheet_limit_rad= float(np.abs(sail_angle)),
+            rudder_angle_deg=rudder_angle,
+        )
+
+        # --- rebuild state ---
+        return next_state
+
+    def _update_dynamic_frames(self, state: State, sheet_limit_rad: float, rudder_angle_deg: float) -> None:
+        """Update boat/fluid/sail/rudder frames for a given instantaneous state."""
         self.tf.add_frame(
             name="boat",
             parent="world",
-            transform=Transform2D(x=next_arr[0], y=next_arr[1], c=next_arr[2], s=next_arr[3]),
+            transform=Transform2D(x=state.x, y=state.y, c=state.psi[0], s=state.psi[1]),
         )
 
-        # update sail frame with new sail angle
+        # (u, v) are body-frame; flow direction is opposite to velocity
+        speed = float(np.hypot(state.u, state.v))
+        if speed > 1e-6:
+            c_fluid, s_fluid = -state.u / speed, -state.v / speed
+        else:
+            c_fluid, s_fluid = 1.0, 0.0
+        self.tf.add_frame(
+            name="fluid",
+            parent="boat",
+            transform=Transform2D(x=0.0, y=0.0, c=c_fluid, s=s_fluid),
+        )
+
+        sail_angle = self._resolve_sail_angle_from_sheet(state=state, sheet_limit_rad=sheet_limit_rad)
+        self.last_sail_angle_rad = sail_angle
         self.tf.add_frame(
             name="sail",
             parent="boat",
             transform=Transform2D(
                 x=self.sail_cfg.get("x_pos", 0.0),
                 y=self.sail_cfg.get("y_pos", 0.0),
-                c=np.cos(sail_angle),
-                s=np.sin(sail_angle),
+                c=float(np.cos(sail_angle)),
+                s=float(np.sin(sail_angle)),
             ),
         )
 
-        # (u, v) are body-frame; flow direction is opposite to velocity
-        u, v = next_arr[4], next_arr[5]
-        norm = np.hypot(u, v)
-        if norm > 1e-6:
-            c, s = -u / norm, -v / norm
-        else:
-            c, s = 1.0, 0.0
-        self.tf.add_frame(
-            name="fluid",
-            parent="boat",
-            transform=Transform2D(x=0.0, y=0.0, c=c, s=s),
-        )
-
+        rudder_rad = float(np.radians(rudder_angle_deg))
         self.tf.add_frame(
             name="rudder",
             parent="boat",
             transform=Transform2D(
                 x=self.rudder_cfg.get("x_pos", 0.0),
                 y=self.rudder_cfg.get("y_pos", 0.0),
-                c=np.cos(np.radians(rudder_angle)),
-                s=np.sin(np.radians(rudder_angle)),
+                c=float(np.cos(rudder_rad)),
+                s=float(np.sin(rudder_rad)),
             ),
         )
 
-        # --- rebuild state ---
-        return State.from_array(next_arr)
+    def _resolve_sail_angle_from_sheet(self, state: State, sheet_limit_rad: float) -> float:
+        """Resolve free sail angle from apparent wind, clamped by sheet limit."""
+
+        # Compute wind vector in world frame
+        wind_speed = float(self.sail_cfg.get("wind_speed", 0.0))
+        wind_angle_deg = float(self.sail_cfg.get("wind_dir_deg", 0.0))
+        wind_rad = float(np.radians(wind_angle_deg))
+        wind_world = wind_speed * np.array([np.cos(wind_rad), np.sin(wind_rad)], dtype=float)
+
+        # Compute boat velocity in world frame
+        v_boat_world = self.tf.vector_to_frame(np.array([state.u, state.v], dtype=float), "boat", "world")
+        apparent_wind_world = wind_world - v_boat_world
+        apparent_wind_boat = self.tf.vector_to_frame(apparent_wind_world, "world", "boat")
+        awa = float(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
+
+        # Sail swings to leeward with apparent wind side, but sheet limits travel.
+        limit = -float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
+        return float(np.sign(awa) * min(abs(awa), limit))
 
     # --- Physics core ----------------------------------------
     def _forces(self, state: State) -> tuple[float, float, float]:
