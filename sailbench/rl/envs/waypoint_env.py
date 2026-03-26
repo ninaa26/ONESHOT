@@ -100,16 +100,16 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         )
 
     def step(self, action: NDArray[np.float64]) -> tuple[NDArray[np.float32], float, bool, bool, dict[str, Any]]:
-        """Advance simulation with normalized rudder/sail actions."""
+        """Advance simulation with normalized rudder/sheet-limit actions."""
         clipped = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         rudder_deg = float(clipped[0] * self.cfg.max_rudder_deg)
-        sail_rad = float(clipped[1] * self.max_sail_rad)
+        sheet_limit_rad = float(clipped[1] * self.max_sail_rad)
 
         self.state = self.hub.step(
             state=self.state,
             dt=self.dt,
             solver=rk4_step,
-            sail_angle=sail_rad,
+            sail_angle=sheet_limit_rad,
             rudder_angle=rudder_deg,
         )
         self.steps += 1

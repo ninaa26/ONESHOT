@@ -156,7 +156,7 @@ connectWebSocket();
 // --- local helm controls ----------------------------------------------
 
 let rudderDeg = 0.0;
-// Sail angle command from centerline (deg).
+// Sheet limit from centerline (deg): larger means letting sheet out.
 let sailDeg = 0.0;
 
 const RUDDER_MAX_DEG = 35.0;
@@ -289,7 +289,7 @@ function animate(now) {
       rudderDeg - RUDDER_RATE_DEG * dt,
     );
   }
-  // Up/down directly change the sail angle command in degrees.
+  // Up/down adjust sheet limit (let out / pull in).
   if (keyUp) {
     sailDeg = Math.min(SAIL_MAX_DEG, sailDeg + SAIL_RATE_DEG * dt);
   }
