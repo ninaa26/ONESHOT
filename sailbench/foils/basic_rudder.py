@@ -33,30 +33,42 @@ class BasicRudder(Foil):
 
 
         """
-        # Boat velocity is body-frame (surge, sway); use directly for track in boat frame
-        local_track_vector = np.array([[state.u], [state.v]])
+        # Use local inflow at rudder position, including yaw-rate contribution.
+        # Body velocity at point (x, y): [u - r*y, v + r*x].
+        x_pos = float(self.p.get("x_pos", 0.0))
+        y_pos = float(self.p.get("y_pos", 0.0))
+        u_local = float(state.u - state.r * y_pos)
+        v_local = float(state.v + state.r * x_pos)
 
-        # angle of attack is angle of vector of negative track in rudder frame
-        rudder_frame_track = tf_tree.vector_to_frame(local_track_vector, "boat", "rudder")
-        angle_of_attack = -1 * np.arctan2(rudder_frame_track[1, 0], rudder_frame_track[0, 0])
+        v_local_boat = np.array([u_local, v_local], dtype=float)
+        speed = float(np.hypot(u_local, v_local))
+        if speed < 1e-6:
+            return np.array([0.0, 0.0], dtype=float)
 
-        # get lift and drag coefficients
-        cl, cd = self.cl_cd(angle_of_attack, re=self.get_reynolds())
+        # Resolve local velocity in rudder frame; AoA is opposite of local track angle.
+        v_local_rudder = tf_tree.vector_to_frame(v_local_boat, "boat", "rudder")
+        aoa = -float(np.arctan2(v_local_rudder[1], v_local_rudder[0]))
 
-        # compute dynamic pressure
-        rho = self.p.get("water_density", 1000.0)  # kg/m^3
-        u = state.u
-        v = state.v
-        v = np.hypot(u, v)
-        q = 0.5 * rho * v**2
+        # Prevent unrealistically large coefficients at extreme deflection/stall.
+        aoa_limit_deg = float(self.p.get("aoa_limit_deg", 25.0))
+        aoa = float(np.clip(aoa, -np.radians(aoa_limit_deg), np.radians(aoa_limit_deg)))
+        cl, cd = self.cl_cd(aoa, re=self.get_reynolds())
+        cl = float(np.clip(cl, -float(self.p.get("cl_max", 1.0)), float(self.p.get("cl_max", 1.0))))
+        cd = float(np.clip(cd, 0.0, float(self.p.get("cd_max", 1.2))))
 
-        # compute forces
-        s = self.p.get("area", 1.0)  # m^2
+        # Dynamic pressure and net foil forces.
+        rho = float(self.p.get("water_density", 1000.0))  # kg/m^3
+        q = 0.5 * rho * speed**2
+        area = float(self.p.get("area", 1.0))  # m^2
+        effectiveness = float(self.p.get("effectiveness", 0.25))
 
-        drag = cd * q * s
-        lift = cl * q * s
+        drag = cd * q * area * effectiveness
+        lift = cl * q * area * effectiveness
 
-        # Fluid-frame: x = flow direction; drag opposes motion => +drag along flow.
-        # Use same fluid→boat transform as keel so lift/drag resolve consistently.
-        f_fluid = np.array([drag, lift])
-        return tf_tree.vector_to_frame(f_fluid, "fluid", "boat")
+        # Convert local fluid-frame forces to rudder frame, then to boat frame.
+        # Fluid x-axis aligns with local flow direction.
+        f_fluid = np.array([drag, lift], dtype=float)
+        c, s = np.cos(aoa), np.sin(aoa)
+        r_fluid_to_rudder = np.array([[c, -s], [s, c]], dtype=float)
+        f_rudder = r_fluid_to_rudder @ f_fluid
+        return tf_tree.vector_to_frame(f_rudder, "rudder", "boat")

@@ -139,6 +139,12 @@ class HubSimulation:
     policy: PolicyController | None = None
     policy_deterministic: bool = True
     rng: np.random.Generator | None = None
+    # Manual-control filtering (server-side safety net).
+    # The browser now owns "snap back" behavior; this just smooths abrupt updates.
+    target_rudder_deg: float = 0.0
+    target_sail_rad: float = 0.0
+    manual_rudder_rate_deg_s: float = 120.0
+    manual_sail_rate_deg_s: float = 180.0
 
     def step(self) -> None:
         """Advance the simulation by one fixed step using current controls."""
@@ -150,6 +156,17 @@ class HubSimulation:
                 self.hub,
                 self.state,
                 deterministic=self.policy_deterministic,
+            )
+        else:
+            # Manual mode: rate-limit toward latest targets from the browser.
+            max_step_deg = self.manual_rudder_rate_deg_s * float(self.dt)
+            self.rudder_deg += float(
+                np.clip(self.target_rudder_deg - self.rudder_deg, -max_step_deg, max_step_deg)
+            )
+
+            max_step_sail = math.radians(self.manual_sail_rate_deg_s) * float(self.dt)
+            self.sail_rad += float(
+                np.clip(self.target_sail_rad - self.sail_rad, -max_step_sail, max_step_sail)
             )
 
         self.state = self.hub.step(
@@ -164,9 +181,9 @@ class HubSimulation:
     def apply_controls(self, controls: ControlInputs) -> None:
         """Update control targets (rudder, sail, wind, pause/reset)."""
         if controls.rudder_deg is not None:
-            self.rudder_deg = float(controls.rudder_deg)
+            self.target_rudder_deg = float(controls.rudder_deg)
         if controls.sail_deg is not None:
-            self.sail_rad = math.radians(float(controls.sail_deg))
+            self.target_sail_rad = math.radians(float(controls.sail_deg))
 
         if controls.wind_speed is not None:
             self.hub.sail_cfg["wind_speed"] = float(controls.wind_speed)
@@ -181,6 +198,8 @@ class HubSimulation:
             self.t = 0.0
             self.rudder_deg = 0.0
             self.sail_rad = 0.0
+            self.target_rudder_deg = 0.0
+            self.target_sail_rad = 0.0
             if self.policy is not None and self.rng is not None:
                 self.policy.reset_waypoint(self.state, self.rng)
 

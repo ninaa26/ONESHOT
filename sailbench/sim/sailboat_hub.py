@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from sailbench.dynamics.dumb_rudder import DumbRudderModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
-from sailbench.foils.hybrid_sail import HybridSail
+from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_sail import BasicSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -37,12 +37,15 @@ class SailboatHub:
         # Per-component forces (boat frame) for visualization.
         self.last_forces: dict[str, tuple[float, float]] = {}
 
+        # Rudder "servo" state (for manual controllability).
+        self._rudder_angle_deg: float = 0.0
+
         self.boat_factory()
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self.sail = HybridSail(self.sail_cfg)
-        self.rudder = DumbRudderModel(self.rudder_cfg)
+        self.sail = BasicSail(self.sail_cfg)
+        self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull,self.keel, self.sail, self.rudder]
@@ -163,14 +166,33 @@ class SailboatHub:
             transform=Transform2D(x=0.0, y=0.0, c=c, s=s),
         )
 
+        # Rudder: smooth + auto-center for easier manual control.
+        cmd_deg = float(rudder_angle)
+        deadband_deg = float(self.rudder_cfg.get("deadband_deg", 1.5))
+        center_tau_s = float(self.rudder_cfg.get("center_tau_s", 0.6))
+        max_rate_deg_s = float(self.rudder_cfg.get("max_rate_deg_s", 120.0))
+
+        if abs(cmd_deg) <= deadband_deg:
+            cmd_deg = 0.0
+
+        if center_tau_s > 0.0 and cmd_deg == 0.0:
+            # Exponential return-to-center when you "let go".
+            alpha = float(np.clip(dt / center_tau_s, 0.0, 1.0))
+            self._rudder_angle_deg = (1.0 - alpha) * self._rudder_angle_deg
+        else:
+            # Rate-limit toward commanded angle.
+            max_step = max_rate_deg_s * float(dt)
+            err = cmd_deg - self._rudder_angle_deg
+            self._rudder_angle_deg += float(np.clip(err, -max_step, max_step))
+
         self.tf.add_frame(
             name="rudder",
             parent="boat",
             transform=Transform2D(
                 x=self.rudder_cfg.get("x_pos", 0.0),
                 y=self.rudder_cfg.get("y_pos", 0.0),
-                c=np.cos(np.radians(rudder_angle)),
-                s=np.sin(np.radians(rudder_angle)),
+                c=np.cos(np.radians(self._rudder_angle_deg)),
+                s=np.sin(np.radians(self._rudder_angle_deg)),
             ),
         )
 
