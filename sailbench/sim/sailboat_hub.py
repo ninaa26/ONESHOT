@@ -45,7 +45,7 @@ class SailboatHub:
         self.rudder = DumbRudderModel(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.hull, self.sail, self.rudder]
+        self.components = [self.hull,self.keel, self.sail, self.rudder]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 

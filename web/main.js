@@ -4,7 +4,7 @@ import { createScene, handleResize } from "./scene.js";
 import { createWind } from "./wind.js";
 import { createBoat, updateBoatFromState } from "./boat.js";
 import { createForceArrows } from "./forces.js";
-import { setConnectionStatus, updateForcesChart } from "./hud.js";
+import { setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
 
 // --- Scene & environment ------------------------------------------------
 
@@ -18,6 +18,19 @@ const wind = createWind(scene);
 // --- Boat ---------------------------------------------------------------
 
 const { boatGroup, sailGroup, rudderGroup, updateTrace } = createBoat(scene);
+const waypointMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.28, 20, 20),
+  new THREE.MeshStandardMaterial({
+    color: 0xffff66,
+    emissive: 0xffdd33,
+    emissiveIntensity: 1.8,
+    roughness: 0.2,
+    metalness: 0.0,
+  }),
+);
+waypointMarker.position.y = 0.4;
+waypointMarker.visible = false;
+scene.add(waypointMarker);
 
 const { update: updateForceArrows } = createForceArrows(boatGroup);
 let showForces = false;
@@ -100,21 +113,36 @@ function makeWsUrl() {
     try {
       const msg = JSON.parse(event.data);
       if (msg && msg.type === "state") {
-        const windPayload = updateBoatFromState(
+        const stateVis = updateBoatFromState(
           msg,
           boatGroup,
           sailGroup,
           rudderGroup,
-          sailDeg,
-          rudderDeg,
         );
-        if (windPayload) {
-          wind.setFromPayload(windPayload);
+        if (stateVis && typeof stateVis.sailAngleDeg === "number") {
+          sailDeg = stateVis.sailAngleDeg;
+        }
+        if (stateVis && typeof stateVis.rudderAngleDeg === "number") {
+          rudderDeg = stateVis.rudderAngleDeg;
+        }
+        if (stateVis && stateVis.wind) {
+          wind.setFromPayload(stateVis.wind);
         }
         if (msg.forces) {
           lastForces = msg.forces;
           updateForceArrows(msg.forces, showForces);
           updateForcesChart(msg.forces);
+        }
+        if (msg.control && typeof msg.control.mode === "string") {
+          setControlMode(msg.control.mode);
+        }
+        if (msg.waypoint) {
+          waypointMarker.visible = true;
+          waypointMarker.position.set(
+            msg.waypoint.x,
+            0.4,
+            msg.waypoint.y,
+          );
         }
       }
     } catch {
@@ -273,9 +301,6 @@ function animate(now) {
 
   // Visually rotate sail around mast based on last known sail angle from HUD.
   // (Angle is updated in boat.js using data from the server.)
-
-  // Visually rotate rudder around its hinge at the stern
-  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderDeg);
 
   // subtle bobbing while idle to keep the scene alive
   const t = now / 1000.0;

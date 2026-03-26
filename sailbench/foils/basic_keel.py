@@ -37,7 +37,7 @@ class BasicKeel(Foil):
         """
         # (u, v) are body-frame velocity (surge, sway)
         local_track = np.degrees(np.arctan2(state.v, state.u))
-        aoa = -local_track  # Keel angle of attack is negative of local track
+        aoa = local_track  # Keel angle of attack is negative of local track
 
         # get lift and drag coefficients
         cl, cd = self.cl_cd(np.radians(aoa), re=self.get_reynolds())

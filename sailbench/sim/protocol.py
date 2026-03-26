@@ -7,7 +7,7 @@ simulation core and a browser frontend (e.g. three.js).
 """
 
 from dataclasses import dataclass
-from typing import Any, Mapping, TypedDict
+from typing import Any, Mapping, TypedDict, cast
 
 from sailbench.models.model import State
 
@@ -91,7 +91,10 @@ class StateMessagePayload(TypedDict, total=False):
     wind: WindPayload
     sail_force: SailForcePayload
     forces: ForcesPayload
-    sail: dict
+    sail: dict[str, float]
+    rudder: dict[str, float]
+    waypoint: PositionPayload
+    control: dict[str, str]
 
 
 @dataclass(slots=True)
@@ -120,6 +123,9 @@ def make_state_message(
     sail_force: tuple[float, float] | None = None,
     forces: dict[str, tuple[float, float]] | None = None,
     sail_angle_deg: float | None = None,
+    rudder_angle_deg: float | None = None,
+    waypoint: tuple[float, float] | None = None,
+    control_mode: str | None = None,
 ) -> StateMessagePayload:
     """Convert an internal State into a JSON-ready state message.
 
@@ -175,14 +181,34 @@ def make_state_message(
         }
 
     if forces is not None:
-        msg["forces"] = {
-            name: {"fx": float(fx), "fy": float(fy)}
-            for name, (fx, fy) in forces.items()
-        }
+        force_payload = cast(
+            ForcesPayload,
+            {
+                name: {"fx": float(fx), "fy": float(fy)}
+                for name, (fx, fy) in forces.items()
+            },
+        )
+        msg["forces"] = force_payload
 
     if sail_angle_deg is not None:
         msg["sail"] = {
             "angle_deg": float(sail_angle_deg),
+        }
+
+    if rudder_angle_deg is not None:
+        msg["rudder"] = {
+            "angle_deg": float(rudder_angle_deg),
+        }
+
+    if waypoint is not None:
+        msg["waypoint"] = {
+            "x": float(waypoint[0]),
+            "y": float(waypoint[1]),
+        }
+
+    if control_mode is not None:
+        msg["control"] = {
+            "mode": str(control_mode),
         }
 
     return msg

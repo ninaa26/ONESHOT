@@ -40,9 +40,42 @@
 
 3. Open http://localhost:8000 in your browser.
 
+### Watch a trained RL policy in the web simulation
+
+1. Start the backend with an RL checkpoint:
+   ```bash
+   uv run python -m sailbench.sim.web_runner \
+     --config basic_sailbot.yaml \
+     --policy-model runs/<run_name>/best_model/best_model.zip \
+     --policy-config configs/rl_waypoint_sb3.yaml
+   ```
+2. In a second terminal:
+   ```bash
+   cd web
+   python -m http.server 8000
+   ```
+3. Open http://localhost:8000. The red/yellow marker shows the current waypoint.
+
 ### [DEPRECATED: sailbench now runs on neuralfoil] XFoil Integration (Instructions for Windows)
 If you are developing new models with new foil types / characteristics, you may run into an issue with Aerosandbox generating new polars:
 
 ```Running XFoil to generate polars for Airfoil 'NACA0012'::   0%|          | 0/1 [00:00<?, ?it/s]```
 
 This is because Aerosandbox requires the XFoil software to generate polars, to install head to this link: https://web.mit.edu/drela/Public/web/xfoil/ and download XFOIL6.99.zip. You then must add your XFoil folder to PATH.
+
+## RL Training (Gymnasium + SB3)
+
+Use the default waypoint RL config:
+
+```bash
+uv run python scripts/train_waypoint_sb3.py --config configs/rl_waypoint_sb3.yaml
+```
+
+Evaluate a trained checkpoint:
+
+```bash
+uv run python scripts/eval_waypoint_sb3.py \
+  --config configs/rl_waypoint_sb3.yaml \
+  --model runs/<run_name>/best_model/best_model.zip \
+  --vecnormalize runs/<run_name>/vecnormalize.pkl
+```
