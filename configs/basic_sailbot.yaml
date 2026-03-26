@@ -30,7 +30,7 @@ keel:
 
 sail:
   model_type: sail
-  area: 10.0
+  area: 3.0
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   x_pos: 0.0
