@@ -103,8 +103,8 @@ class ControlInputs:
 
     All fields are optional; ``None`` means \"no change\" for that control.
 
-    ``rudder_deg`` and ``sail_deg`` are angles in degrees, consistent with
-    the higher-level config and browser UI.
+    ``rudder_deg`` is rudder angle in degrees.
+    ``sail_deg`` is sheet limit angle in degrees (max |sail angle| from centerline).
     """
 
     rudder_deg: float | None = None
@@ -242,7 +242,7 @@ def parse_control_message(data: Mapping[str, Any]) -> ControlInputs:
         {
             "type": "control",
             "rudder_deg": float,     # optional, degrees
-            "sail_deg": float,       # optional, degrees
+            "sail_deg": float,       # optional, sheet-limit degrees
             "wind_speed": float,     # optional, m/s
             "wind_dir_deg": float,   # optional, from +x, degrees
             "paused": bool,          # optional

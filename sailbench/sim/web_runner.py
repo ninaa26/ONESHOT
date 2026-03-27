@@ -134,7 +134,7 @@ class HubSimulation:
     dt: float
     t: float = 0.0
     rudder_deg: float = 0.0
-    sail_rad: float = 0.0
+    sheet_limit_rad: float = 0.0
     paused: bool = False
     policy: PolicyController | None = None
     policy_deterministic: bool = True
@@ -152,7 +152,7 @@ class HubSimulation:
             return
 
         if self.policy is not None:
-            self.rudder_deg, self.sail_rad = self.policy.compute_controls(
+            self.rudder_deg, self.sheet_limit_rad = self.policy.compute_controls(
                 self.hub,
                 self.state,
                 deterministic=self.policy_deterministic,
@@ -165,15 +165,15 @@ class HubSimulation:
             )
 
             max_step_sail = math.radians(self.manual_sail_rate_deg_s) * float(self.dt)
-            self.sail_rad += float(
-                np.clip(self.target_sail_rad - self.sail_rad, -max_step_sail, max_step_sail)
+            self.sheet_limit_rad += float(
+                np.clip(self.target_sail_rad - self.sheet_limit_rad, -max_step_sail, max_step_sail)
             )
 
         self.state = self.hub.step(
             self.state,
             self.dt,
             solver=rk4_step,
-            sail_angle=self.sail_rad,
+            sail_angle=self.sheet_limit_rad,
             rudder_angle=self.rudder_deg,
         )
         self.t += self.dt
@@ -197,7 +197,7 @@ class HubSimulation:
             self.state = State(x=0.0, y=0.0, psi=(1.0, 0.0), u=0.0, v=0.0, r=0.0)
             self.t = 0.0
             self.rudder_deg = 0.0
-            self.sail_rad = 0.0
+            self.sheet_limit_rad = 0.0
             self.target_rudder_deg = 0.0
             self.target_sail_rad = 0.0
             if self.policy is not None and self.rng is not None:
@@ -232,7 +232,7 @@ async def hub_simulation_loop(
             wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 0.0))
             sail_force = getattr(sim.hub, "last_sail_force", (0.0, 0.0))
             forces = getattr(sim.hub, "last_forces", {})
-            sail_angle_deg = math.degrees(sim.sail_rad)
+            sail_angle_deg = math.degrees(float(getattr(sim.hub, "last_sail_angle_rad", 0.0)))
             msg = make_state_message(
                 sim.state,
                 sim.t,

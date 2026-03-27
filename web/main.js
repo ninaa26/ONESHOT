@@ -17,7 +17,7 @@ const wind = createWind(scene);
 
 // --- Boat ---------------------------------------------------------------
 
-const { boatGroup, sailGroup, rudderGroup, updateTrace } = createBoat(scene);
+const { boatGroup, sailGroup, rudderGroup, updateTrace, animateControlSurfaces } = createBoat(scene);
 const waypointMarker = new THREE.Mesh(
   new THREE.SphereGeometry(0.28, 20, 20),
   new THREE.MeshStandardMaterial({
@@ -160,7 +160,7 @@ connectWebSocket();
 
 // Commanded control targets (what we send to the server).
 let rudderCmdDeg = 0.0;
-// Sail angle command from centerline (deg).
+// Sheet-limit command from centerline (deg, 0..SAIL_MAX).
 let sailCmdDeg = 0.0;
 
 // Measured / reported by server (for UI/debug only).
@@ -307,12 +307,12 @@ function animate(now) {
       rudderCmdDeg = Math.min(0, rudderCmdDeg + step);
     }
   }
-  // Up/down directly change the sail angle command in degrees.
+  // Up/down adjust sheet limit (let out / pull in).
   if (keyUp) {
     sailCmdDeg = Math.min(SAIL_MAX_DEG, sailCmdDeg + SAIL_RATE_DEG * dt);
   }
   if (keyDown) {
-    sailCmdDeg = Math.max(-SAIL_MAX_DEG, sailCmdDeg - SAIL_RATE_DEG * dt);
+    sailCmdDeg = Math.max(0.0, sailCmdDeg - SAIL_RATE_DEG * dt);
   }
 
   maybeSendControls();
@@ -326,6 +326,7 @@ function animate(now) {
 
   // Advect wind wisps and update wake
   wind.advect(dt, t);
+  animateControlSurfaces(dt);
   updateTrace();
 
   if (cameraFollowMode) {
