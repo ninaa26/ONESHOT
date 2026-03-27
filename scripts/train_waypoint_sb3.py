@@ -49,6 +49,12 @@ def main(argv: list[str] | None = None) -> None:
         default=Path("runs"),
         help="Base directory for training outputs.",
     )
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+        help="Path to a saved PPO checkpoint .zip to continue training from.",
+    )
     args = parser.parse_args(argv)
 
     full_cfg = _load_yaml(args.config)
@@ -93,26 +99,45 @@ def main(argv: list[str] | None = None) -> None:
             clip_obs=10.0,
             training=False,
         )
+        if args.resume_from is not None:
+            inferred_vec_path = args.resume_from.with_name(f"{args.resume_from.stem}_vecnormalize.pkl")
+            if inferred_vec_path.exists():
+                train_env = VecNormalize.load(str(inferred_vec_path), train_env)
+                eval_env = VecNormalize.load(str(inferred_vec_path), eval_env)
+                train_env.training = True
+                train_env.norm_reward = use_norm_reward
+                eval_env.training = False
+                eval_env.norm_reward = False
+            else:
+                print(
+                    f"WARNING: normalization enabled but could not find {inferred_vec_path}; "
+                    "continuing without loading saved VecNormalize statistics.",
+                )
 
     tensorboard_log = train_cfg.get("tensorboard_log", "runs/tensorboard")
-    model = PPO(
-        policy="MlpPolicy",
-        env=train_env,
-        learning_rate=float(train_cfg.get("learning_rate", 3e-4)),
-        n_steps=int(train_cfg.get("n_steps", 1024)),
-        batch_size=int(train_cfg.get("batch_size", 256)),
-        n_epochs=int(train_cfg.get("n_epochs", 10)),
-        gamma=float(train_cfg.get("gamma", 0.99)),
-        gae_lambda=float(train_cfg.get("gae_lambda", 0.95)),
-        clip_range=float(train_cfg.get("clip_range", 0.2)),
-        ent_coef=float(train_cfg.get("ent_coef", 0.0)),
-        vf_coef=float(train_cfg.get("vf_coef", 0.5)),
-        max_grad_norm=float(train_cfg.get("max_grad_norm", 0.5)),
-        use_sde=bool(train_cfg.get("use_sde", False)),
-        seed=seed,
-        verbose=1,
-        tensorboard_log=tensorboard_log,
-    )
+    if args.resume_from is not None:
+        if not args.resume_from.exists():
+            raise FileNotFoundError(f"Resume checkpoint does not exist: {args.resume_from}")
+        model = PPO.load(str(args.resume_from), env=train_env, tensorboard_log=tensorboard_log)
+    else:
+        model = PPO(
+            policy="MlpPolicy",
+            env=train_env,
+            learning_rate=float(train_cfg.get("learning_rate", 3e-4)),
+            n_steps=int(train_cfg.get("n_steps", 1024)),
+            batch_size=int(train_cfg.get("batch_size", 256)),
+            n_epochs=int(train_cfg.get("n_epochs", 10)),
+            gamma=float(train_cfg.get("gamma", 0.99)),
+            gae_lambda=float(train_cfg.get("gae_lambda", 0.95)),
+            clip_range=float(train_cfg.get("clip_range", 0.2)),
+            ent_coef=float(train_cfg.get("ent_coef", 0.0)),
+            vf_coef=float(train_cfg.get("vf_coef", 0.5)),
+            max_grad_norm=float(train_cfg.get("max_grad_norm", 0.5)),
+            use_sde=bool(train_cfg.get("use_sde", False)),
+            seed=seed,
+            verbose=1,
+            tensorboard_log=tensorboard_log,
+        )
 
     checkpoint_callback = CheckpointCallback(
         save_freq=max(int(train_cfg.get("checkpoint_freq", 25_000)) // n_envs, 1),
@@ -131,7 +156,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     callback = CallbackList([checkpoint_callback, eval_callback])
 
-    model.learn(total_timesteps=total_timesteps, callback=callback, progress_bar=True)
+    model.learn(
+        total_timesteps=total_timesteps,
+        callback=callback,
+        progress_bar=True,
+        reset_num_timesteps=args.resume_from is None,
+    )
 
     final_model_path = run_dir / "final_model.zip"
     model.save(str(final_model_path))
@@ -144,6 +174,7 @@ def main(argv: list[str] | None = None) -> None:
         "total_timesteps": total_timesteps,
         "n_envs": n_envs,
         "final_model_path": str(final_model_path),
+        "resumed_from": str(args.resume_from) if args.resume_from is not None else None,
     }
     with (run_dir / "summary.json").open("w", encoding="utf-8") as file:
         json.dump(summary, file, indent=2)

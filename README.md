@@ -91,6 +91,16 @@ Use the default waypoint RL config (`configs/rl_waypoint_sb3.yaml`):
 uv run python scripts/train_waypoint_sb3.py --config configs/rl_waypoint_sb3.yaml
 ```
 
+To continue a stopped run from a checkpoint:
+
+```bash
+uv run python scripts/train_waypoint_sb3.py \
+  --config configs/rl_waypoint_sb3.yaml \
+  --resume-from runs/<run_name>/checkpoints/ppo_waypoint_<steps>_steps.zip
+```
+
+When `--resume-from` is provided, training continues from that model state and keeps timestep counting continuous.
+
 Training outputs are written under `runs/` by default:
 
 - `runs/waypoint_ppo_<timestamp>/best_model/best_model.zip`: best checkpoint per eval callback
@@ -99,6 +109,11 @@ Training outputs are written under `runs/` by default:
 - `runs/waypoint_ppo_<timestamp>/vecnormalize.pkl`: VecNormalize stats (only if enabled via config)
 - `runs/waypoint_ppo_<timestamp>/config_used.yaml`: the exact config used for the run
 
+Notes for resume:
+
+- Keep `--config` consistent with the original training setup (especially env settings and `train.n_envs`).
+- If normalization is enabled, the trainer automatically attempts to load checkpoint stats from the matching file `.../<checkpoint_stem>_vecnormalize.pkl`.
+
 ### TensorBoard
 
 If you keep `train.tensorboard_log: runs/tensorboard` (the default), you can launch TensorBoard with:
@@ -106,6 +121,9 @@ If you keep `train.tensorboard_log: runs/tensorboard` (the default), you can lau
 ```bash
 uv run tensorboard --logdir runs/tensorboard
 ```
+
+When training, logs will be written into subdirectories under `runs/tensorboard/`, one per run. You can view your training progress, hyperparameters, and evaluation metrics in TensorBoard at [http://localhost:6006](http://localhost:6006) after launching the command above.
+
 
 ### Evaluate a trained checkpoint
 
