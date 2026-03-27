@@ -47,3 +47,61 @@ def test_episode_truncates_at_horizon() -> None:
         _, _, _, truncated, _ = env.step(np.zeros(2, dtype=np.float32))
     assert truncated
 
+
+def test_control_mapping_extrema_are_expected() -> None:
+    env = _make_env()
+    env.reset(seed=17)
+
+    captured: list[tuple[float, float]] = []
+    original_step = env.hub.step
+
+    def spy_step(*, state, dt, solver, sail_angle, rudder_angle):  # type: ignore[no-untyped-def]
+        captured.append((float(rudder_angle), float(sail_angle)))
+        return state
+
+    env.hub.step = spy_step  # type: ignore[method-assign]
+    try:
+        env.step(np.array([-1.0, -1.0], dtype=np.float32))
+        env.step(np.array([1.0, 1.0], dtype=np.float32))
+    finally:
+        env.hub.step = original_step  # type: ignore[method-assign]
+
+    assert len(captured) == 2
+    rudder_lo, sail_lo = captured[0]
+    rudder_hi, sail_hi = captured[1]
+    assert rudder_lo == -35.0
+    assert sail_lo == 0.0
+    assert rudder_hi == 35.0
+    assert sail_hi == np.radians(85.0)
+
+
+def test_observation_includes_previous_action_channels() -> None:
+    env = _make_env()
+    env.reset(seed=23)
+    obs, *_ = env.step(np.array([0.25, -0.5], dtype=np.float32))
+    # Observation channels 11/12 track the clipped previous action.
+    assert np.isclose(obs[11], env.last_action[0])
+    assert np.isclose(obs[12], env.last_action[1])
+
+
+def test_vis_callback_receives_state_messages() -> None:
+    payloads: list[dict[str, object]] = []
+    cfg = WaypointEnvConfig(
+        simulator_config="basic_sailbot.yaml",
+        waypoint_min_radius_m=8.0,
+        waypoint_max_radius_m=12.0,
+        vis_callback=payloads.append,
+        vis_stride_steps=1,
+    )
+    env = WaypointEnv(config=cfg)
+    env.reset(seed=9)
+    env.step(np.array([0.0, 0.0], dtype=np.float32))
+
+    assert len(payloads) >= 2
+    latest = payloads[-1]
+    assert latest["type"] == "state"
+    assert "boat" in latest
+    assert "waypoint" in latest
+    control = latest.get("control")
+    assert isinstance(control, dict)
+    assert control.get("mode") == "training"

@@ -121,7 +121,9 @@ class PolicyController:
         act = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         self.last_action = act
         rudder_deg = float(act[0] * self.cfg.max_rudder_deg)
-        sail_rad = float(act[1] * math.radians(self.cfg.max_sail_deg))
+        # Match training env scaling: action[1] in [-1, 1] maps to sheet limit [0, max].
+        sail_cmd = 0.5 * (float(act[1]) + 1.0)
+        sail_rad = float(sail_cmd * math.radians(self.cfg.max_sail_deg))
         return rudder_deg, sail_rad
 
 
@@ -144,7 +146,6 @@ class HubSimulation:
     target_rudder_deg: float = 0.0
     target_sail_rad: float = 0.0
     manual_rudder_rate_deg_s: float = 120.0
-    manual_sail_rate_deg_s: float = 180.0
 
     def step(self) -> None:
         """Advance the simulation by one fixed step using current controls."""
@@ -152,11 +153,15 @@ class HubSimulation:
             return
 
         if self.policy is not None:
-            self.rudder_deg, self.sheet_limit_rad = self.policy.compute_controls(
+            self.rudder_deg, requested_sheet_limit_rad = self.policy.compute_controls(
                 self.hub,
                 self.state,
                 deterministic=self.policy_deterministic,
             )
+            sheet_cap_rad = float(np.abs(self.target_sail_rad))
+            if sheet_cap_rad <= 0.0:
+                sheet_cap_rad = float(math.radians(self.policy.cfg.max_sail_deg))
+            self.sheet_limit_rad = float(np.clip(np.abs(requested_sheet_limit_rad), 0.0, sheet_cap_rad))
         else:
             # Manual mode: rate-limit toward latest targets from the browser.
             max_step_deg = self.manual_rudder_rate_deg_s * float(self.dt)
@@ -164,10 +169,8 @@ class HubSimulation:
                 np.clip(self.target_rudder_deg - self.rudder_deg, -max_step_deg, max_step_deg)
             )
 
-            max_step_sail = math.radians(self.manual_sail_rate_deg_s) * float(self.dt)
-            self.sheet_limit_rad += float(
-                np.clip(self.target_sail_rad - self.sheet_limit_rad, -max_step_sail, max_step_sail)
-            )
+            # Sail follows command immediately (no backend smoothing/rate limiting).
+            self.sheet_limit_rad = float(self.target_sail_rad)
 
         self.state = self.hub.step(
             self.state,
@@ -180,7 +183,9 @@ class HubSimulation:
 
     def apply_controls(self, controls: ControlInputs) -> None:
         """Update control targets (rudder, sail, wind, pause/reset)."""
-        if controls.rudder_deg is not None:
+        # In RL mode, policy outputs own rudder/sheet commands every step.
+        # Ignore manual helm inputs so they can never override policy intent.
+        if self.policy is None and controls.rudder_deg is not None:
             self.target_rudder_deg = float(controls.rudder_deg)
         if controls.sail_deg is not None:
             self.target_sail_rad = math.radians(float(controls.sail_deg))
@@ -199,7 +204,10 @@ class HubSimulation:
             self.rudder_deg = 0.0
             self.sheet_limit_rad = 0.0
             self.target_rudder_deg = 0.0
-            self.target_sail_rad = 0.0
+            if self.policy is not None:
+                self.target_sail_rad = math.radians(float(self.policy.cfg.max_sail_deg))
+            else:
+                self.target_sail_rad = 0.0
             if self.policy is not None and self.rng is not None:
                 self.policy.reset_waypoint(self.state, self.rng)
 
@@ -279,6 +287,7 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
         rng=rng,
     )
     if sim.policy is not None:
+        sim.target_sail_rad = math.radians(float(sim.policy.cfg.max_sail_deg))
         sim.policy.reset_waypoint(sim.state, rng)
 
     await hub_simulation_loop(ws, sim)

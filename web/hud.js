@@ -33,6 +33,10 @@ export function setConnectionStatus(text) {
 
 export function setControlMode(mode) {
   if (!hudControlModeEl) return;
+  if (mode === "training") {
+    hudControlModeEl.textContent = "TRAINING";
+    return;
+  }
   hudControlModeEl.textContent = mode === "rl" ? "RL AUTOPILOT" : "MANUAL";
 }
 

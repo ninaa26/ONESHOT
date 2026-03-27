@@ -91,6 +91,27 @@ Use the default waypoint RL config (`configs/rl_waypoint_sb3.yaml`):
 uv run python scripts/train_waypoint_sb3.py --config configs/rl_waypoint_sb3.yaml
 ```
 
+To watch training live in the web visualizer, enable the training websocket stream:
+
+```bash
+uv run python scripts/train_waypoint_sb3.py \
+  --config configs/rl_waypoint_sb3.yaml \
+  --watch-web
+```
+
+Then run the frontend in another terminal and open `http://localhost:8000`:
+
+```bash
+cd web
+python -m http.server 8000
+```
+
+Notes:
+
+- The live stream is served on `ws://127.0.0.1:8765/sim` by default (same frontend URL as the normal backend).
+- Training visualization publishes from env-0 only, so it works with vectorized training (`train.n_envs > 1`).
+- You can reduce browser update load with `--watch-stride <N>` (or `train.watch_stride` in YAML).
+
 To continue a stopped run from a checkpoint:
 
 ```bash

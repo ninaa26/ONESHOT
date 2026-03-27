@@ -9,7 +9,7 @@ import yaml
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
-from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -46,7 +46,7 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self.sail = BasicSail(self.sail_cfg)
+        self.sail = HybridSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
@@ -237,10 +237,22 @@ class SailboatHub:
         apparent_wind_boat = self.tf.vector_to_frame(apparent_wind_world, "world", "boat")
         awa = float(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
 
-        # Coordinate convention: positive boat-frame Y maps to opposite visual-Z side,
-        # so we apply a sign flip here to keep sail on the expected leeward side.
+        # Simplest sheeting behavior:
+        # - sail is always fully eased to the commanded sheet limit magnitude
+        # - sign flips when apparent wind crosses the boat centerline
+        # - if exactly centered, keep previous side to avoid collapsing to 0
         limit = float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
-        return float(-np.sign(awa) * min(abs(awa), limit))
+        if limit <= 0.0:
+            return 0.0
+
+        wind_side = float(np.sign(apparent_wind_boat[1]))
+        if wind_side == 0.0:
+            wind_side = float(np.sign(self.last_sail_angle_rad))
+            if wind_side == 0.0:
+                wind_side = -1.0
+
+        # Coordinate convention: positive boat-frame Y maps to opposite visual-Z side.
+        return float(-wind_side * limit)
 
     # --- Physics core ----------------------------------------
     def _forces(self, state: State) -> tuple[float, float, float]:

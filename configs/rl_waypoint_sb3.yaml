@@ -1,6 +1,6 @@
 env:
   simulator_config: basic_sailbot.yaml
-  dt: null
+  dt: 0.02
   max_episode_steps: 1000
   max_rudder_deg: 35.0
   max_sail_deg: 85.0
@@ -15,7 +15,7 @@ env:
   yaw_rate_scale: 2.0
   wind_speed_scale: 15.0
   vmg_multiplier: 1.0
-  joint_penalty: 0.0
+  joint_penalty: 0.5
   dist_multiplier: 5.0
   time_penalty: 3.0
   success_reward: 25.0
@@ -43,6 +43,8 @@ train:
   eval_episodes: 10
   deterministic_eval: true
   tensorboard_log: runs/tensorboard
+  watch_web: false
+  watch_stride: 2
 
 eval:
   episodes: 20

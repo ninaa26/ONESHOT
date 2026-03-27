@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from sailbench.rl.envs.waypoint_env import WaypointEnv, WaypointEnvConfig
+from sailbench.rl.live_vis import LiveTrainingVisServer
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -55,6 +57,28 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Path to a saved PPO checkpoint .zip to continue training from.",
     )
+    parser.add_argument(
+        "--watch-web",
+        action="store_true",
+        help="Broadcast env-0 training state over websocket for the browser visualizer.",
+    )
+    parser.add_argument(
+        "--watch-host",
+        default="127.0.0.1",
+        help="Host for training visualization websocket server.",
+    )
+    parser.add_argument(
+        "--watch-port",
+        type=int,
+        default=8765,
+        help="Port for training visualization websocket server.",
+    )
+    parser.add_argument(
+        "--watch-stride",
+        type=int,
+        default=None,
+        help="Publish every N env steps (default from config or 2).",
+    )
     args = parser.parse_args(argv)
 
     full_cfg = _load_yaml(args.config)
@@ -75,12 +99,26 @@ def main(argv: list[str] | None = None) -> None:
     seed = int(train_cfg.get("seed", 7))
     n_envs = int(train_cfg.get("n_envs", 4))
     total_timesteps = int(train_cfg.get("total_timesteps", 200_000))
+    watch_enabled = bool(args.watch_web or train_cfg.get("watch_web", False))
+    watch_stride = int(args.watch_stride if args.watch_stride is not None else train_cfg.get("watch_stride", 2))
 
-    def make_env() -> Monitor:
-        return Monitor(WaypointEnv(config=env_cfg))
+    vis_server: LiveTrainingVisServer | None = None
+    if watch_enabled:
+        vis_server = LiveTrainingVisServer(host=args.watch_host, port=args.watch_port)
+        vis_server.start()
 
-    train_env = DummyVecEnv([make_env for _ in range(n_envs)])
-    eval_env = DummyVecEnv([make_env])
+    def make_env(env_idx: int) -> Monitor:
+        cfg = env_cfg
+        if watch_enabled and env_idx == 0 and vis_server is not None:
+            cfg = replace(
+                env_cfg,
+                vis_callback=vis_server.publish,
+                vis_stride_steps=max(watch_stride, 1),
+            )
+        return Monitor(WaypointEnv(config=cfg))
+
+    train_env = DummyVecEnv([lambda i=i: make_env(i) for i in range(n_envs)])
+    eval_env = DummyVecEnv([lambda: Monitor(WaypointEnv(config=env_cfg))])
 
     use_norm_obs = bool(train_cfg.get("normalize_observation", False))
     use_norm_reward = bool(train_cfg.get("normalize_reward", False))
@@ -156,28 +194,34 @@ def main(argv: list[str] | None = None) -> None:
     )
     callback = CallbackList([checkpoint_callback, eval_callback])
 
-    model.learn(
-        total_timesteps=total_timesteps,
-        callback=callback,
-        progress_bar=True,
-        reset_num_timesteps=args.resume_from is None,
-    )
+    try:
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=callback,
+            progress_bar=True,
+            reset_num_timesteps=args.resume_from is None,
+        )
 
-    final_model_path = run_dir / "final_model.zip"
-    model.save(str(final_model_path))
-    if isinstance(train_env, VecNormalize):
-        train_env.save(str(run_dir / "vecnormalize.pkl"))
+        final_model_path = run_dir / "final_model.zip"
+        model.save(str(final_model_path))
+        if isinstance(train_env, VecNormalize):
+            train_env.save(str(run_dir / "vecnormalize.pkl"))
 
-    summary = {
-        "run_dir": str(run_dir),
-        "seed": seed,
-        "total_timesteps": total_timesteps,
-        "n_envs": n_envs,
-        "final_model_path": str(final_model_path),
-        "resumed_from": str(args.resume_from) if args.resume_from is not None else None,
-    }
-    with (run_dir / "summary.json").open("w", encoding="utf-8") as file:
-        json.dump(summary, file, indent=2)
+        summary = {
+            "run_dir": str(run_dir),
+            "seed": seed,
+            "total_timesteps": total_timesteps,
+            "n_envs": n_envs,
+            "final_model_path": str(final_model_path),
+            "resumed_from": str(args.resume_from) if args.resume_from is not None else None,
+        }
+        with (run_dir / "summary.json").open("w", encoding="utf-8") as file:
+            json.dump(summary, file, indent=2)
+    finally:
+        train_env.close()
+        eval_env.close()
+        if vis_server is not None:
+            vis_server.close()
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@ const BOAT_LENGTH_M = 1.5;
 const HULL_MODEL_LENGTH = 2.6;
 const BOAT_SCALE = BOAT_LENGTH_M / HULL_MODEL_LENGTH;
 const SURFACE_ANIM_RESPONSE = 15.0; // larger = snappier easing
-const SAIL_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(420.0);
 const RUDDER_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(520.0);
 
 export function createBoat(scene) {
@@ -158,13 +157,8 @@ export function createBoat(scene) {
     const safeDt = Math.max(0.0, dt);
     const alpha = 1.0 - Math.exp(-SURFACE_ANIM_RESPONSE * safeDt);
 
-    const sailErr = sailGroup.userData.targetYaw - sailGroup.rotation.y;
-    const sailStep = THREE.MathUtils.clamp(
-      sailErr * alpha,
-      -SAIL_MAX_RATE_RAD_S * safeDt,
-      SAIL_MAX_RATE_RAD_S * safeDt,
-    );
-    sailGroup.rotation.y += sailStep;
+    // Sail should follow sim state immediately (no frontend smoothing).
+    sailGroup.rotation.y = sailGroup.userData.targetYaw;
 
     const rudderErr = rudderGroup.userData.targetYaw - rudderGroup.rotation.y;
     const rudderStep = THREE.MathUtils.clamp(

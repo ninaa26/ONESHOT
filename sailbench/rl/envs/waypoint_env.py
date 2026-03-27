@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import gymnasium as gym
 import numpy as np
@@ -12,8 +12,12 @@ from gymnasium import spaces
 from numpy.typing import NDArray
 
 from sailbench.models.model import State
+from sailbench.sim.protocol import make_state_message
 from sailbench.sim.sailboat_hub import SailboatHub
 from sailbench.solvers.rk4 import rk4_step
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(slots=True)
@@ -41,6 +45,8 @@ class WaypointEnvConfig:
     time_penalty: float = 3.0
     success_reward: float = 25.0
     failure_penalty: float = -10.0
+    vis_callback: Callable[[dict[str, Any]], None] | None = None
+    vis_stride_steps: int = 1
 
 
 class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: ignore[misc]
@@ -86,12 +92,14 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         self.state = start
         self.waypoint = self._sample_waypoint(start)
         self.prev_distance = self._distance_to_waypoint()
+        self._publish_vis_state(force=True)
 
         return self._get_observation(), self._build_info(
             vmg=0.0,
             vmg_term=0.0,
             joint_delta=0.0,
             joint_penalty_term=0.0,
+            movement_penalty_term=0.0,
             dist_delta=0.0,
             dist_term=0.0,
             time_penalty_term=0.0,
@@ -103,7 +111,9 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         """Advance simulation with normalized rudder/sheet-limit actions."""
         clipped = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         rudder_deg = float(clipped[0] * self.cfg.max_rudder_deg)
-        sheet_limit_rad = float(clipped[1] * self.max_sail_rad)
+        # Map sail action from [-1, 1] -> [0, 1] so sheet limit is [0, max_sail_deg].
+        sail_cmd = 0.5 * (float(clipped[1]) + 1.0)
+        sheet_limit_rad = float(sail_cmd * self.max_sail_rad)
 
         self.state = self.hub.step(
             state=self.state,
@@ -118,8 +128,12 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         distance = self._distance_to_waypoint()
         vmg = self._velocity_made_good_to_waypoint()
         vmg_term = self.cfg.vmg_multiplier * (vmg**3)
-        joint_delta = float(np.sum(np.abs(clipped - self.prev_action)))
+        action_delta = np.abs(clipped - self.prev_action)
+        rudder_delta = float(action_delta[0])
+        sail_delta = float(action_delta[1])
+        joint_delta = float(np.sum(action_delta))
         joint_penalty_term = self.cfg.joint_penalty * joint_delta
+        movement_penalty_term =joint_penalty_term
         dist_delta = self.prev_distance - distance
         dist_term = self.cfg.dist_multiplier * dist_delta
         time_penalty_term = self.cfg.time_penalty
@@ -137,7 +151,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             terminated = True
             terminal_reward = self.cfg.failure_penalty
 
-        reward = vmg_term - joint_penalty_term + dist_term - time_penalty_term + terminal_reward
+        reward = vmg_term - movement_penalty_term + dist_term - time_penalty_term + terminal_reward
 
         self.prev_distance = distance
         self.prev_action = clipped
@@ -148,13 +162,43 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             vmg_term=vmg_term,
             joint_delta=joint_delta,
             joint_penalty_term=joint_penalty_term,
+            movement_penalty_term=movement_penalty_term,
             dist_delta=dist_delta,
             dist_term=dist_term,
             time_penalty_term=time_penalty_term,
             success=success,
             failure=failure,
         )
+        self._publish_vis_state(force=terminated or truncated)
         return self._get_observation(), float(reward), terminated, truncated, info
+
+    def _publish_vis_state(self, *, force: bool = False) -> None:
+        """Push the current simulation state to an optional visualization callback."""
+        callback = self.cfg.vis_callback
+        if callback is None:
+            return
+        stride = max(int(self.cfg.vis_stride_steps), 1)
+        if not force and (self.steps % stride != 0):
+            return
+
+        wind_speed = float(self.hub.sail_cfg.get("wind_speed", 0.0))
+        wind_dir_deg = float(self.hub.sail_cfg.get("wind_dir_deg", 0.0))
+        sail_force = getattr(self.hub, "last_sail_force", (0.0, 0.0))
+        forces = getattr(self.hub, "last_forces", {})
+        sail_angle_deg = math.degrees(float(getattr(self.hub, "last_sail_angle_rad", 0.0)))
+        msg = make_state_message(
+            self.state,
+            self.t,
+            wind_speed=wind_speed,
+            wind_dir_deg=wind_dir_deg,
+            sail_force=sail_force,
+            forces=forces,
+            sail_angle_deg=sail_angle_deg,
+            rudder_angle_deg=float(self.last_action[0] * self.cfg.max_rudder_deg),
+            waypoint=(float(self.waypoint[0]), float(self.waypoint[1])),
+            control_mode="training",
+        )
+        callback(msg)
 
     def _velocity_made_good_to_waypoint(self) -> float:
         dx = self.waypoint[0] - self.state.x
@@ -259,6 +303,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         vmg_term: float,
         joint_delta: float,
         joint_penalty_term: float,
+        movement_penalty_term: float,
         dist_delta: float,
         dist_term: float,
         time_penalty_term: float,
@@ -275,6 +320,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             "reward_vmg": vmg_term,
             "joint_delta": joint_delta,
             "penalty_joint": joint_penalty_term,
+            "penalty_movement_total": movement_penalty_term,
             "dist_delta": dist_delta,
             "reward_dist": dist_term,
             "penalty_time": time_penalty_term,
