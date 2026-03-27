@@ -115,4 +115,4 @@ uv run python scripts/eval_waypoint_sb3.py \
 
 - If policy jitters controls, increase `env.joint_penalty`.
 - If training is slow, reduce eval/checkpoint frequency and avoid `--watch-web` except when debugging.
-- Keep config consistent when resuming runs, especially env settings and vectorization count.
+- Keep config consistent when resuming runs, especially env settings and vectorization count. Weird stuff will happen if not...
