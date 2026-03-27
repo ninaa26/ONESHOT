@@ -1,7 +1,7 @@
 [project]
 name = "sailbench"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sailbench base dependencies"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,12 +9,7 @@ dependencies = [
     "aerosandbox==4.2.8",
     "pyyaml>=6.0.3",
     "pytest>=9.0.2",
-    "pygame>=2.6.1",
     "websockets>=12.0",
-    "gymnasium>=1.2.1",
-    "stable-baselines3>=2.7.0",
-    "torch>=2.8.0",
-    "tensorboard>=2.20.0",
     "tqdm>=4.67.1",
     "rich>=14.3.3",
 ]
@@ -24,6 +19,13 @@ dev = [
     "lark>=1.3.1",
     "mypy>=1.19.1",
     "ruff>=0.14.9",
+]
+
+rl = [
+    "gymnasium>=1.2.1",
+    "stable-baselines3>=2.7.0",
+    "torch>=2.8.0",
+    "tensorboard>=2.20.0",
 ]
 
 
