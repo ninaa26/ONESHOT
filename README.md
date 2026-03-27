@@ -135,6 +135,53 @@ Notes for resume:
 - Keep `--config` consistent with the original training setup (especially env settings and `train.n_envs`).
 - If normalization is enabled, the trainer automatically attempts to load checkpoint stats from the matching file `.../<checkpoint_stem>_vecnormalize.pkl`.
 
+### Train (GA with Torch)
+
+SailBench also includes a minimal genetic algorithm trainer that uses the same `WaypointEnv` reward function and dynamics:
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga.yaml
+```
+
+Quick smoke run:
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga_smoke.yaml
+```
+
+Device selection:
+
+- In config: set `train.device` to `cuda_if_available`, `cuda`, `cuda:0`, or `cpu`
+- CLI override: `--device cuda` (or another torch device string)
+
+Watch training in the web visualizer (websocket stream, same as PPO):
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py \
+  --config configs/rl_waypoint_ga.yaml \
+  --watch-web
+```
+
+In another terminal, serve the frontend and open `http://localhost:8000`:
+
+```bash
+cd web
+python -m http.server 8000
+```
+
+Notes:
+
+- Stream URL: `ws://127.0.0.1:8765/sim` (matches `web/main.js`). Do not run `web_runner` on the same port at the same time.
+- Optional: `--watch-host`, `--watch-port`, `--watch-stride N`, or set `train.watch_web` / `train.watch_stride` in YAML.
+
+Training outputs are written under `runs/waypoint_ga_<timestamp>/`:
+
+- `final_model.npz`: best genome and metadata
+- `checkpoints/ga_waypoint_gen_*.npz`: periodic snapshots
+- `history.json`: per-generation metrics
+- `summary.json`: run summary
+- `config_used.yaml`: exact config used for the run
+
 ### TensorBoard
 
 If you keep `train.tensorboard_log: runs/tensorboard` (the default), you can launch TensorBoard with:

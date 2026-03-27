@@ -23,15 +23,13 @@ env:
 
 train:
   seed: 7
-  generations: 150
-  population_size: 96
+  generations: 100
+  population_size: 64
   elite_count: 8
-  tournament_size: 8
   hidden_sizes: [64, 64]
   episodes_per_candidate: 2
-  n_workers: 4
+  device: cuda_if_available
   init_std: 0.5
-  crossover_rate: 0.7
   mutation_rate: 0.05
   mutation_std: 0.1
   checkpoint_freq_gens: 10

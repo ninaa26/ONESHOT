@@ -1,4 +1,4 @@
-"""Live WebSocket publisher for RL training visualization."""
+"""Live WebSocket publisher for RL training visualization. Our RL training """
 
 from __future__ import annotations
 
