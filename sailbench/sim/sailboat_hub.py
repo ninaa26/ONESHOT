@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from sailbench.dynamics.dumb_rudder import DumbRudderModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
-from sailbench.foils.hybrid_sail import HybridSail
+from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_sail import BasicSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -39,12 +39,15 @@ class SailboatHub:
         # Per-component forces (boat frame) for visualization.
         self.last_forces: dict[str, tuple[float, float]] = {}
 
+        # Rudder "servo" state (for manual controllability).
+        self._rudder_angle_deg: float = 0.0
+
         self.boat_factory()
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self.sail = HybridSail(self.sail_cfg)
-        self.rudder = DumbRudderModel(self.rudder_cfg)
+        self.sail = BasicSail(self.sail_cfg)
+        self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull,self.keel, self.sail, self.rudder]
@@ -142,14 +145,21 @@ class SailboatHub:
         # --- update tf tree with dynamic components ---
         self._update_dynamic_frames(
             state=next_state,
-            sheet_limit_rad= float(np.abs(sail_angle)),
+            sheet_limit_rad=float(np.abs(sail_angle)),
             rudder_angle_deg=rudder_angle,
+            dt=dt,
         )
 
         # --- rebuild state ---
         return next_state
 
-    def _update_dynamic_frames(self, state: State, sheet_limit_rad: float, rudder_angle_deg: float) -> None:
+    def _update_dynamic_frames(
+        self,
+        state: State,
+        sheet_limit_rad: float,
+        rudder_angle_deg: float,
+        dt: float,
+    ) -> None:
         """Update boat/fluid/sail/rudder frames for a given instantaneous state."""
         self.tf.add_frame(
             name="boat",
@@ -182,7 +192,25 @@ class SailboatHub:
             ),
         )
 
-        rudder_rad = float(np.radians(rudder_angle_deg))
+        # Rudder: smooth + auto-center for easier manual control.
+        cmd_deg = float(rudder_angle_deg)
+        deadband_deg = float(self.rudder_cfg.get("deadband_deg", 1.5))
+        center_tau_s = float(self.rudder_cfg.get("center_tau_s", 0.6))
+        max_rate_deg_s = float(self.rudder_cfg.get("max_rate_deg_s", 120.0))
+
+        if abs(cmd_deg) <= deadband_deg:
+            cmd_deg = 0.0
+
+        if center_tau_s > 0.0 and cmd_deg == 0.0:
+            # Exponential return-to-center when you "let go".
+            alpha = float(np.clip(dt / center_tau_s, 0.0, 1.0))
+            self._rudder_angle_deg = (1.0 - alpha) * self._rudder_angle_deg
+        else:
+            # Rate-limit toward commanded angle.
+            max_step = max_rate_deg_s * float(dt)
+            err = cmd_deg - self._rudder_angle_deg
+            self._rudder_angle_deg += float(np.clip(err, -max_step, max_step))
+        rudder_rad = float(np.radians(self._rudder_angle_deg))
         self.tf.add_frame(
             name="rudder",
             parent="boat",
@@ -209,9 +237,10 @@ class SailboatHub:
         apparent_wind_boat = self.tf.vector_to_frame(apparent_wind_world, "world", "boat")
         awa = float(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
 
-        # Sail swings to leeward with apparent wind side, but sheet limits travel.
-        limit = -float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
-        return float(np.sign(awa) * min(abs(awa), limit))
+        # Coordinate convention: positive boat-frame Y maps to opposite visual-Z side,
+        # so we apply a sign flip here to keep sail on the expected leeward side.
+        limit = float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
+        return float(-np.sign(awa) * min(abs(awa), limit))
 
     # --- Physics core ----------------------------------------
     def _forces(self, state: State) -> tuple[float, float, float]:

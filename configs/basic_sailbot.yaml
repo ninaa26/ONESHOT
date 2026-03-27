@@ -47,8 +47,15 @@ rudder:
   alpha_max: 179
   res: [1e5]
   area: 0.3    # [m²]    planform area (fin + bulb strut)
-  x_pos: -0.5  # [m]     x position relative to boat center of rotation
+  x_pos: -0.3  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   moment_coeff: 3.5
+  effectiveness: 0.2  # scale rudder force to avoid over-steer
+  aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
+  cl_max: 1.0
+  cd_max: 1.2
+  deadband_deg: 1.5     # small stick noise -> zero command
+  center_tau_s: 0.6     # time constant to return to center when cmd==0
+  max_rate_deg_s: 120.0 # servo rate limit for manual controllability
 
   

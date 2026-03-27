@@ -71,6 +71,4 @@ class BasicSail(Foil):
 
         f_sail = R @ f_fluid
         # Rotate sail → boat using tf_tree
-        sail_vec = tf_tree.vector_to_frame(f_sail, "sail", "boat")
-        sail_vec[1] = 0
-        return sail_vec
+        return tf_tree.vector_to_frame(f_sail, "sail", "boat")

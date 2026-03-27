@@ -17,7 +17,7 @@ const wind = createWind(scene);
 
 // --- Boat ---------------------------------------------------------------
 
-const { boatGroup, sailGroup, rudderGroup, updateTrace } = createBoat(scene);
+const { boatGroup, sailGroup, rudderGroup, updateTrace, animateControlSurfaces } = createBoat(scene);
 const waypointMarker = new THREE.Mesh(
   new THREE.SphereGeometry(0.28, 20, 20),
   new THREE.MeshStandardMaterial({
@@ -119,11 +119,14 @@ function makeWsUrl() {
           sailGroup,
           rudderGroup,
         );
+        // NOTE: Do not overwrite command targets from server state.
+        // Mixing "what the boat is doing" with "what the user commands"
+        // causes twitch/feedback oscillations.
         if (stateVis && typeof stateVis.sailAngleDeg === "number") {
-          sailDeg = stateVis.sailAngleDeg;
+          sailStateDeg = stateVis.sailAngleDeg;
         }
         if (stateVis && typeof stateVis.rudderAngleDeg === "number") {
-          rudderDeg = stateVis.rudderAngleDeg;
+          rudderStateDeg = stateVis.rudderAngleDeg;
         }
         if (stateVis && stateVis.wind) {
           wind.setFromPayload(stateVis.wind);
@@ -155,13 +158,19 @@ connectWebSocket();
 
 // --- local helm controls ----------------------------------------------
 
-let rudderDeg = 0.0;
-// Sheet limit from centerline (deg): larger means letting sheet out.
-let sailDeg = 0.0;
+// Commanded control targets (what we send to the server).
+let rudderCmdDeg = 0.0;
+// Sheet-limit command from centerline (deg, 0..SAIL_MAX).
+let sailCmdDeg = 0.0;
+
+// Measured / reported by server (for UI/debug only).
+let rudderStateDeg = 0.0;
+let sailStateDeg = 0.0;
 
 const RUDDER_MAX_DEG = 35.0;
 const SAIL_MAX_DEG = 90.0; // total travel ±90° (180° span)
 const RUDDER_RATE_DEG = 80.0; // deg/s
+const RUDDER_CENTER_RATE_DEG = 220.0; // deg/s (snap back when no key pressed)
 const SAIL_RATE_DEG = 90.0; // deg/s
 
 let keyLeft = false;
@@ -238,27 +247,27 @@ if (forcesSection && forcesToggle) {
   });
 }
 
-let lastSentRudderDeg = rudderDeg;
-let lastSentSailDeg = sailDeg;
+let lastSentRudderDeg = rudderCmdDeg;
+let lastSentSailDeg = sailCmdDeg;
 
 function maybeSendControls() {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
   const changedRudder =
-    Math.abs(rudderDeg - lastSentRudderDeg) > 0.1;
-  const changedSail = Math.abs(sailDeg - lastSentSailDeg) > 0.1;
+    Math.abs(rudderCmdDeg - lastSentRudderDeg) > 0.1;
+  const changedSail = Math.abs(sailCmdDeg - lastSentSailDeg) > 0.1;
 
   if (!changedRudder && !changedSail) return;
 
   const payload = {
     type: "control",
-    rudder_deg: rudderDeg,
-    sail_deg: sailDeg,
+    rudder_deg: rudderCmdDeg,
+    sail_deg: sailCmdDeg,
   };
 
   socket.send(JSON.stringify(payload));
-  lastSentRudderDeg = rudderDeg;
-  lastSentSailDeg = sailDeg;
+  lastSentRudderDeg = rudderCmdDeg;
+  lastSentSailDeg = sailCmdDeg;
 }
 
 // --- animation loop ----------------------------------------------------
@@ -278,23 +287,32 @@ function animate(now) {
 
   // integrate local helm controls
   if (keyLeft) {
-    rudderDeg = Math.min(
+    rudderCmdDeg = Math.min(
       RUDDER_MAX_DEG,
-      rudderDeg + RUDDER_RATE_DEG * dt,
+      rudderCmdDeg + RUDDER_RATE_DEG * dt,
     );
   }
   if (keyRight) {
-    rudderDeg = Math.max(
+    rudderCmdDeg = Math.max(
       -RUDDER_MAX_DEG,
-      rudderDeg - RUDDER_RATE_DEG * dt,
+      rudderCmdDeg - RUDDER_RATE_DEG * dt,
     );
+  }
+  if (!keyLeft && !keyRight) {
+    // Snap back toward center when no rudder key is held.
+    const step = RUDDER_CENTER_RATE_DEG * dt;
+    if (rudderCmdDeg > 0) {
+      rudderCmdDeg = Math.max(0, rudderCmdDeg - step);
+    } else if (rudderCmdDeg < 0) {
+      rudderCmdDeg = Math.min(0, rudderCmdDeg + step);
+    }
   }
   // Up/down adjust sheet limit (let out / pull in).
   if (keyUp) {
-    sailDeg = Math.min(SAIL_MAX_DEG, sailDeg + SAIL_RATE_DEG * dt);
+    sailCmdDeg = Math.min(SAIL_MAX_DEG, sailCmdDeg + SAIL_RATE_DEG * dt);
   }
   if (keyDown) {
-    sailDeg = Math.max(-SAIL_MAX_DEG, sailDeg - SAIL_RATE_DEG * dt);
+    sailCmdDeg = Math.max(0.0, sailCmdDeg - SAIL_RATE_DEG * dt);
   }
 
   maybeSendControls();
@@ -308,6 +326,7 @@ function animate(now) {
 
   // Advect wind wisps and update wake
   wind.advect(dt, t);
+  animateControlSurfaces(dt);
   updateTrace();
 
   if (cameraFollowMode) {

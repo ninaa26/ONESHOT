@@ -13,6 +13,9 @@ export const WORLD_SCALE = 1.0;
 const BOAT_LENGTH_M = 1.5;
 const HULL_MODEL_LENGTH = 2.6;
 const BOAT_SCALE = BOAT_LENGTH_M / HULL_MODEL_LENGTH;
+const SURFACE_ANIM_RESPONSE = 15.0; // larger = snappier easing
+const SAIL_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(420.0);
+const RUDDER_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(520.0);
 
 export function createBoat(scene) {
   const boatGroup = new THREE.Group();
@@ -47,6 +50,7 @@ export function createBoat(scene) {
   // Rudder
   const rudderGroup = new THREE.Group();
   rudderGroup.position.set(-1.0, -0.1, 0.0);
+  rudderGroup.userData.targetYaw = 0.0;
   boatGroup.add(rudderGroup);
 
   const rudderGeom = new THREE.BoxGeometry(0.5, 0.5, 0.04);
@@ -75,6 +79,7 @@ export function createBoat(scene) {
   // Sail group (boom + sail) anchored at mast
   const sailGroup = new THREE.Group();
   sailGroup.position.set(0.5, 1.3, 0.0);
+  sailGroup.userData.targetYaw = 0.0;
   boatGroup.add(sailGroup);
 
   const boomGeom = new THREE.CylinderGeometry(0.025, 0.035, 1.6, 10);
@@ -149,11 +154,33 @@ export function createBoat(scene) {
     traceGeom.setDrawRange(0, tracePoints.length);
   }
 
+  function animateControlSurfaces(dt) {
+    const safeDt = Math.max(0.0, dt);
+    const alpha = 1.0 - Math.exp(-SURFACE_ANIM_RESPONSE * safeDt);
+
+    const sailErr = sailGroup.userData.targetYaw - sailGroup.rotation.y;
+    const sailStep = THREE.MathUtils.clamp(
+      sailErr * alpha,
+      -SAIL_MAX_RATE_RAD_S * safeDt,
+      SAIL_MAX_RATE_RAD_S * safeDt,
+    );
+    sailGroup.rotation.y += sailStep;
+
+    const rudderErr = rudderGroup.userData.targetYaw - rudderGroup.rotation.y;
+    const rudderStep = THREE.MathUtils.clamp(
+      rudderErr * alpha,
+      -RUDDER_MAX_RATE_RAD_S * safeDt,
+      RUDDER_MAX_RATE_RAD_S * safeDt,
+    );
+    rudderGroup.rotation.y += rudderStep;
+  }
+
   return {
     boatGroup,
     sailGroup,
     rudderGroup,
     updateTrace,
+    animateControlSurfaces,
   };
 }
 
@@ -202,8 +229,8 @@ export function updateBoatFromState(
     setSailForce(sailForce.fx, sailForce.fy);
   }
 
-  sailGroup.rotation.y = THREE.MathUtils.degToRad(-sailAngleDeg);
-  rudderGroup.rotation.y = THREE.MathUtils.degToRad(-rudderAngleDeg);
+  sailGroup.userData.targetYaw = THREE.MathUtils.degToRad(-sailAngleDeg);
+  rudderGroup.userData.targetYaw = THREE.MathUtils.degToRad(-rudderAngleDeg);
 
   return {
     wind: wind || null,
