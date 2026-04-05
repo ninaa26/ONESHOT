@@ -137,7 +137,7 @@ Notes for resume:
 
 ### Train (GA with Torch)
 
-SailBench also includes a minimal genetic algorithm trainer that uses the same `WaypointEnv` reward function and dynamics:
+SailBench includes a compact genetic algorithm trainer (`MLGAgentPolicy`: ReLU MLP, `tanh` actions) on the same `WaypointEnv` reward and dynamics:
 
 ```bash
 uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga.yaml
@@ -154,32 +154,22 @@ Device selection:
 - In config: set `train.device` to `cuda_if_available`, `cuda`, `cuda:0`, or `cpu`
 - CLI override: `--device cuda` (or another torch device string)
 
-Watch training in the web visualizer (websocket stream, same as PPO):
+Parallel evaluation (CUDA):
 
-```bash
-uv run --group rl python scripts/train_waypoint_ga.py \
-  --config configs/rl_waypoint_ga.yaml \
-  --watch-web
-```
+- Set `train.n_workers` or `--n-workers N`. With `n_workers > 1`, each generation splits the population into chunks; each **process** runs its chunk of rollouts on `train.device` (typically `cuda:0`) with one `MLGAgentPolicy` per process.
+- Use `n_workers: 1` for a single-process evaluation loop (no process pool).
 
-In another terminal, serve the frontend and open `http://localhost:8000`:
+Policy / GA hyperparameters (see YAML defaults):
 
-```bash
-cd web
-python -m http.server 8000
-```
+- `hidden_dim`, `num_hidden`, `elite_count`, `parents_per_child`, `combine_mutation_rate`, `combine_mutation_std`, `init_std`
+- `checkpoint_freq_gens`: save under `checkpoints/` every N completed generations (`0` disables)
 
-Notes:
+Training outputs under `runs/waypoint_ga_<timestamp>/`:
 
-- Stream URL: `ws://127.0.0.1:8765/sim` (matches `web/main.js`). Do not run `web_runner` on the same port at the same time.
-- Optional: `--watch-host`, `--watch-port`, `--watch-stride N`, or set `train.watch_web` / `train.watch_stride` in YAML.
-
-Training outputs are written under `runs/waypoint_ga_<timestamp>/`:
-
-- `final_model.npz`: best genome and metadata
-- `checkpoints/ga_waypoint_gen_*.npz`: periodic snapshots
-- `history.json`: per-generation metrics
-- `summary.json`: run summary
+- `final_model.npz`: best genome so far, `obs_dim`, `act_dim`, `hidden_dim`, `num_hidden`, `device`
+- `checkpoints/ga_waypoint_gen_<G>.npz`: periodic snapshots (`generation`, `best_fitness`, `best_genome`, dims, `seed`, `device`)
+- `history.json`: per-generation best/mean fitness
+- `summary.json`: run summary (includes `checkpoint_freq_gens`)
 - `config_used.yaml`: exact config used for the run
 
 ### TensorBoard

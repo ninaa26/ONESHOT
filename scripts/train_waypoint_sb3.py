@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from dataclasses import replace
+from functools import partial
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
 # Ensure the repository root is importable when running this file directly.
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from sailbench.rl.envs.waypoint_env import WaypointEnv, WaypointEnvConfig
 from sailbench.rl.live_vis import LiveTrainingVisServer
+
+
+def _sb3_waypoint_monitor_env(env_dict: dict[str, Any]) -> Monitor:
+    """Top-level factory for SubprocVecEnv workers (must be picklable)."""
+    cfg = WaypointEnvConfig(**env_dict)
+    return Monitor(WaypointEnv(config=cfg))
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -97,6 +104,7 @@ def main(argv: list[str] | None = None) -> None:
         yaml.safe_dump(full_cfg, file, sort_keys=False)
 
     seed = int(train_cfg.get("seed", 7))
+    device = str(train_cfg.get("device", "cpu"))
     n_envs = int(train_cfg.get("n_envs", 4))
     total_timesteps = int(train_cfg.get("total_timesteps", 200_000))
     watch_enabled = bool(args.watch_web or train_cfg.get("watch_web", False))
@@ -107,17 +115,31 @@ def main(argv: list[str] | None = None) -> None:
         vis_server = LiveTrainingVisServer(host=args.watch_host, port=args.watch_port)
         vis_server.start()
 
-    def make_env(env_idx: int) -> Monitor:
-        cfg = env_cfg
-        if watch_enabled and env_idx == 0 and vis_server is not None:
-            cfg = replace(
-                env_cfg,
-                vis_callback=vis_server.publish,
-                vis_stride_steps=max(watch_stride, 1),
+    vec_env_kind = str(train_cfg.get("vec_env", "subproc")).lower()
+    if watch_enabled:
+        if vec_env_kind == "subproc":
+            print(
+                "watch_web: using DummyVecEnv (live visualization must run in-process; "
+                "not picklable for SubprocVecEnv workers).",
             )
-        return Monitor(WaypointEnv(config=cfg))
+        vec_env_kind = "dummy"
 
-    train_env = DummyVecEnv([lambda i=i: make_env(i) for i in range(n_envs)])
+    if vec_env_kind == "subproc":
+        env_dict = dict(full_cfg.get("env", {}))
+        train_env = SubprocVecEnv([partial(_sb3_waypoint_monitor_env, env_dict) for _ in range(n_envs)])
+        print(f"Training with SubprocVecEnv: {n_envs} parallel environment processes.")
+    else:
+        def make_env(env_idx: int) -> Monitor:
+            cfg = env_cfg
+            if watch_enabled and env_idx == 0 and vis_server is not None:
+                cfg = replace(
+                    env_cfg,
+                    vis_callback=vis_server.publish,
+                    vis_stride_steps=max(watch_stride, 1),
+                )
+            return Monitor(WaypointEnv(config=cfg))
+
+        train_env = DummyVecEnv([lambda i=i: make_env(i) for i in range(n_envs)])
     eval_env = DummyVecEnv([lambda: Monitor(WaypointEnv(config=env_cfg))])
 
     use_norm_obs = bool(train_cfg.get("normalize_observation", False))
@@ -156,7 +178,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.resume_from is not None:
         if not args.resume_from.exists():
             raise FileNotFoundError(f"Resume checkpoint does not exist: {args.resume_from}")
-        model = PPO.load(str(args.resume_from), env=train_env, tensorboard_log=tensorboard_log)
+        model = PPO.load(
+            str(args.resume_from),
+            env=train_env,
+            tensorboard_log=tensorboard_log,
+            device=device,
+        )
     else:
         model = PPO(
             policy="MlpPolicy",
@@ -175,6 +202,7 @@ def main(argv: list[str] | None = None) -> None:
             seed=seed,
             verbose=1,
             tensorboard_log=tensorboard_log,
+            device=device,
         )
 
     checkpoint_callback = CheckpointCallback(
@@ -212,6 +240,8 @@ def main(argv: list[str] | None = None) -> None:
             "seed": seed,
             "total_timesteps": total_timesteps,
             "n_envs": n_envs,
+            "parallel_rollout_envs": n_envs if vec_env_kind == "subproc" else 1,
+            "vec_env": vec_env_kind,
             "final_model_path": str(final_model_path),
             "resumed_from": str(args.resume_from) if args.resume_from is not None else None,
         }

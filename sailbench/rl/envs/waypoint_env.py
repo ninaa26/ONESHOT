@@ -43,6 +43,10 @@ class WaypointEnvConfig:
     joint_penalty: float = 0.0
     dist_multiplier: float = 5.0
     time_penalty: float = 3.0
+    stagnation_penalty: float = 0.0
+    stagnation_u_threshold: float = 0.35
+    surge_speed_bonus: float = 0.0
+    surge_speed_bonus_cap_m_s: float = 6.0
     success_reward: float = 25.0
     failure_penalty: float = -10.0
     vis_callback: Callable[[dict[str, Any]], None] | None = None
@@ -100,6 +104,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             joint_delta=0.0,
             joint_penalty_term=0.0,
             movement_penalty_term=0.0,
+            stagnation_penalty_term=0.0,
+            surge_speed_bonus_term=0.0,
             dist_delta=0.0,
             dist_term=0.0,
             time_penalty_term=0.0,
@@ -127,15 +133,16 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
 
         distance = self._distance_to_waypoint()
         vmg = self._velocity_made_good_to_waypoint()
-        vmg_term = self.cfg.vmg_multiplier * (vmg**3)
+        vmg_term = self.cfg.vmg_multiplier * vmg
         action_delta = np.abs(clipped - self.prev_action)
-        rudder_delta = float(action_delta[0])
-        sail_delta = float(action_delta[1])
+        
         joint_delta = float(np.sum(action_delta))
         joint_penalty_term = self.cfg.joint_penalty * joint_delta
-        movement_penalty_term =joint_penalty_term
+        movement_penalty_term = joint_penalty_term
         dist_delta = self.prev_distance - distance
         dist_term = self.cfg.dist_multiplier * dist_delta
+        stagnation_penalty_term = self._stagnation_penalty()
+        surge_speed_bonus_term = self._surge_speed_bonus()
         time_penalty_term = self.cfg.time_penalty
 
         terminated = False
@@ -151,7 +158,15 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             terminated = True
             terminal_reward = self.cfg.failure_penalty
 
-        reward = vmg_term - movement_penalty_term + dist_term - time_penalty_term + terminal_reward
+        reward = (
+            vmg_term
+            - movement_penalty_term
+            + dist_term
+            + surge_speed_bonus_term
+            - stagnation_penalty_term
+            - time_penalty_term
+            + terminal_reward
+        )
 
         self.prev_distance = distance
         self.prev_action = clipped
@@ -165,6 +180,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             movement_penalty_term=movement_penalty_term,
             dist_delta=dist_delta,
             dist_term=dist_term,
+            stagnation_penalty_term=stagnation_penalty_term,
+            surge_speed_bonus_term=surge_speed_bonus_term,
             time_penalty_term=time_penalty_term,
             success=success,
             failure=failure,
@@ -199,6 +216,21 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             control_mode="training",
         )
         callback(msg)
+
+    def _stagnation_penalty(self) -> float:
+        w = float(self.cfg.stagnation_penalty)
+        if w <= 0.0:
+            return 0.0
+        thr = float(self.cfg.stagnation_u_threshold)
+        deficit = max(0.0, thr - abs(float(self.state.u)))
+        return w * deficit
+
+    def _surge_speed_bonus(self) -> float:
+        w, cap = self.cfg.surge_speed_bonus, self.cfg.surge_speed_bonus_cap_m_s
+        if w <= 0.0 or cap <= 0.0:
+            return 0.0
+        u = max(0.0, float(self.state.u))  # body-frame surge: forward only, no astern reward
+        return w * min(u, cap) / cap
 
     def _velocity_made_good_to_waypoint(self) -> float:
         dx = self.waypoint[0] - self.state.x
@@ -304,6 +336,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         joint_delta: float,
         joint_penalty_term: float,
         movement_penalty_term: float,
+        stagnation_penalty_term: float,
+        surge_speed_bonus_term: float,
         dist_delta: float,
         dist_term: float,
         time_penalty_term: float,
@@ -323,6 +357,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             "penalty_movement_total": movement_penalty_term,
             "dist_delta": dist_delta,
             "reward_dist": dist_term,
+            "penalty_stagnation": stagnation_penalty_term,
+            "reward_surge_speed": surge_speed_bonus_term,
             "penalty_time": time_penalty_term,
             "success": success,
             "failure": failure,

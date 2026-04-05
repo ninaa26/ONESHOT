@@ -23,16 +23,16 @@ env:
 
 train:
   seed: 7
-  generations: 3
+  generations: 2
   population_size: 12
-  elite_count: 2
-  hidden_sizes: [32]
+  elite_count: 3
+  parents_per_child: 2
+  hidden_dim: 32
+  num_hidden: 1
   episodes_per_candidate: 1
   device: cuda_if_available
-  init_std: 0.5
-  mutation_rate: 0.05
-  mutation_std: 0.1
+  n_workers: 2
+  init_std: 0.1
+  combine_mutation_rate: 0.1
+  combine_mutation_std: 0.1
   checkpoint_freq_gens: 1
-  log_candidate_every: 3
-  watch_web: false
-  watch_stride: 2
