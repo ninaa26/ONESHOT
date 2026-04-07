@@ -19,8 +19,11 @@ Sailbench is an end-to-end sailing physics simulator made by [Cornell Autonomous
 2. **Install `uv`**  
    Follow the installation instructions here: `https://docs.astral.sh/uv/getting-started/installation/`.
 
-3. **Install project dependencies**  
-   For users who just want to run (`sailbench/`), run:
+3. **Install project dependencies**
+
+   In the terminal, navigate to ```sailbench/```
+
+   For users who just want to run the simulation, run:
    ```bash
    uv sync
    ```
@@ -37,19 +40,19 @@ Sailbench is an end-to-end sailing physics simulator made by [Cornell Autonomous
    uv sync --group dev --group rl
    ```
 
-4. **[Optional but recommended] Setup VSCode Extensions**   
+5. **[Optional but recommended] Setup VSCode Extensions**   
     I would recommend utilizing VSCode for developing in this project. The two extensions to install are [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) (Python formatter and linter) as well as [MyPy](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) (Python type checker). This will help keep consistent code quality and style across sailbench.
 
 ## Running the Web Simulation
 
 Once you've installed the packages, you can play sailbench with manual control with the following instructions.
 
-1. **Start the sim backend** (from the repository root):
+1. **Start the sim backend** (from ```sailbench/```):
    ```bash
    uv run python -m sailbench.sim.web_runner --config basic_sailbot.yaml --fps 60
    ```
 
-2. **Start the frontend** (in a separate terminal, from the `web` directory):
+2. **Start the frontend** (in a separate terminal):
    ```bash
    cd web
    python -m http.server 8000
