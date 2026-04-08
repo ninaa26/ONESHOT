@@ -34,6 +34,8 @@ class WaypointEnvConfig:
     spawn_radius_m: float = 10.0
     waypoint_min_radius_m: float = 12.0
     waypoint_max_radius_m: float = 25.0
+    upwind_waypoint_bias: float = 0.0
+    upwind_half_angle_deg: float = 35.0
     success_radius_m: float = 1.5
     fail_radius_m: float = 80.0
     speed_scale: float = 6.0
@@ -259,6 +261,13 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
 
     def _sample_waypoint(self, start: State) -> NDArray[np.float64]:
         theta = float(self.np_random.uniform(-math.pi, math.pi))
+        bias = float(np.clip(self.cfg.upwind_waypoint_bias, 0.0, 1.0))
+        if float(self.np_random.random()) < bias:
+            # Wind config stores direction the wind blows toward; upwind is the opposite bearing.
+            wind_to_deg = float(self.hub.sail_cfg.get("wind_dir_deg", 90.0))
+            upwind_heading = math.radians(wind_to_deg) + math.pi
+            half_width = math.radians(max(float(self.cfg.upwind_half_angle_deg), 0.0))
+            theta = float(self.np_random.uniform(upwind_heading - half_width, upwind_heading + half_width))
         radius = float(self.np_random.uniform(self.cfg.waypoint_min_radius_m, self.cfg.waypoint_max_radius_m))
         return np.array(
             [
