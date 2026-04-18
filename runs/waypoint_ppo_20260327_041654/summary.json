@@ -1,8 +1,0 @@
-{
-  "run_dir": "runs/waypoint_ppo_20260327_041654",
-  "seed": 7,
-  "total_timesteps": 200000,
-  "n_envs": 4,
-  "final_model_path": "runs/waypoint_ppo_20260327_041654/final_model.zip",
-  "resumed_from": null
-}

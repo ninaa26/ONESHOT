@@ -1,4 +1,4 @@
-"""Live WebSocket publisher for RL training visualization."""
+"""Live WebSocket publisher for RL training visualization. Our RL training """
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class LiveTrainingVisServer:
     _ready: threading.Event = field(default_factory=threading.Event, init=False)
     _closed: threading.Event = field(default_factory=threading.Event, init=False)
     _latest_payload: str | None = field(default=None, init=False)
+    _start_error: Exception | None = field(default=None, init=False)
 
     def start(self) -> None:
         """Start the WebSocket server in a background thread."""
@@ -31,11 +32,20 @@ class LiveTrainingVisServer:
             return
         self._closed.clear()
         self._ready.clear()
+        self._start_error = None
         self._thread = threading.Thread(target=self._run_loop, name="rl-live-vis", daemon=True)
         self._thread.start()
-        self._ready.wait(timeout=5.0)
-        if self._loop is None:
-            msg = "Failed to start live visualization websocket server."
+        ready = self._ready.wait(timeout=5.0)
+        if self._start_error is not None:
+            err = self._start_error
+            self._thread = None
+            self._loop = None
+            msg = f"Failed to start live visualization websocket server on {self.host}:{self.port}: {err}"
+            raise RuntimeError(msg) from err
+        if not ready or self._loop is None:
+            self._thread = None
+            self._loop = None
+            msg = f"Timed out starting live visualization websocket server on {self.host}:{self.port}."
             raise RuntimeError(msg)
 
     def publish(self, message: dict[str, Any]) -> None:
@@ -64,7 +74,12 @@ class LiveTrainingVisServer:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
-        server = loop.run_until_complete(serve(self._handle_client, self.host, self.port))
+        try:
+            server = loop.run_until_complete(serve(self._handle_client, self.host, self.port))
+        except Exception as exc:  # noqa: BLE001
+            self._start_error = exc
+            self._ready.set()
+            return
         self._ready.set()
         try:
             loop.run_forever()

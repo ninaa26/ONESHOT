@@ -21,30 +21,16 @@ env:
   success_reward: 25.0
   failure_penalty: -10.0
 train:
-  total_timesteps: 200000
   seed: 7
-  n_envs: 4
-  learning_rate: 0.0003
-  n_steps: 1024
-  batch_size: 256
-  n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  ent_coef: 0.0
-  vf_coef: 0.5
-  max_grad_norm: 0.5
-  use_sde: false
-  normalize_observation: false
-  normalize_reward: false
-  checkpoint_freq: 25000
-  eval_freq: 10000
-  eval_episodes: 10
-  deterministic_eval: true
-  tensorboard_log: runs/tensorboard
-  watch_web: false
-  watch_stride: 2
-eval:
-  episodes: 20
-  deterministic: true
-  render: false
+  generations: 100
+  population_size: 64
+  elite_count: 8
+  parents_per_child: 3
+  hidden_dim: 64
+  num_hidden: 2
+  episodes_per_candidate: 2
+  device: cuda_if_available
+  n_workers: 4
+  init_std: 0.1
+  combine_mutation_rate: 0.1
+  combine_mutation_std: 0.1

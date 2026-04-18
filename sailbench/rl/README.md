@@ -18,6 +18,8 @@ Related scripts and config outside this folder:
 - `scripts/train_waypoint_sb3.py` for training
 - `scripts/eval_waypoint_sb3.py` for evaluation
 - `configs/rl_waypoint_sb3.yaml` for environment + PPO hyperparameters
+- `scripts/train_waypoint_ga.py` for genetic algorithm (Torch `MLGAgentPolicy` on `WaypointEnv`)
+- `configs/rl_waypoint_ga.yaml` / `configs/rl_waypoint_ga_smoke.yaml` for GA hyperparameters
 
 ## Environment design (`WaypointEnv`)
 
@@ -110,6 +112,26 @@ uv run python scripts/eval_waypoint_sb3.py \
   --config configs/rl_waypoint_sb3.yaml \
   --model runs/<run_name>/best_model/best_model.zip
 ```
+
+## Genetic algorithm (`scripts/train_waypoint_ga.py`)
+
+Torch-based GA with `MLGAgentPolicy` (ReLU hidden stack, `tanh` actions) on the same `WaypointEnv` reward as PPO. Parallel rollout evaluation uses multiple processes on CUDA (see `train.n_workers` in YAML).
+
+Train:
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga.yaml
+```
+
+Checkpoints (every `train.checkpoint_freq_gens` generations, `0` to disable):
+
+- `runs/waypoint_ga_<timestamp>/checkpoints/ga_waypoint_gen_<G>.npz` — `generation`, `best_fitness`, `best_genome`, `obs_dim`, `act_dim`, `hidden_dim`, `num_hidden`, `seed`, `device`
+
+Final artifact:
+
+- `runs/waypoint_ga_<timestamp>/final_model.npz` — same fields as checkpoints for the best genome at end of training
+
+See the repository root `README.md` for more GA options (`--device`, `--n-workers`, smoke config).
 
 ## Tuning notes
 

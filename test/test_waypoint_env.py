@@ -75,6 +75,36 @@ def test_control_mapping_extrema_are_expected() -> None:
     assert sail_hi == np.radians(85.0)
 
 
+def test_stagnation_penalty_in_info_when_enabled() -> None:
+    cfg = WaypointEnvConfig(
+        simulator_config="basic_sailbot.yaml",
+        max_episode_steps=10,
+        waypoint_min_radius_m=8.0,
+        waypoint_max_radius_m=12.0,
+        stagnation_penalty=0.5,
+        stagnation_u_threshold=0.5,
+    )
+    env = WaypointEnv(config=cfg)
+    env.reset(seed=1)
+    _, _, _, _, info = env.step(np.zeros(2, dtype=np.float32))
+    assert "penalty_stagnation" in info
+
+
+def test_surge_speed_bonus_in_info_when_enabled() -> None:
+    cfg = WaypointEnvConfig(
+        simulator_config="basic_sailbot.yaml",
+        max_episode_steps=10,
+        waypoint_min_radius_m=8.0,
+        waypoint_max_radius_m=12.0,
+        surge_speed_bonus=0.3,
+        surge_speed_bonus_cap_m_s=3.0,
+    )
+    env = WaypointEnv(config=cfg)
+    env.reset(seed=2)
+    _, _, _, _, info = env.step(np.zeros(2, dtype=np.float32))
+    assert "reward_surge_speed" in info
+
+
 def test_observation_includes_previous_action_channels() -> None:
     env = _make_env()
     env.reset(seed=23)

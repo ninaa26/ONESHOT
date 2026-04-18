@@ -141,6 +141,43 @@ Notes for resume:
 - Keep `--config` consistent with the original training setup (especially env settings and `train.n_envs`).
 - If normalization is enabled, the trainer automatically attempts to load checkpoint stats from the matching file `.../<checkpoint_stem>_vecnormalize.pkl`.
 
+### Train (GA with Torch)
+
+SailBench includes a compact genetic algorithm trainer (`MLGAgentPolicy`: ReLU MLP, `tanh` actions) on the same `WaypointEnv` reward and dynamics:
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga.yaml
+```
+
+Quick smoke run:
+
+```bash
+uv run --group rl python scripts/train_waypoint_ga.py --config configs/rl_waypoint_ga_smoke.yaml
+```
+
+Device selection:
+
+- In config: set `train.device` to `cuda_if_available`, `cuda`, `cuda:0`, or `cpu`
+- CLI override: `--device cuda` (or another torch device string)
+
+Parallel evaluation (CUDA):
+
+- Set `train.n_workers` or `--n-workers N`. With `n_workers > 1`, each generation splits the population into chunks; each **process** runs its chunk of rollouts on `train.device` (typically `cuda:0`) with one `MLGAgentPolicy` per process.
+- Use `n_workers: 1` for a single-process evaluation loop (no process pool).
+
+Policy / GA hyperparameters (see YAML defaults):
+
+- `hidden_dim`, `num_hidden`, `elite_count`, `parents_per_child`, `combine_mutation_rate`, `combine_mutation_std`, `init_std`
+- `checkpoint_freq_gens`: save under `checkpoints/` every N completed generations (`0` disables)
+
+Training outputs under `runs/waypoint_ga_<timestamp>/`:
+
+- `final_model.npz`: best genome so far, `obs_dim`, `act_dim`, `hidden_dim`, `num_hidden`, `device`
+- `checkpoints/ga_waypoint_gen_<G>.npz`: periodic snapshots (`generation`, `best_fitness`, `best_genome`, dims, `seed`, `device`)
+- `history.json`: per-generation best/mean fitness
+- `summary.json`: run summary (includes `checkpoint_freq_gens`)
+- `config_used.yaml`: exact config used for the run
+
 ### TensorBoard
 
 If you keep `train.tensorboard_log: runs/tensorboard` (the default), you can launch TensorBoard with:
