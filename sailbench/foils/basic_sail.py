@@ -53,7 +53,7 @@ class BasicSail(Foil):
 
         aoa = np.degrees(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
 
-        cl, cd = self.cl_cd(np.radians(-aoa), re=self.p.get("re", 1e5))
+        cl, cd = self.cl_cd(np.radians(aoa), re=self.p.get("re", 1e5))
 
         rho = self.p.get("air_density", 1.225)  # kg/m³
         V = np.linalg.norm(apparent_wind_sail)
