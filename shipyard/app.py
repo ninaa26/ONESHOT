@@ -5,9 +5,15 @@ from typing import Any
 import yaml  # type: ignore[import]
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Label, Static
+from textual.widgets import Button, Collapsible, Footer, Header, Input, Label, Static
 
-from shipyard.services.config_service import load_config, load_template_config, save_config, set_config_path, set_template_path
+from shipyard.services.config_service import (
+    load_config,
+    load_template_config,
+    save_config,
+    set_config_path,
+    set_template_path,
+)
 from shipyard.services.polar_service import plot_element_polar, plot_total_polar
 
 
@@ -21,8 +27,7 @@ class Shipyard(App):
     }
 
     #main {
-        width: 90%;
-        border: heavy $accent;
+        width: 98%;
         padding: 1 2;
         background: $boost;
     }
@@ -98,7 +103,6 @@ class Shipyard(App):
                 self._config_panel(),
                 Vertical(
                 self._preview_panel(),
-                self._save_load_panel(),
                 ),
                 id="content-row",
             ),
@@ -116,55 +120,70 @@ class Shipyard(App):
 
         yield Footer()
 
-    def _config_panel(self) -> Horizontal:
-        return Horizontal(
-            self._config_keel_panel(),
-            self._config_sail_panel(),
-            self._config_rudder_panel(),
-            self._config_hull_panel(),
-
+    def _config_panel(self) -> Vertical:
+        return Vertical(
+            self._save_load_panel(),
+            Collapsible(self._config_keel_panel(), title= "Keel"),
+            Collapsible(self._config_sail_panel(), title = "Sail"),
+            Collapsible(self._config_rudder_panel(), title = "Rudder"),
+            Collapsible(self._config_hull_panel(), title = "Hull"),
         )
 
     def _config_keel_panel(self) -> Vertical:
-        return Vertical(
-            Static("Keel", classes="section-title"),
+        panel = Vertical(
+            #Static("Keel", classes="section-title"),
+            Horizontal(
             self._field_row("Airfoil", "NACA0012", "keel_airfoil"),
             self._field_row("alpha min/max", "25" ,"keel_alpha_max"),
             self._field_row("Area [m²]", "0.5", "keel_area"),
+            ),
+            Horizontal(
             self._field_row("x position", "0." ,"keel_x_pos"),
             self._field_row("y position", "0." ,"keel_y_pos"),
+            ),
         )
+        panel.styles.height = 9
+        return panel
 
-    def _config_sail_panel(self) -> Vertical:
-        return Vertical(
-            Static("Sail", classes="section-title"),
+    def _config_sail_panel(self) -> Horizontal:
+        panel =  Horizontal(
+            #Static("Sail", classes="section-title"),
             self._field_row("Airfoil", "NACA0012", "sail_airfoil"),
             self._field_row("Area [m²]", "5.0", "sail_area"),
             #self._field_row("Wind speed [m/s]", "0.0", "sail_wind_speed"),
             #self._field_row("Wind dir [deg]", "0.0", "sail_wind_dir"),
         )
+        panel.styles.height = 4
+        return panel
 
-    def _config_rudder_panel(self) -> Vertical:
-        return Vertical(
-            Static("Rudder", classes="section-title"),
+    def _config_rudder_panel(self) -> Horizontal:
+        panel = Horizontal(
+            #Static("Rudder", classes="section-title"),
             self._field_row("Airfoil", "NACA0012", "rudder_airfoil"),
             self._field_row("alpha min/max", "25" ,"rudder_alpha_max"),
             self._field_row("Area [m²]", "0.3", "rudder_area"),
         )
+        panel.styles.height = 4
+        return panel
 
-    def _config_hull_panel(self) -> Vertical:
-        return Vertical(Static("Hull", classes = "section-title"),
+    def _config_hull_panel(self) -> Horizontal:
+        panel = Horizontal(
+            #Static("Hull", classes = "section-title"),
             self._field_row("Xu1", "12.0", "hull_xu1"),
             self._field_row("Yv1", "60.0", "hull_yv1"),
             self._field_row("Nr1", "200.0", "hull_nr1"),
             )
+        panel.styles.height = 4
+        return panel
     
     def _save_load_panel(self) -> Vertical:
-        return Vertical(
+        panel = Vertical(
             Static("Save and Load", classes="section-title"),
             self._field_row("File path (Save)", "boat.yaml", "save_file_path"),
             self._field_row("File path (Load)", "configs/shipyard_template.yaml", "load_file_path"),
         )
+        panel.styles.height = 12
+        return panel
 
 
     @staticmethod
