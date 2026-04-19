@@ -83,8 +83,16 @@ class PolicyController:
             prev_distance=0.0,
         )
 
-    def reset_waypoint(self, state: State, rng: np.random.Generator) -> None:
+    def reset_waypoint(self, state: State, rng: np.random.Generator, wind_dir_deg: float) -> None:
         theta = float(rng.uniform(-math.pi, math.pi))
+        bias = float(np.clip(self.cfg.upwind_waypoint_bias, 0.0, 1.0))
+        if float(rng.random()) < bias:
+            # Match WaypointEnv sampling: wind_dir_deg is direction wind blows toward,
+            # so upwind is the opposite bearing.
+            wind_to_deg = float(wind_dir_deg)
+            upwind_heading = math.radians(wind_to_deg) + math.pi
+            half_width = math.radians(max(float(self.cfg.upwind_half_angle_deg), 0.0))
+            theta = float(rng.uniform(upwind_heading - half_width, upwind_heading + half_width))
         radius = float(rng.uniform(self.cfg.waypoint_min_radius_m, self.cfg.waypoint_max_radius_m))
         self.waypoint = (state.x + radius * math.cos(theta), state.y + radius * math.sin(theta))
         self.prev_distance = self.distance_to_waypoint(state)
@@ -225,7 +233,8 @@ class HubSimulation:
             else:
                 self.target_sail_rad = 0.0
             if self.policy is not None and self.rng is not None:
-                self.policy.reset_waypoint(self.state, self.rng)
+                wind_dir_deg = float(self.hub.sail_cfg.get("wind_dir_deg", 90.0))
+                self.policy.reset_waypoint(self.state, self.rng, wind_dir_deg)
 
 
 async def hub_simulation_loop(
@@ -251,7 +260,8 @@ async def hub_simulation_loop(
             if sim.policy is not None and sim.rng is not None:
                 distance = sim.policy.distance_to_waypoint(sim.state)
                 if distance <= sim.policy.cfg.success_radius_m:
-                    sim.policy.reset_waypoint(sim.state, sim.rng)
+                    wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 90.0))
+                    sim.policy.reset_waypoint(sim.state, sim.rng, wind_dir_deg)
             wind_speed = float(sim.hub.sail_cfg.get("wind_speed", 0.0))
             wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 0.0))
             sail_force = getattr(sim.hub, "last_sail_force", (0.0, 0.0))
@@ -304,7 +314,8 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
     )
     if sim.policy is not None:
         sim.target_sail_rad = math.radians(float(sim.policy.cfg.max_sail_deg))
-        sim.policy.reset_waypoint(sim.state, rng)
+        wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 90.0))
+        sim.policy.reset_waypoint(sim.state, rng, wind_dir_deg)
 
     await hub_simulation_loop(ws, sim)
 
