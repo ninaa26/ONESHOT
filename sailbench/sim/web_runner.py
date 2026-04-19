@@ -10,6 +10,7 @@ can render a 3D view and send rudder/sail controls.
 import argparse
 import asyncio
 import contextlib
+import importlib
 import json
 import math
 from dataclasses import dataclass
@@ -18,12 +19,10 @@ from typing import Any
 
 import numpy as np
 import yaml
-from stable_baselines3 import PPO
 
 from websockets.server import WebSocketServerProtocol, serve
 
 from sailbench.models.model import State
-from sailbench.rl.envs.waypoint_env import WaypointEnvConfig
 from sailbench.sim.protocol import ControlInputs, make_state_message, parse_control_message
 from sailbench.sim.sailboat_hub import SailboatHub
 from sailbench.solvers.rk4 import rk4_step
@@ -44,14 +43,31 @@ class HubSimulationConfig:
 class PolicyController:
     """Optional PPO policy controller for live simulation."""
 
-    model: PPO
-    cfg: WaypointEnvConfig
+    model: Any
+    cfg: Any
     waypoint: tuple[float, float]
     last_action: np.ndarray
     prev_distance: float
 
     @classmethod
     def from_files(cls, model_path: str, config_path: str | None) -> "PolicyController":
+        try:
+            PPO = getattr(importlib.import_module("stable_baselines3"), "PPO")
+        except (ImportError, AttributeError) as exc:
+            raise RuntimeError(
+                "The --policy-model option requires stable-baselines3. "
+                "Install it to use RL policy control."
+            ) from exc
+
+        try:
+            waypoint_env_module = importlib.import_module("sailbench.rl.envs.waypoint_env")
+            WaypointEnvConfig = getattr(waypoint_env_module, "WaypointEnvConfig")
+        except (ImportError, AttributeError) as exc:
+            raise RuntimeError(
+                "The --policy-model option requires RL environment dependencies. "
+                "Install SailBench RL extras to use RL policy control."
+            ) from exc
+
         full_cfg: dict[str, Any] = {}
         if config_path is not None:
             with Path(config_path).open(encoding="utf-8") as file:

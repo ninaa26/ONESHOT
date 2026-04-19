@@ -24,7 +24,7 @@ env:
   stagnation_u_threshold: 0.35
   surge_speed_bonus: 0.0
   surge_speed_bonus_cap_m_s: 6.0
-  success_reward: 25.0
+  success_reward: 50.0
   failure_penalty: -10.0
 
 train:
