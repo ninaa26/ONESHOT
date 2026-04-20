@@ -1,8 +1,0 @@
-simulation:
-  dt:       0.02        # [s] solver step (50 Hz)
-
-rho_whater: 1000 # Water density kg/m^3
-wind_dir_deg: 0.0 # Initial wind direction in degrees (from +x, east, in N-E frame)
-wind_speed: 3.0   # Initial wind speed in m/s
-current_dir_deg: 0.0 # Initial current direction in degrees (from +x, east, in N-E frame)
-current_speed: 0.0   # Initial current speed in m/s
