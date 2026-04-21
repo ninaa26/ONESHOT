@@ -51,7 +51,7 @@ jib:
   area: 0.55
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
-  x_pos: 0.0
+  x_pos: 0.3
   y_pos: 0.0
   # NeuralFoil model parameters
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
@@ -69,7 +69,7 @@ rudder:
   alpha_max: 179
   res: [5e5]
   area: 0.3    # [m²]    planform area (fin + bulb strut)
-  x_pos: -0.3  # [m]     x position relative to boat center of rotation
+  x_pos: -0.8  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   moment_coeff: 3.5
   effectiveness: 0.2  # scale rudder force to avoid over-steer

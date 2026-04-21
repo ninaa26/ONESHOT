@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
@@ -31,6 +32,7 @@ class SailboatHub:
         self.keel_cfg = cfg["keel"]
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
+        self.jib_cfg = cfg["jib"]
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -47,11 +49,12 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self.sail = HybridSail(self.sail_cfg)
+        self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
-        self.hull = QuadraticHydroModel(self.hull_cfg)
+        self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.hull,self.keel, self.sail, self.rudder]
+        self.jib = BasicSail(self.jib_cfg)
+        self.components = [self.hull,self.keel, self.sail, self.jib, self.rudder]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -184,6 +187,19 @@ class SailboatHub:
         self.last_sail_angle_rad = sail_angle
         self.tf.add_frame(
             name="sail",
+            parent="boat",
+            transform=Transform2D(
+                x=self.sail_cfg.get("x_pos", 0.0),
+                y=self.sail_cfg.get("y_pos", 0.0),
+                c=float(np.cos(sail_angle)),
+                s=float(np.sin(sail_angle)),
+            ),
+        )
+
+        #TODO Update jib to have seperate angle from sail
+
+        self.tf.add_frame(
+            name="jib",
             parent="boat",
             transform=Transform2D(
                 x=self.sail_cfg.get("x_pos", 0.0),
