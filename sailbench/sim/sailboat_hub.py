@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
@@ -47,9 +48,9 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self.sail = HybridSail(self.sail_cfg)
+        self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
-        self.hull = QuadraticHydroModel(self.hull_cfg)
+        self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull,self.keel, self.sail, self.rudder]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
@@ -114,7 +115,6 @@ class SailboatHub:
         `sail_angle` is treated as sheet limit (max |sail angle| from centerline),
         not as a rigid commanded sail angle.
         """
-
         def dynamics(arr: np.ndarray) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
@@ -224,7 +224,11 @@ class SailboatHub:
         )
 
     def _resolve_sail_angle_from_sheet(self, state: State, sheet_limit_rad: float) -> float:
-        """Resolve free sail angle from apparent wind, clamped by sheet limit."""
+        """Resolve sail angle from apparent wind side and geometric sheet angle.
+
+        The sail free-spins with apparent wind, constrained by sheet limit.
+        Luffing/depower remains in the aerodynamic sail model.
+        """
 
         # Compute wind vector in world frame
         wind_speed = float(self.sail_cfg.get("wind_speed", 0.0))
@@ -236,15 +240,17 @@ class SailboatHub:
         v_boat_world = self.tf.vector_to_frame(np.array([state.u, state.v], dtype=float), "boat", "world")
         apparent_wind_world = wind_world - v_boat_world
         apparent_wind_boat = self.tf.vector_to_frame(apparent_wind_world, "world", "boat")
-        awa = float(np.arctan2(apparent_wind_boat[1], apparent_wind_boat[0]))
+        awa = float(np.arctan2(-apparent_wind_boat[1], -apparent_wind_boat[0]))
 
-        # Simplest sheeting behavior:
-        # - sail is always fully eased to the commanded sheet limit magnitude
-        # - sign flips when apparent wind crosses the boat centerline
-        # - if exactly centered, keep previous side to avoid collapsing to 0
-        limit = float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
-        if limit <= 0.0:
+        # Pure geometric sheeting:
+        # - free sail follows |AWA| (weather-vane behavior)
+        # - sheet is a geometric stop at |sheet_limit_rad|
+        # - side follows apparent-wind side, with hysteresis when centered
+        sheet_limit = float(np.clip(np.abs(sheet_limit_rad), 0.0, 0.5 * np.pi))
+        if sheet_limit <= 0.0:
             return 0.0
+        free_mag = float(np.clip(np.abs(awa), 0.0, 0.5 * np.pi))
+        boom_mag = min(free_mag, sheet_limit)
 
         wind_side = float(np.sign(apparent_wind_boat[1]))
         if wind_side == 0.0:
@@ -253,7 +259,7 @@ class SailboatHub:
                 wind_side = -1.0
 
         # Coordinate convention: positive boat-frame Y maps to opposite visual-Z side.
-        return float(-wind_side * limit)
+        return float(-wind_side * boom_mag)
 
     # --- Physics core ----------------------------------------
     def _forces(self, state: State) -> tuple[float, float, float]:
