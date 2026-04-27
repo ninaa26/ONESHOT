@@ -49,6 +49,7 @@ class BoatKinematicsPayload(TypedDict):
     heading: HeadingPayload
     velocity_body: BodyVelocityPayload
     velocity_world: WorldVelocityPayload
+    heel_deg: float
 
 
 class WindPayload(TypedDict, total=False):
@@ -124,6 +125,7 @@ def make_state_message(
     forces: dict[str, tuple[float, float]] | None = None,
     sail_angle_deg: float | None = None,
     rudder_angle_deg: float | None = None,
+    heel_angle_deg: float | None = None,
     waypoint: tuple[float, float] | None = None,
     control_mode: str | None = None,
 ) -> StateMessagePayload:
@@ -164,6 +166,7 @@ def make_state_message(
                 "vx": vx,
                 "vy": vy,
             },
+            "heel_deg": float(state.roll_deg if heel_angle_deg is None else heel_angle_deg),
         },
     }
 

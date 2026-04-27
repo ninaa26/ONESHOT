@@ -32,6 +32,7 @@ class SailboatHub:
         self.keel_cfg = cfg["keel"]
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
+        self.keeling_cfg = cfg.get("keeling", {})
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -40,6 +41,8 @@ class SailboatHub:
         self.last_sail_angle_rad: float = 0.0
         # Per-component forces (boat frame) for visualization.
         self.last_forces: dict[str, tuple[float, float]] = {}
+        # Last computed quasi-static heel angle [deg] for UI/rendering.
+        self.last_heel_deg: float = 0.0
 
         # Rudder "servo" state (for manual controllability).
         self._rudder_angle_deg: float = 0.0
@@ -50,7 +53,7 @@ class SailboatHub:
         """Instantiate boat components from configs."""
         self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
-        self.hull = BasicHullModel(self.hull_cfg)
+        self.hull = QuadraticHydroModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull,self.keel, self.sail, self.rudder]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
@@ -142,6 +145,7 @@ class SailboatHub:
         # --- integrate ---
         next_arr = solver(dynamics, state.to_array(), dt)
         next_state = State.from_array(next_arr)
+        next_state.roll_deg = float(self.last_heel_deg)
 
         # --- update tf tree with dynamic components ---
         self._update_dynamic_frames(
@@ -268,17 +272,14 @@ class SailboatHub:
         fy_total = 0.0
         mz_total = 0.0
         self.last_forces = {}
-
-        # Helpful for debugging runaway forces.
-        u, v, r = float(state.u), float(state.v), float(state.r)
-        speed = float(np.hypot(u, v))
+        state.roll_deg = float(self.last_heel_deg)
 
         for component in self.components:
             result = np.atleast_1d(component.compute(state, self.tf))
             fx, fy = float(result[0]), float(result[1])
             mz_direct = float(result[2]) if len(result) > 2 else 0.0
 
-            # Track sail contribution for visualization.
+            # Track sail contribution for visualization and heel estimation.
             if component is self.sail:
                 self.last_sail_force = (fx, fy)
 
@@ -287,14 +288,36 @@ class SailboatHub:
             self.last_forces[name] = (fx, fy)
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
-            x_pos = component.p.get("x_pos", 0.0)
-            y_pos = component.p.get("y_pos", 0.0)
+            x_pos = float(component.p.get("x_pos", 0.0))
+            y_pos = float(component.p.get("y_pos", 0.0))
             mz = x_pos * fy - y_pos * fx + mz_direct
-
-            # Sum forces
             fx_total += fx
             fy_total += fy
             mz_total += mz
 
+        _, sail_fy = self.last_sail_force
+        self.last_heel_deg = self._estimate_heel_deg(float(sail_fy))
         self.last_forces["total"] = (fx_total, fy_total)
         return fx_total, fy_total, mz_total
+
+    def _estimate_heel_deg(self, sail_fy: float) -> float:
+        """Estimate quasi-static heel angle [deg] from sail lateral force."""
+        cfg = self.keeling_cfg
+        enabled = bool(cfg.get("enabled", True)) if cfg else False
+        if not enabled:
+            self.last_heel_deg = 0.0
+            return self.last_heel_deg
+
+        heeling_lever_m = float(cfg.get("heeling_lever_m", 0.9))
+        gm_m = float(cfg.get("gm_m", 0.35))
+        max_heel_deg = float(cfg.get("max_heel_deg", 35.0))
+        smoothing = float(np.clip(cfg.get("smoothing", 0.25), 0.0, 1.0))
+
+        # Small-angle balance: M_heel ~= F_lat * h, M_right ~= m * g * GM * phi.
+        denom = max(self.m * 9.81 * max(gm_m, 1e-6), 1e-6)
+        heel_target_rad = float(np.clip((-sail_fy * heeling_lever_m) / denom, -1.2, 1.2))
+        heel_target_deg = float(np.degrees(heel_target_rad))
+        heel_target_deg = float(np.clip(heel_target_deg, -max_heel_deg, max_heel_deg))
+
+        self.last_heel_deg = float((1.0 - smoothing) * self.last_heel_deg + smoothing * heel_target_deg)
+        return self.last_heel_deg

@@ -14,6 +14,8 @@ const hudSailAngleEl = document.getElementById("hud-sail-angle");
 const hudRudderAngleEl = document.getElementById("hud-rudder-angle");
 /** @type {HTMLSpanElement | null} */
 const hudSailForceEl = document.getElementById("hud-sail-force");
+/** @type {HTMLSpanElement | null} */
+const hudHeelAngleEl = document.getElementById("hud-heel-angle");
 
 export function setSpeed(valueMs) {
   if (!hudSpeedEl) return;
@@ -53,6 +55,12 @@ export function setRudderAngle(deg) {
 export function setSailForce(fx, fy) {
   if (!hudSailForceEl) return;
   hudSailForceEl.textContent = `Fx ${fx.toFixed(1)} N, Fy ${fy.toFixed(1)} N`;
+}
+
+export function setHeelAngle(deg) {
+  if (!hudHeelAngleEl) return;
+  const sign = deg > 0 ? "+" : "";
+  hudHeelAngleEl.textContent = `${sign}${deg.toFixed(1)}°`;
 }
 
 /** @type {HTMLDivElement | null} */

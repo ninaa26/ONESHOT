@@ -267,6 +267,7 @@ async def hub_simulation_loop(
             sail_force = getattr(sim.hub, "last_sail_force", (0.0, 0.0))
             forces = getattr(sim.hub, "last_forces", {})
             sail_angle_deg = math.degrees(float(getattr(sim.hub, "last_sail_angle_rad", 0.0)))
+            heel_angle_deg = float(sim.state.roll_deg)
             msg = make_state_message(
                 sim.state,
                 sim.t,
@@ -276,6 +277,7 @@ async def hub_simulation_loop(
                 forces=forces,
                 sail_angle_deg=sail_angle_deg,
                 rudder_angle_deg=sim.rudder_deg,
+                heel_angle_deg=heel_angle_deg,
                 waypoint=sim.policy.waypoint if sim.policy is not None else None,
                 control_mode="rl" if sim.policy is not None else "manual",
             )

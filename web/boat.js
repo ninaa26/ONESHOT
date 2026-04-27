@@ -5,6 +5,7 @@ import {
   setSailAngle,
   setRudderAngle,
   setSailForce,
+  setHeelAngle,
 } from "./hud.js";
 
 export const WORLD_SCALE = 1.0;
@@ -19,6 +20,8 @@ const RUDDER_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(520.0);
 export function createBoat(scene) {
   const boatGroup = new THREE.Group();
   boatGroup.scale.setScalar(BOAT_SCALE);
+  // Apply yaw first, then roll about the boat's local centerline (X axis).
+  boatGroup.rotation.order = "YXZ";
   scene.add(boatGroup);
 
   // Hull: extruded triangle (bow +X, stern -X)
@@ -188,6 +191,7 @@ export function updateBoatFromState(
   const pos = boat.position;
   const heading = boat.heading;
   const velBody = boat.velocity_body;
+  const heelDeg = typeof boat.heel_deg === "number" ? boat.heel_deg : 0.0;
   const wind = msg.wind;
   const sailForce = msg.sail_force;
   const sailState = msg.sail;
@@ -201,7 +205,9 @@ export function updateBoatFromState(
 
   const yawWorld = Math.atan2(heading.sin, heading.cos);
   const yawVis = -yawWorld;
-  boatGroup.rotation.set(0, yawVis, 0);
+  // Render-only roll about centerline (local +X), no extra smoothing.
+  const rollVis = -THREE.MathUtils.degToRad(heelDeg);
+  boatGroup.rotation.set(rollVis, yawVis, 0);
 
   const speed = Math.sqrt(
     velBody.u * velBody.u + velBody.v * velBody.v,
@@ -219,6 +225,7 @@ export function updateBoatFromState(
       : 0.0;
   setSailAngle(sailAngleDeg);
   setRudderAngle(rudderAngleDeg);
+  setHeelAngle(heelDeg);
   if (sailForce) {
     setSailForce(sailForce.fx, sailForce.fy);
   }

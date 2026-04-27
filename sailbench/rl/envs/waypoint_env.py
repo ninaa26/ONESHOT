@@ -205,6 +205,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         sail_force = getattr(self.hub, "last_sail_force", (0.0, 0.0))
         forces = getattr(self.hub, "last_forces", {})
         sail_angle_deg = math.degrees(float(getattr(self.hub, "last_sail_angle_rad", 0.0)))
+        heel_angle_deg = float(self.state.roll_deg)
         msg = make_state_message(
             self.state,
             self.t,
@@ -214,6 +215,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             forces=forces,
             sail_angle_deg=sail_angle_deg,
             rudder_angle_deg=float(self.last_action[0] * self.cfg.max_rudder_deg),
+            heel_angle_deg=heel_angle_deg,
             waypoint=(float(self.waypoint[0]), float(self.waypoint[1])),
             control_mode="training",
         )

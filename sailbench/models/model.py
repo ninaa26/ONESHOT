@@ -18,6 +18,7 @@ class State:
     u: float  # surge velocity (body x)
     v: float  # sway velocity (body y)
     r: float  # angular velocity
+    roll_deg: float = 0.0  # quasi-static roll/heel angle [deg]
 
     @property
     def get_heading(self) -> float:
@@ -64,11 +65,15 @@ class State:
             u=float(u),
             v=float(v),
             r=float(r),
+            roll_deg=0.0,
         )
 
     def __str__(self) -> str:
         """Return string representation of State."""
-        return f"State(x={self.x:.2f}, y={self.y:.2f}, psi=({self.psi[0]:.2f}, {self.psi[1]:.2f}), u={self.u:.2f}, v={self.v:.2f}, r={self.r:.2f})"
+        return (
+            f"State(x={self.x:.2f}, y={self.y:.2f}, psi=({self.psi[0]:.2f}, {self.psi[1]:.2f}), "
+            f"u={self.u:.2f}, v={self.v:.2f}, r={self.r:.2f}, roll_deg={self.roll_deg:.2f})"
+        )
 
 
 class Model(ABC):
