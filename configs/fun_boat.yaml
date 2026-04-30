@@ -1,3 +1,5 @@
+# Fun boat configuration - make sure to use quadratic drag hydro model
+
 simulation:
   dt: 0.02  # [s] solver step
 
@@ -14,7 +16,7 @@ hull:
   nr1:      15.0         # [N·m·s/rad] yaw
   xu2:      5.0          # [N·s²/m²]
   yv2:      80.0
-  nr2:      15.0
+  nr2:      10.0
   L: 1.5 # [m] length
   B: 0.60 # [m] beam
   T: 0.05 # [m] draft

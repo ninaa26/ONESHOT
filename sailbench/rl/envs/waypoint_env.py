@@ -47,6 +47,10 @@ class WaypointEnvConfig:
     time_penalty: float = 3.0
     stagnation_penalty: float = 0.0
     stagnation_u_threshold: float = 0.35
+    no_go_zone_penalty: float = 0.0
+    no_go_zone_half_angle_deg: float = 45.0
+    jibe_penalty: float = 0.0
+    jibe_threshold_deg: float = 150.0
     surge_speed_bonus: float = 0.0
     surge_speed_bonus_cap_m_s: float = 6.0
     success_reward: float = 25.0
@@ -107,6 +111,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             joint_penalty_term=0.0,
             movement_penalty_term=0.0,
             stagnation_penalty_term=0.0,
+            no_go_zone_penalty_term=0.0,
+            jibe_penalty_term=0.0,
             surge_speed_bonus_term=0.0,
             dist_delta=0.0,
             dist_term=0.0,
@@ -144,6 +150,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         dist_delta = self.prev_distance - distance
         dist_term = self.cfg.dist_multiplier * dist_delta
         stagnation_penalty_term = self._stagnation_penalty()
+        no_go_zone_penalty_term = self._no_go_zone_penalty()
+        jibe_penalty_term = self._jibe_penalty()
         surge_speed_bonus_term = self._surge_speed_bonus()
         time_penalty_term = self.cfg.time_penalty
 
@@ -166,6 +174,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             + dist_term
             + surge_speed_bonus_term
             - stagnation_penalty_term
+            - no_go_zone_penalty_term
+            - jibe_penalty_term
             - time_penalty_term
             + terminal_reward
         )
@@ -183,6 +193,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             dist_delta=dist_delta,
             dist_term=dist_term,
             stagnation_penalty_term=stagnation_penalty_term,
+            no_go_zone_penalty_term=no_go_zone_penalty_term,
+            jibe_penalty_term=jibe_penalty_term,
             surge_speed_bonus_term=surge_speed_bonus_term,
             time_penalty_term=time_penalty_term,
             success=success,
@@ -226,6 +238,36 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         thr = float(self.cfg.stagnation_u_threshold)
         deficit = max(0.0, thr - abs(float(self.state.u)))
         return w * deficit
+
+    def _no_go_zone_penalty(self) -> float:
+        w = float(self.cfg.no_go_zone_penalty)
+        if w <= 0.0:
+            return 0.0
+        cos_threshold = math.cos(math.radians(float(self.cfg.no_go_zone_half_angle_deg)))
+        wind_dir_deg = float(self.hub.sail_cfg.get("wind_dir_deg", 90.0))
+        wind_dir_rad = math.radians(wind_dir_deg)
+        c, s = self.state.psi
+        # wind_boat_x: x-component of the wind-blows-to vector in boat frame.
+        # Negative means wind blows aft → wind SOURCE is ahead → boat is in no-go zone.
+        wind_boat_x = c * math.cos(wind_dir_rad) + s * math.sin(wind_dir_rad)
+        # penetration: 0 at zone boundary, positive deeper in the zone
+        penetration = max(0.0, -wind_boat_x - cos_threshold)
+        return w * penetration
+
+    def _jibe_penalty(self) -> float:
+        w = float(self.cfg.jibe_penalty)
+        if w <= 0.0:
+            return 0.0
+        # jibe_threshold_deg: TWA beyond which we penalize (e.g. 150° → penalise deep downwind).
+        # cos(180° - threshold) gives the wind_boat_x value at the boundary.
+        cos_threshold = math.cos(math.radians(180.0 - float(self.cfg.jibe_threshold_deg)))
+        wind_dir_deg = float(self.hub.sail_cfg.get("wind_dir_deg", 90.0))
+        wind_dir_rad = math.radians(wind_dir_deg)
+        c, s = self.state.psi
+        # wind_boat_x > cos_threshold means wind source is astern → deep downwind / jibe zone.
+        wind_boat_x = c * math.cos(wind_dir_rad) + s * math.sin(wind_dir_rad)
+        penetration = max(0.0, wind_boat_x - cos_threshold)
+        return w * penetration
 
     def _surge_speed_bonus(self) -> float:
         w, cap = self.cfg.surge_speed_bonus, self.cfg.surge_speed_bonus_cap_m_s
@@ -346,6 +388,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         joint_penalty_term: float,
         movement_penalty_term: float,
         stagnation_penalty_term: float,
+        no_go_zone_penalty_term: float,
+        jibe_penalty_term: float,
         surge_speed_bonus_term: float,
         dist_delta: float,
         dist_term: float,
@@ -367,6 +411,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             "dist_delta": dist_delta,
             "reward_dist": dist_term,
             "penalty_stagnation": stagnation_penalty_term,
+            "penalty_no_go_zone": no_go_zone_penalty_term,
+            "penalty_jibe": jibe_penalty_term,
             "reward_surge_speed": surge_speed_bonus_term,
             "penalty_time": time_penalty_term,
             "success": success,
