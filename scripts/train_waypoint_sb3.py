@@ -178,11 +178,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.resume_from is not None:
         if not args.resume_from.exists():
             raise FileNotFoundError(f"Resume checkpoint does not exist: {args.resume_from}")
+        # On resume, keep model weights from checkpoint but allow fine-tune overrides from config.
+        resume_overrides: dict[str, Any] = {
+            "learning_rate": float(train_cfg.get("learning_rate", 3e-4)),
+            "ent_coef": float(train_cfg.get("ent_coef", 0.0)),
+        }
         model = PPO.load(
             str(args.resume_from),
             env=train_env,
             tensorboard_log=tensorboard_log,
             device=device,
+            custom_objects=resume_overrides,
         )
     else:
         model = PPO(

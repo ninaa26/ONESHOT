@@ -52,7 +52,7 @@ class SailboatHub:
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.hull,self.keel, self.sail, self.rudder]
+        self.components = [self.hull, self.keel, self.sail, self.rudder]
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -115,6 +115,7 @@ class SailboatHub:
         `sail_angle` is treated as sheet limit (max |sail angle| from centerline),
         not as a rigid commanded sail angle.
         """
+
         def dynamics(arr: np.ndarray) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
@@ -283,7 +284,15 @@ class SailboatHub:
                 self.last_sail_force = (fx, fy)
 
             # Track per-component forces for visualization.
-            name = "hull" if component is self.hull else "keel" if component is self.keel else "rudder" if component is self.rudder else "sail"
+            name = (
+                "hull"
+                if component is self.hull
+                else "keel"
+                if component is self.keel
+                else "rudder"
+                if component is self.rudder
+                else "sail"
+            )
             self.last_forces[name] = (fx, fy)
 
             # Moment about CG (2D cross product; x_pos = arm along boat, y_pos = lateral offset)
