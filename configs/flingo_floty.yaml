@@ -27,6 +27,11 @@ keel:
   alpha_max: 179
   res: [5e5]   # Reynolds number
   area: 0.13    # [m²]    planform area — larger = more lateral lift, less leeway
+  # MEASURE: submerged span (depth below the hull). Not taken off the real boat.
+  # Induced drag varies ~6x across the plausible range, so this is the single
+  # most load-bearing unmeasured number in the file.
+  span: 0.35    # [m]
+  end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
@@ -50,9 +55,14 @@ rudder:
   alpha_max: 179
   res: [5e5]
   area: 0.046    # [m²]    planform area (fin + bulb strut)
+  span: 0.22    # [m]     MEASURE: submerged span, not taken off the real boat
+  end_plate_factor: 1.0  # surface-piercing, no image
   x_pos: -0.46  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
-  effectiveness: 0.2  # scale rudder force to avoid over-steer
+  # Retuned 0.2 -> 0.6 alongside the finite-span correction. The old value was a
+  # hand-tuned stand-in for exactly that correction; keeping it would double-count
+  # and the boat loses steerage (the audit measured the no-go pushed out to 57 deg).
+  effectiveness: 0.6  # scale rudder force to avoid over-steer
   aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
   cl_max: 1.0
   cd_max: 1.2
