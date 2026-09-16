@@ -37,7 +37,9 @@ class BasicKeel(Foil):
         """
         # (u, v) are body-frame velocity (surge, sway)
         local_track = np.degrees(np.arctan2(state.v, state.u))
-        aoa = local_track  # Keel angle of attack is negative of local track
+        # Coefficients are looked up at the track angle rather than the angle of
+        # attack; the fluid frame's 180-degree flip below supplies the negation.
+        aoa = local_track
 
         # get lift and drag coefficients
         cl, cd = self.cl_cd(np.radians(aoa), re=self.get_reynolds())
@@ -49,6 +51,10 @@ class BasicKeel(Foil):
         s = self.p.get("area", 1.0)  # m^2
         lift = cl * q * s
         drag = cd * q * s
-        # Fluid-frame force (fluid x = flow direction; drag opposes motion => +drag along flow)
+        # Fluid-frame force (fluid x = flow direction; drag opposes motion => +drag along flow).
+        # The frame is derived from the state here rather than read back out of the
+        # transform tree: a fluid frame that someone else forgot to update silently
+        # turns this drag into thrust.
         f_fluid = np.array([drag, lift])
-        return tf_tree.vector_to_frame(f_fluid, "fluid", "boat")
+        r_fluid_to_boat = utils.fluid_transform_from_state(state).rotation_matrix()
+        return np.asarray(r_fluid_to_boat @ f_fluid, dtype=float)

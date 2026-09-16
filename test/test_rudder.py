@@ -24,7 +24,7 @@ def make_state(u: float = 0.0, v: float = 0.0, r: float = 0.0) -> State:
 
 
 class TestRudder:
-    """Keel model physics tests."""
+    """Rudder model physics tests."""
 
     def test_zero_flow_zero_force(self, rudder: BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder should produce zero force with zero velocity."""
@@ -37,11 +37,16 @@ class TestRudder:
 
     def test_forward_flow(self, rudder: BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder should produce drag in forward flow."""
-        state = make_state(u=5.0)
+        u, v = 5.0, 0.0
+        state = make_state(u=u, v=v)
 
         fx, fy = rudder.compute(state, tf_tree)
-        assert fx < -10.0  # Drag should be negative in forward flow
-        assert abs(fy) < 0.5  # Minimal lift expected in straight flow
+
+        # Symmetric foil at zero incidence makes no lift
+        assert abs(fy) < 0.5
+
+        # The rudder is a passive foil: it can only remove energy from the boat
+        assert fx * u + fy * v < 0
 
     def test_angle90_print_test(self, rudder:BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder set at 90 degrees."""
@@ -62,21 +67,19 @@ class TestRudder:
         ],
     )
     def test_quadrant_flow(self, rudder: BasicRudder, u: float, v: float, tf_tree: TFTree2D) -> None:
-        """Keel lateral force should oppose lateral flow direction."""
+        """Rudder lateral force should oppose lateral flow direction."""
         state = make_state(u=u, v=v)
 
-        fx, fy = rudder.compute(state,tf_tree)
-        print(fx, fy)
+        fx, fy = rudder.compute(state, tf_tree)
 
-        # Drag should be negative in forward flow and positive in reverse flow
-        if u > 0:
-            assert fx < -10.0
-        else:
-            assert fx > 10.0
-
-        # Drag should be smaller than lift for mostly side-flow
+        # Lift dominates drag for mostly forward flow at a small leeway angle
         assert abs(fx) < abs(fy)
 
         # Lift should oppose lateral velocity (restoring force)
         if abs(v) > 1e-6:
             assert np.sign(fy) == -np.sign(v)
+
+        # The rudder is a passive foil: it can only remove energy from the boat.
+        # Its lift is perpendicular to the flow, so at leeway it has a forward
+        # body-x component; what must stay negative is the net mechanical power.
+        assert fx * u + fy * v < 0
