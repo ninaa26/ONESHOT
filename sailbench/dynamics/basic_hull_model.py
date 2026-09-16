@@ -25,7 +25,7 @@ class BasicHullModel(Model):
         s = 1.7 * l * (b + t)
         aside = l * t
 
-        k_u = 0.5 * rho * s * 0.004
+        k_u = 0.5 * rho * s * self._friction_coefficient(u, l)
         k_v = 0.5 * rho * aside
         k_r = (1.0 / 8.0) * rho * t * (l**4)
 
@@ -36,6 +36,31 @@ class BasicHullModel(Model):
         fx += self._residuary_resistance(u, rho, l, t)
 
         return np.array([fx, fy, mz], dtype=float)
+
+    def _friction_coefficient(self, u: float, l: float) -> float:
+        """Skin-friction coefficient, times a form factor.
+
+        The flat 0.004 this replaces is a plausible mid-range number but it does
+        not vary with speed, and skin friction is the one term here that has a
+        well-established empirical line. `friction_model: hughes` opts in to it:
+
+            Re = 0.85 * |u| * L / nu     (0.85 accounts for the boundary layer
+                                          not running the full waterline)
+            Cf = 0.066 / (log10(Re) - 2.03)^2
+            ff = 1.05                     (form factor: a hull is not a flat plate)
+
+        Left unset, the coefficient stays at the previous constant so nothing
+        changes for a config that has not opted in.
+        """
+        if str(self.p.get("friction_model", "flat")).lower() != "hughes":
+            return 0.004
+
+        nu = float(self.p.get("nu_water", 1.19e-6))  # [m^2/s] fresh water, ~15 C
+        re = 0.85 * abs(u) * l / nu
+        if re < 1.0e4:  # below this the line is not valid and Cf is not the story
+            return 0.004
+        cf = 0.066 / (np.log10(re) - 2.03) ** 2
+        return cf * float(self.p.get("form_factor", 1.05))
 
     def _residuary_resistance(self, u: float, rho: float, l: float, t: float) -> float:
         """Wave-making resistance, the term that makes a displacement hull have a top speed.
