@@ -3,6 +3,7 @@
 import numpy as np
 
 from sailbench.models.model import State
+from sailbench.tf.tf_tree import Transform2D
 
 
 def get_global_track(state: State) -> float:
@@ -59,6 +60,27 @@ def get_velocity_magnitude(state: State) -> float:
     u = state.u
     v = state.v
     return float(np.hypot(u, v))
+
+
+def fluid_transform_from_state(state: State) -> Transform2D:
+    """Build the boat->fluid transform for a given state.
+
+    The fluid frame's +x axis points along the direction the water travels
+    relative to the boat, which is opposite the boat's velocity. Foils resolve
+    their drag along +x of this frame, so it must be rebuilt whenever the state
+    changes; a stale fluid frame silently flips the sign of foil drag.
+
+    Args:
+        state (State): Current body state of the sailboat.
+
+    Returns:
+        Transform2D: Rotation-only transform from the boat frame to the fluid frame.
+
+    """
+    speed = get_velocity_magnitude(state)
+    if speed <= 1e-6:
+        return Transform2D(x=0.0, y=0.0, c=1.0, s=0.0)
+    return Transform2D(x=0.0, y=0.0, c=-state.u / speed, s=-state.v / speed)
 
 
 def fluid_frame_to_body_frame(forces_fluid: np.ndarray, local_track_deg: float) -> np.ndarray:

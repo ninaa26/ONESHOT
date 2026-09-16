@@ -88,7 +88,10 @@ class TestSail:
         fx1, fy1 = sail.compute(state_moving, tf_tree)
 
         assert abs(fx1) < abs(fx0)
-        assert abs(fy1) < abs(fy0)
+        # Dead astern with the sail centred, lateral force is identically zero at
+        # both speeds, so this can only be a non-strict bound.
+        assert abs(fy1) <= abs(fy0)
+        assert np.hypot(fx1, fy1) < np.hypot(fx0, fy0)
 
     def test_sail_angle_changes_force(self, sail: HybridSail, tf_tree: TFTree2D) -> None:
         """Changing sail angle should change force direction."""

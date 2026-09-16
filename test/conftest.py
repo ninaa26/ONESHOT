@@ -26,7 +26,6 @@ def tf_tree() -> TFTree2D:
     tf = TFTree2D()
     tf.add_frame(name="boat", parent="world", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     tf.add_frame(name="keel", parent="boat", transform=Transform2D(x=0.0, y=-0.5, c=1.0, s=0.0))
-    tf.add_frame(name="fluid", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     tf.add_frame(name="rudder", parent="boat", transform = Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     tf.add_frame(name="sail", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0))
     return tf

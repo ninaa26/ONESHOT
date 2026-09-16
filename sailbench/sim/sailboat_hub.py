@@ -63,13 +63,6 @@ class SailboatHub:
             transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # boat frame starts aligned with world frame
         )
 
-        # How the boat is traveling through the water (local track)
-        self.tf.add_frame(
-            name="fluid",
-            parent="boat",
-            transform=Transform2D(x=0.0, y=0.0, c=1.0, s=0.0),  # fluid frame starts aligned with boat frame
-        )
-
         # Instantiate component frames in tf tree
         # Keel is fixed
         self.tf.add_frame(
@@ -162,23 +155,11 @@ class SailboatHub:
         rudder_angle_deg: float,
         dt: float,
     ) -> None:
-        """Update boat/fluid/sail/rudder frames for a given instantaneous state."""
+        """Update boat/sail/rudder frames for a given instantaneous state."""
         self.tf.add_frame(
             name="boat",
             parent="world",
             transform=Transform2D(x=state.x, y=state.y, c=state.psi[0], s=state.psi[1]),
-        )
-
-        # (u, v) are body-frame; flow direction is opposite to velocity
-        speed = float(np.hypot(state.u, state.v))
-        if speed > 1e-6:
-            c_fluid, s_fluid = -state.u / speed, -state.v / speed
-        else:
-            c_fluid, s_fluid = 1.0, 0.0
-        self.tf.add_frame(
-            name="fluid",
-            parent="boat",
-            transform=Transform2D(x=0.0, y=0.0, c=c_fluid, s=s_fluid),
         )
 
         sail_angle = self._resolve_sail_angle_from_sheet(state=state, sheet_limit_rad=sheet_limit_rad)

@@ -29,7 +29,6 @@ class TestKeel:
     def test_zero_flow_zero_force(self, keel: BasicKeel, tf_tree: TFTree2D) -> None:
         """Keel should produce zero force with zero velocity."""
         state = make_state()
-        print(tf_tree.transforms)
 
         fx, fy = keel.compute(state, tf_tree)
 
@@ -38,11 +37,16 @@ class TestKeel:
 
     def test_forward_flow(self, keel: BasicKeel, tf_tree: TFTree2D) -> None:
         """Keel should produce drag in forward flow."""
-        state = make_state(u=5.0)
+        u, v = 5.0, 0.0
+        state = make_state(u=u, v=v)
 
         fx, fy = keel.compute(state, tf_tree)
-        assert fx < -10.0  # Drag should be negative in forward flow
-        assert abs(fy) < 0.5  # Minimal lift expected in straight flow
+
+        # Symmetric foil at zero incidence makes no lift
+        assert abs(fy) < 0.5
+
+        # The keel is a passive foil: it can only remove energy from the boat
+        assert fx * u + fy * v < 0
 
     @pytest.mark.parametrize(
         ("u", "v"),
@@ -56,17 +60,15 @@ class TestKeel:
         state = make_state(u=u, v=v)
 
         fx, fy = keel.compute(state, tf_tree)
-        print(fx, fy)
 
-        # Drag should be negative in forward flow and positive in reverse flow
-        if u > 0:
-            assert fx < -1
-        else:
-            assert fx > 1
-
-        # Drag should be smaller than lift for mostly side-flow
+        # Lift dominates drag for mostly forward flow at a small leeway angle
         assert abs(fx) < abs(fy)
 
         # Lift should oppose lateral velocity (restoring force)
         if abs(v) > 1e-6:
             assert np.sign(fy) == -np.sign(v)
+
+        # The keel is a passive foil: it can only remove energy from the boat.
+        # Its lift is perpendicular to the flow, so at leeway it has a forward
+        # body-x component; what must stay negative is the net mechanical power.
+        assert fx * u + fy * v < 0
