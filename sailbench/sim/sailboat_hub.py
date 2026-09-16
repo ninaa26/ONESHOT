@@ -7,11 +7,9 @@ import numpy as np
 import yaml
 
 from sailbench.dynamics.basic_hull_model import BasicHullModel
-from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
-from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -32,6 +30,7 @@ class SailboatHub:
         self.keel_cfg = cfg["keel"]
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
+        self.environment_cfg = cfg.get("environment", {})
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -48,6 +47,8 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
+        self._inject_fluid_densities()
+
         self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = BasicHullModel(self.hull_cfg)
@@ -94,6 +95,22 @@ class SailboatHub:
             parent="boat",
             transform=Transform2D(x=self.sail_cfg.get("x_pos", 0.0), y=self.sail_cfg.get("y_pos", 0.0), c=1.0, s=0.0),
         )
+
+    def _inject_fluid_densities(self) -> None:
+        """Push the environment densities into every component's parameters.
+
+        Each component used to default its own density under its own key name
+        (`rho`, `water_density`, `air_density`), none of which any config set, so
+        every one of them silently fell back and the configured value did nothing.
+        Resolving both numbers here keeps a single source of truth: whatever the
+        `environment` block says is what the components actually use.
+        """
+        rho_water = float(self.environment_cfg.get("rho_water", 1000.0))
+        rho_air = float(self.environment_cfg.get("rho_air", 1.225))
+
+        for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg):
+            cfg["rho_water"] = rho_water
+        self.sail_cfg["rho_air"] = rho_air
 
     def step(
         self,
