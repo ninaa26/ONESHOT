@@ -126,9 +126,27 @@ class SailboatHub:
         not as a rigid commanded sail angle.
         """
 
+        sheet_limit_rad = float(np.abs(sail_angle))
+
+        # Advance the actuator BEFORE integrating, so `rudder_angle` is in effect
+        # during the step that commanded it. Advancing it afterwards left the boat
+        # sailing each step on the previous step's rudder: a one-step input lag,
+        # which shrinks linearly with dt and so pins the whole integration to
+        # first order no matter how good the solver is.
+        self._advance_rudder_servo(rudder_angle, dt)
+
         def dynamics(arr: np.ndarray) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
+
+            # The sail resolves its force through the boat and sail frames, and
+            # the rudder through the rudder frame. Left alone, those frames hold
+            # the heading from the end of the previous step, so every RK4 stage
+            # evaluates its forces against a stale attitude and the integrator
+            # collapses to first order -- four force evaluations per step buying
+            # Euler-grade accuracy. Re-deriving them from this stage's state is
+            # what makes the fourth-order behaviour real.
+            self._set_kinematic_frames(state_vec, sheet_limit_rad)
 
             fx, fy, mz = self._forces(state_vec)
 
@@ -154,25 +172,21 @@ class SailboatHub:
         next_arr = solver(dynamics, state.to_array(), dt)
         next_state = State.from_array(next_arr)
 
-        # --- update tf tree with dynamic components ---
-        self._update_dynamic_frames(
-            state=next_state,
-            sheet_limit_rad=float(np.abs(sail_angle)),
-            rudder_angle_deg=rudder_angle,
-            dt=dt,
-        )
+        # --- leave the tf tree consistent with the state we return ---
+        # Kinematics only: the servo already advanced for this step.
+        self._set_kinematic_frames(next_state, sheet_limit_rad)
 
         # --- rebuild state ---
         return next_state
 
-    def _update_dynamic_frames(
-        self,
-        state: State,
-        sheet_limit_rad: float,
-        rudder_angle_deg: float,
-        dt: float,
-    ) -> None:
-        """Update boat/sail/rudder frames for a given instantaneous state."""
+    def _set_kinematic_frames(self, state: State, sheet_limit_rad: float) -> None:
+        """Set the boat and sail frames from an instantaneous state.
+
+        A pure function of the state, so it is safe to call inside an integrator
+        stage. The rudder frame is deliberately not set here: its angle is servo
+        state advanced once per step, and slewing it once per RK4 stage would
+        quadruple the effective servo rate.
+        """
         self.tf.add_frame(
             name="boat",
             parent="world",
@@ -192,6 +206,12 @@ class SailboatHub:
             ),
         )
 
+    def _advance_rudder_servo(self, rudder_angle_deg: float, dt: float) -> None:
+        """Advance the rudder servo one step and set the rudder frame.
+
+        Actuator state, not a function of the boat state: call exactly once per
+        step, outside the integrator.
+        """
         # Rudder: smooth + auto-center for easier manual control.
         cmd_deg = float(rudder_angle_deg)
         deadband_deg = float(self.rudder_cfg.get("deadband_deg", 1.5))
