@@ -7,11 +7,12 @@ import numpy as np
 import yaml
 
 from sailbench.dynamics.basic_hull_model import BasicHullModel
-from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
+from sailbench.dynamics.displacement_hull import DisplacementHull
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
-from sailbench.foils.hybrid_sail import HybridSail
+from sailbench.foils.orc_sail import ORCSail
+from sailbench.foils.thin_foil import ThinFoil
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -32,6 +33,7 @@ class SailboatHub:
         self.keel_cfg = cfg["keel"]
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
+        self.physics = str(cfg.get("physics", "legacy")).lower()
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -47,14 +49,38 @@ class SailboatHub:
         self.boat_factory()
 
     def boat_factory(self) -> None:
-        """Instantiate boat components from configs."""
-        self.sail = BasicSail(self.sail_cfg)
-        self.rudder = BasicRudder(self.rudder_cfg)
-        self.hull = BasicHullModel(self.hull_cfg)
-        self.keel = BasicKeel(self.keel_cfg)
-        self.components = [self.hull, self.keel, self.sail, self.rudder]
+        """Instantiate boat components from configs.
+
+        ``physics: v2`` in the config selects the ORC-based sail, finite-span
+        appendages and displacement hull, plus added mass. Anything else keeps
+        the legacy NeuralFoil models so existing configs and trained policies
+        are untouched.
+        """
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
+
+        if self.physics == "v2":
+            self.hull_cfg.setdefault("mass", self.m)
+            self.sail = ORCSail(self.sail_cfg)
+            self.rudder = ThinFoil(self.rudder_cfg, frame="rudder")
+            self.hull = DisplacementHull(self.hull_cfg)
+            self.keel = ThinFoil(self.keel_cfg, frame="keel")
+            m_surge, m_sway, i_yaw = self.hull.added_mass()
+        else:
+            self.sail = BasicSail(self.sail_cfg)
+            self.rudder = BasicRudder(self.rudder_cfg)
+            self.hull = BasicHullModel(self.hull_cfg)
+            self.keel = BasicKeel(self.keel_cfg)
+            m_surge = m_sway = i_yaw = 0.0
+
+        self.components = [self.hull, self.keel, self.sail, self.rudder]
+
+        # Effective (rigid + added) mass. Added mass in sway and yaw is the
+        # same order as the rigid-body values for a slender hull; omitting it
+        # makes the boat slide and turn several times too fast.
+        self.m_surge = self.m + m_surge
+        self.m_sway = self.m + m_sway
+        self.iz_eff = self.iz + i_yaw
 
         # TODO: Change starting position and heading from config
         self.tf.add_frame(
@@ -109,19 +135,33 @@ class SailboatHub:
         not as a rigid commanded sail angle.
         """
 
+        sheet_limit_rad = float(np.abs(sail_angle))
+
+        # The rudder servo is discrete-time actuator state, not part of the
+        # continuous dynamics, so it advances exactly once per step.
+        self._advance_rudder_servo(rudder_angle_deg=rudder_angle, dt=dt)
+
         def dynamics(arr: np.ndarray) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
+
+            # Re-resolve the boat/fluid/sail frames at *this* stage's state.
+            # Without this the force model reads a tf tree left over from the
+            # previous step, which silently drops the integrator to 1st order.
+            self._set_kinematic_frames(state_vec, sheet_limit_rad)
 
             fx, fy, mz = self._forces(state_vec)
 
             c, s = arr[2], arr[3]  # Heading cosine, sine
             u, v, r = arr[4], arr[5], arr[6]
 
-            # --- body-frame accelerations ---
-            du = fx / self.m + r * v
-            dv = fy / self.m - r * u
-            dr = mz / self.iz
+            # --- body-frame accelerations (Fossen rigid-body + added mass) ---
+            # With no added mass these reduce exactly to the previous form.
+            du = (fx + self.m_sway * r * v) / self.m_surge
+            dv = (fy - self.m_surge * r * u) / self.m_sway
+            # Munk moment: a slender body with unequal surge/sway added mass
+            # gets a real destabilising yaw moment when moving at an angle.
+            dr = (mz + (self.m_surge - self.m_sway) * u * v) / self.iz_eff
 
             # --- world-frame position rates (transform body velocity to world) ---
             dx = u * c - v * s
@@ -137,13 +177,8 @@ class SailboatHub:
         next_arr = solver(dynamics, state.to_array(), dt)
         next_state = State.from_array(next_arr)
 
-        # --- update tf tree with dynamic components ---
-        self._update_dynamic_frames(
-            state=next_state,
-            sheet_limit_rad=float(np.abs(sail_angle)),
-            rudder_angle_deg=rudder_angle,
-            dt=dt,
-        )
+        # --- leave the tf tree consistent with the state we return ---
+        self._set_kinematic_frames(next_state, sheet_limit_rad)
 
         # --- rebuild state ---
         return next_state
@@ -155,7 +190,15 @@ class SailboatHub:
         rudder_angle_deg: float,
         dt: float,
     ) -> None:
-        """Update boat/sail/rudder frames for a given instantaneous state."""
+        """Update every dynamic frame at once (kinematics + rudder servo)."""
+        self._set_kinematic_frames(state, sheet_limit_rad)
+        self._advance_rudder_servo(rudder_angle_deg, dt)
+
+    def _set_kinematic_frames(self, state: State, sheet_limit_rad: float) -> None:
+        """Set the boat and sail frames from an instantaneous state.
+
+        Pure function of the state: safe to call inside an integrator stage.
+        """
         self.tf.add_frame(
             name="boat",
             parent="world",
@@ -175,6 +218,12 @@ class SailboatHub:
             ),
         )
 
+    def _advance_rudder_servo(self, rudder_angle_deg: float, dt: float) -> None:
+        """Advance the rudder servo model by one step and set its frame.
+
+        This is discrete actuator state, so it must be advanced once per step,
+        never once per integrator stage.
+        """
         # Rudder: smooth + auto-center for easier manual control.
         cmd_deg = float(rudder_angle_deg)
         deadband_deg = float(self.rudder_cfg.get("deadband_deg", 1.5))

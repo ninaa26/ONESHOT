@@ -1,0 +1,71 @@
+# Flingo Floaty -- v2 physics.
+#
+# Same boat as flingo_floty.yaml, run through the ORC-based sail model,
+# finite-span appendages and displacement hull. See sailbench/models/foil_theory.py
+# and sailbench/foils/orc_sail.py for the model references.
+#
+# Values marked MEASURE are estimates that were never in the original config
+# and should be measured off the real boat -- they drive induced drag and the
+# yaw response, so they matter more than most of the numbers here.
+
+physics: v2
+
+simulation:
+  dt: 0.02  # [s] solver step
+
+boat:
+  mass: 27.0       # [kg]
+  # Rigid yaw inertia. m*(0.25L)^2 for a 1 m hull is ~1.7, not 1.0; the hull
+  # model adds roughly another 0.75 of added inertia on top.
+  inertia_z: 1.7   # [kg·m²]
+
+hull:
+  rho_water: 1000
+  x_pos: 0.0
+  y_pos: 0.0
+  L: 1.0    # [m] waterline length
+  B: 0.5    # [m] beam
+  T: 0.125  # [m] canoe-body draft
+  form_factor: 1.15   # (1+k) on the ITTC-57 friction line
+  cr_coeff: 0.04      # residuary resistance at hull speed, / displacement weight
+  cr_exp: 6.0         # steepness of the wave-drag rise
+  fn_hull: 0.4        # Froude number defining hull speed (1.25 m/s at L=1 m)
+  cd_cross: 1.0       # cross-flow drag coefficient of the lateral plane
+  yv1: 10.0           # [N·s/m] linear sway damping (these keys now do something)
+  nr1: 2.0            # [N·m·s/rad] linear yaw damping
+  m_add_sway_factor: 1.0
+  m_add_yaw_factor: 1.0
+  m_add_surge_factor: 0.05
+
+keel:
+  area: 0.13    # [m²] planform area
+  span: 0.40    # [m] MEASURE -- submerged depth; sets aspect ratio and induced drag
+  end_plate_factor: 2.0  # hull + free surface act as an end plate
+  oswald: 0.9
+  cd0: 0.008
+  x_pos: 0.0
+  y_pos: 0.0
+
+sail:
+  area: 1.34        # [m²]
+  heff: 1.8         # [m] MEASURE -- effective rig height; sets induced drag
+  wind_speed: 5
+  wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
+  x_pos: 0.1
+  y_pos: 0.0
+  air_density: 1.225
+  alpha_opt_deg: 22.0     # sail angle of attack giving peak lift
+  flat_stall_floor: 0.55  # residual lift fraction when over-sheeted
+
+rudder:
+  area: 0.046   # [m²]
+  span: 0.22    # [m] MEASURE
+  end_plate_factor: 2.0
+  oswald: 0.9
+  cd0: 0.008
+  x_pos: -0.46
+  y_pos: 0.0
+  # Servo model (unchanged from v1).
+  deadband_deg: 1.5
+  center_tau_s: 0.6
+  max_rate_deg_s: 120.0
