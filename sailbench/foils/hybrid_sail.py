@@ -73,7 +73,7 @@ class HybridSail(Model):
         # Apparent wind: V_aw = V_wind - V_boat
         apparent_wind_world = wind_world - v_boat_world
 
-        # Apparent wind in sail frame (sail chord along sail +x)
+        # Apparent wind in sail frame (sail chord along sail -x, mast at +x)
         apparent_wind_sail = tf_tree.vector_to_frame(
             apparent_wind_world, "world", "sail"
         )
@@ -82,9 +82,13 @@ class HybridSail(Model):
         if V < 1e-6:
             return np.array([0.0, 0.0])
 
-        # 2. Angle of attack from apparent wind in sail frame
-        # alpha = angle from sail chord (+x) to wind direction
-        alpha = float(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
+        # 2. Angle of attack from apparent wind in sail frame.
+        # Sail +x points clew -> mast, so the chord (leading -> trailing edge)
+        # runs along -x and alpha is the flow angle measured from -x. sin(2a)
+        # and cos(2a) are pi-periodic, so this only ever changed the luff gate:
+        # measured from +x, alpha sat near +-180 deg and the gate never fired.
+        flow = float(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
+        alpha = float(np.arctan2(-apparent_wind_sail[1], -apparent_wind_sail[0]))
 
         # 3. Lift and drag coefficients (hybrid model)
         if np.degrees(np.abs(alpha)) < LUFF_DEG:
@@ -103,8 +107,8 @@ class HybridSail(Model):
         # Fluid frame: x = flow direction. f_fluid = [drag, lift]
         f_fluid = np.array([drag, lift], dtype=float)
 
-        # Rotation fluid → sail: alpha = angle from sail chord to flow
-        c, s = np.cos(alpha), np.sin(alpha)
+        # Rotation fluid → sail: fluid +x is the flow direction
+        c, s = np.cos(flow), np.sin(flow)
         R_fluid_to_sail = np.array([[c, -s], [s, c]])
         f_sail = R_fluid_to_sail @ f_fluid
 

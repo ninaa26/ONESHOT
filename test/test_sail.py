@@ -109,3 +109,25 @@ class TestSail:
 
         assert not np.isclose(fx0, fx1)
         assert not np.isclose(fy0, fy1)
+
+    def test_luff_gate_fires_at_small_aoa(self, sail: HybridSail, tf_tree: TFTree2D) -> None:
+        """Below LUFF_DEG the sail flogs: only drag, along the apparent wind, remains.
+
+        The gate compares the angle of attack measured from the chord (sail -x).
+        Measured from +x it sat near 180 deg and never fired.
+        """
+        sail.p["wind_speed"] = 10.0
+        sail.p["wind_dir_deg"] = 180.0  # headwind for a boat facing east
+        state = make_state()
+
+        c, s = np.cos(np.radians(3.0)), np.sin(np.radians(3.0))  # 3 deg AoA: luffing
+        tf_tree.add_frame(name="sail", parent="boat", transform=Transform2D(0.0, 0.0, c, s))
+        fx_luff, fy_luff = sail.compute(state, tf_tree)
+
+        c, s = np.cos(np.radians(20.0)), np.sin(np.radians(20.0))  # 20 deg AoA: powered
+        tf_tree.add_frame(name="sail", parent="boat", transform=Transform2D(0.0, 0.0, c, s))
+        _, fy_full = sail.compute(state, tf_tree)
+
+        assert fx_luff < 0.0
+        assert abs(fy_luff) < 1e-9  # pure drag straight downwind, no lift
+        assert abs(fy_full) > 1.0

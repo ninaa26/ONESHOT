@@ -3,7 +3,7 @@ import pytest
 
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.models.model import State
-from sailbench.tf.tf_tree import TFTree2D
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 
 def make_state(u: float = 0.0, v: float = 0.0, r: float = 0.0) -> State:
@@ -47,6 +47,57 @@ class TestRudder:
 
         # The rudder is a passive foil: it can only remove energy from the boat
         assert fx * u + fy * v < 0
+
+    @pytest.mark.parametrize("delta_deg", [5.0, 10.0, -10.0])
+    def test_deflection_steers_without_braking(
+        self, rudder: BasicRudder, tf_tree: TFTree2D, delta_deg: float
+    ) -> None:
+        """Deflecting the rudder in straight flow should steer, not brake.
+
+        With the boat moving straight ahead the flow is exactly along boat -x, so
+        lift is purely lateral and the only longitudinal force is profile drag,
+        a few percent of lift for pre-stall deflections. Resolving the forces in
+        a frame built from the wrong angle put a lift component along -x instead,
+        and small corrections cost 17x their real drag.
+        """
+        d = np.radians(delta_deg)
+        tf_tree.add_frame(name="rudder", parent="boat", transform=Transform2D(0.0, 0.0, np.cos(d), np.sin(d)))
+        state = make_state(u=1.0)
+
+        fx, fy = rudder.compute(state, tf_tree)
+
+        assert np.sign(fy) == np.sign(delta_deg)
+        assert fx < 0.0
+        assert abs(fx) < 0.05 * abs(fy)
+
+    @pytest.mark.parametrize(
+        ("u", "v", "r", "delta_deg"),
+        [
+            (1.0, 0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0, 10.0),
+            (1.0, 0.2, 0.0, 0.0),
+            (1.0, -0.2, 0.0, 15.0),
+            (1.0, 0.0, 0.5, 0.0),
+            (1.0, 0.1, 0.3, 20.0),
+            (0.5, 0.0, -0.4, -30.0),
+        ],
+    )
+    def test_never_adds_energy(
+        self, rudder: BasicRudder, tf_tree: TFTree2D, u: float, v: float, r: float, delta_deg: float
+    ) -> None:
+        """In still water a passive foil can only remove kinetic energy: F . v_local <= 0.
+
+        Covers deflection and yaw rate together, which the straight-flow tests do not.
+        """
+        d = np.radians(delta_deg)
+        x_pos, y_pos = float(rudder.p.get("x_pos", 0.0)), float(rudder.p.get("y_pos", 0.0))
+        tf_tree.add_frame(name="rudder", parent="boat", transform=Transform2D(x_pos, y_pos, np.cos(d), np.sin(d)))
+        state = make_state(u=u, v=v, r=r)
+
+        fx, fy = rudder.compute(state, tf_tree)
+
+        u_local, v_local = u - r * y_pos, v + r * x_pos
+        assert fx * u_local + fy * v_local <= 1e-9
 
     def test_angle90_print_test(self, rudder:BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder set at 90 degrees."""
