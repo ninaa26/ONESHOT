@@ -51,6 +51,7 @@ from typing import Any
 
 import numpy as np
 
+import sailbench.utils.coordinate_helper as utils
 from sailbench.models.model import Model, State
 from sailbench.tf.tf_tree import TFTree2D
 
@@ -186,14 +187,15 @@ class ORCSail(Model):
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Return ``[Fx, Fy]`` in the boat frame [N]."""
-        wind_speed = float(self.p.get("wind_speed", 0.0))
-        wind_rad = np.radians(float(self.p.get("wind_dir_deg", 0.0)))
         rho = float(self.p.get("rho_air", 1.225))
 
-        # Apparent wind in the boat frame.
-        wind_world = wind_speed * np.array([np.cos(wind_rad), np.sin(wind_rad)])
-        v_boat_world = tf_tree.vector_to_frame(np.array([state.u, state.v], dtype=float), "boat", "world")
-        aw_boat = tf_tree.vector_to_frame(wind_world - v_boat_world, "world", "boat")
+        # Shared with the windage model so the two cannot disagree about the wind.
+        aw_boat = utils.apparent_wind_boat(
+            state,
+            tf_tree,
+            float(self.p.get("wind_speed", 0.0)),
+            float(self.p.get("wind_dir_deg", 0.0)),
+        )
 
         aw_speed = float(np.hypot(aw_boat[0], aw_boat[1]))
         if aw_speed < 1e-6:

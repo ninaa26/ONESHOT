@@ -7,6 +7,7 @@ import numpy as np
 import yaml
 
 from sailbench.dynamics.basic_hull_model import BasicHullModel
+from sailbench.dynamics.windage import Windage
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
@@ -41,6 +42,7 @@ class SailboatHub:
         self.rudder_cfg = cfg["rudder"]
         self.sail_cfg = cfg["sail"]
         self.environment_cfg = cfg.get("environment", {})
+        self.windage_cfg = cfg.get("windage", {})
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -64,6 +66,18 @@ class SailboatHub:
         self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
+
+        # Above-water drag is its own component, not part of the sail: the sail
+        # is a trimmable lifting surface, the mast and topsides are bluff bodies.
+        # Gated on a drag area rather than on the section existing, because
+        # _apply_environment populates every section it is handed -- an empty
+        # `windage` dict comes back non-empty and would build a do-nothing model.
+        has_windage = any(
+            float(self.windage_cfg.get(key, 0.0)) > 0.0 for key in ("frontal_area_m2", "drag_area_m2")
+        )
+        self.windage = Windage(self.windage_cfg) if has_windage else None
+        if self.windage is not None:
+            self.components.append(self.windage)
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
@@ -131,7 +145,7 @@ class SailboatHub:
         value set in the component's own section still wins, so a component can
         override the shared one.
         """
-        for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg, self.sail_cfg):
+        for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg, self.sail_cfg, self.windage_cfg):
             for key, value in self.environment_cfg.items():
                 cfg.setdefault(key, value)
 
@@ -150,6 +164,7 @@ class SailboatHub:
         """
 
         sheet_limit_rad = float(np.abs(sail_angle))
+        self._sync_wind()
 
         # Advance the actuator BEFORE integrating, so `rudder_angle` is in effect
         # during the step that commanded it. Advancing it afterwards left the boat
@@ -201,6 +216,22 @@ class SailboatHub:
 
         # --- rebuild state ---
         return next_state
+
+    def _sync_wind(self) -> None:
+        """Keep every above-water component on the same wind as the sail.
+
+        Wind lives in the sail's config section rather than in `environment`,
+        and callers change it by writing there -- the web runner does exactly
+        that. Copying it across each step means a second aerodynamic component
+        cannot quietly run on the wind from whenever it was constructed. If wind
+        ever moves into `environment`, the layering in _apply_environment covers
+        this and the method goes away.
+        """
+        if self.windage is None:
+            return
+        for key in ("wind_speed", "wind_dir_deg"):
+            if key in self.sail_cfg:
+                self.windage_cfg[key] = self.sail_cfg[key]
 
     def _set_kinematic_frames(self, state: State, sheet_limit_rad: float) -> None:
         """Set the boat and sail frames from an instantaneous state.
@@ -332,6 +363,8 @@ class SailboatHub:
                 if component is self.keel
                 else "rudder"
                 if component is self.rudder
+                else "windage"
+                if component is self.windage
                 else "sail"
             )
             self.last_forces[name] = (fx, fy)
