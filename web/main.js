@@ -105,10 +105,26 @@ function returnToShipyard() {
 let socket = null;
 let reconnectDelayMs = 1000;
 
+// The sim backend is a separate process on its own port, so this page cannot
+// infer it from where it was served. 8765 is what the README starts it on and
+// stays the default, so nothing changes for the usual workflow.
+const DEFAULT_WS_PORT = 8765;
+
+// `?port=` points the page at a backend on another port, which is what lets two
+// checkouts be previewed at once without editing this file. `?host=` reaches a
+// backend on another machine, and `?ws=` replaces the whole URL for one behind a
+// proxy. A port that is not a number falls back rather than building a URL that
+// can only fail to connect.
 function makeWsUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const override = params.get("ws");
+  if (override) {
+    return override;
+  }
+  const requested = params.get("port");
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  const host = window.location.hostname || "127.0.0.1";
-  const port = 8765; // default server port
+  const host = params.get("host") || window.location.hostname || "127.0.0.1";
+  const port = /^[0-9]+$/.test(requested || "") ? requested : DEFAULT_WS_PORT;
   return `${proto}://${host}:${port}/sim`;
 }
 

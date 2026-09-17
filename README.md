@@ -60,6 +60,11 @@ Once you've installed the packages, you can play sailbench with manual control w
 
 3. Open http://localhost:8000 in your browser.
 
+The page talks to the backend on port 8765. To point it somewhere else -- a
+second checkout running its own backend, say -- pass the port in the URL:
+`http://localhost:8000/?port=8766`. `?host=` reaches another machine and `?ws=`
+replaces the whole socket URL.
+
 The page opens on the **shipyard**: pick a boat (any boat config under
 `configs/`), then the sail, keel, rudder and hull models and who holds the helm
 (you, or a trained policy found under `runs/`), and set sail. Arrow keys move
