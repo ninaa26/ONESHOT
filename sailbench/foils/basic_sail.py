@@ -73,6 +73,9 @@ class BasicSail(Foil):
         aoa_rad = float(np.arctan2(-apparent_wind_sail[1], -apparent_wind_sail[0]))
 
         cl, cd = self.cl_cd(aoa_rad, re=self.get_reynolds())
+        # A rig sheds tip vortices like any other foil. Skipped when the sail
+        # has no span configured, which is the case until the rig is measured.
+        cl, cd = self.apply_finite_span(cl, cd)
 
         # Luffing model:
         # - near centerline apparent flow, sail flaps and loses lift authority

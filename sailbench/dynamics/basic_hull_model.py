@@ -22,7 +22,9 @@ class BasicHullModel(Model):
         t = float(self.p["T"])
         rho = float(self.p.get("rho_water", 1000.0))
 
-        s = 1.7 * l * (b + t)
+        # 1.7*L*(B+T) is a rough stand-in; prefer a measured hull area when the
+        # config carries one. On flingo the approximation is about 2.5x high.
+        s = float(self.p.get("wetted_surface_m2") or 1.7 * l * (b + t))
         aside = l * t
 
         k_u = 0.5 * rho * s * self._friction_coefficient(u, l)

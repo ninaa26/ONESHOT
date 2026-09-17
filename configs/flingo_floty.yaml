@@ -1,3 +1,5 @@
+# Geometry measured 2026-09-16 from "Full Boat Assembly Final.SLDASM".
+# Provenance, method and caveats: scripts/solidworks/flingo_floty_measured.yaml
 simulation:
   dt: 0.02  # [s] solver step
 
@@ -9,16 +11,20 @@ environment:
 
 boat:
   mass: 27.0       # [kg]
-  inertia_z: 1.0  # [kg·m²] yaw inertia
+  inertia_z: 7.391  # [kg·m²] yaw inertia about the vertical axis through the CG (MP: Lyy)
 
 hull:
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
-  L: 1.0 # [m] length of waterline
+  L: 1.372  # [m] length of waterline, at the floating waterline for 27 kg
   friction_model: hughes  # ITTC-style skin friction instead of a flat 0.004
   c_wave: 0.01   # residuary (wave-making) resistance; caps speed near 0.4*sqrt(g*L)
-  B: 0.5 # [m] beam
-  T: 0.125 # [m] draft
+  B: 0.492  # [m] beam at waterline
+  T: 0.110  # [m] hull draft (canoe body, not to keel tip)
+  # Measured hull skin below the waterline. The 1.7*L*(B+T) approximation this
+  # replaces gives 1.404 m², about 2.5x the real area, and so overstated friction
+  # drag by the same factor. Omit the key to fall back to the approximation.
+  wetted_surface_m2: 0.571
 
 keel:
   # Thicker section (12%) gives better L/D at boat Re than NACA0006 (6%)
@@ -27,13 +33,12 @@ keel:
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]   # Reynolds number
-  area: 0.13    # [m²]    planform area — larger = more lateral lift, less leeway
-  # MEASURE: submerged span (depth below the hull). Not taken off the real boat.
-  # Induced drag varies ~6x across the plausible range, so this is the single
-  # most load-bearing unmeasured number in the file.
-  span: 0.35    # [m]
+  area: 0.1225  # [m²]    planform area (STL projected silhouette)
+  # Measured: hull underside to tip. Geometric AR 4.00; with the hull acting as
+  # an end plate the effective AR is 8.0, so this is a deep, efficient fin.
+  span: 0.700   # [m]     submerged span below the hull
   end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
-  x_pos: 0.0  # [m]     x position relative to boat center of rotation
+  x_pos: 0.092  # [m]    forward of the CG — this is the keel/rudder lead
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
 sail:
@@ -41,6 +46,8 @@ sail:
   area: 1.34 # [m²]
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
+  # NOT MEASURED. The sail is 9 triangles of open surface in the STL, so it has
+  # no measurable volume; area, rig height and centre of effort are all open.
   x_pos: 0.1
   y_pos: 0.0
   # NeuralFoil model parameters
@@ -55,10 +62,10 @@ rudder:
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]
-  area: 0.046    # [m²]    planform area (fin + bulb strut)
-  span: 0.22    # [m]     MEASURE: submerged span, not taken off the real boat
+  area: 0.0468  # [m²]    planform area (STL projected silhouette)
+  span: 0.570   # [m]     measured: waterline to tip. Geometric AR 6.94
   end_plate_factor: 1.0  # surface-piercing, no image
-  x_pos: -0.46  # [m]     x position relative to boat center of rotation
+  x_pos: -0.319  # [m]    geometric centre (CG-based estimate gives -0.305)
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   # Retuned 0.2 -> 0.6 alongside the finite-span correction. The old value was a
   # hand-tuned stand-in for exactly that correction; keeping it would double-count
