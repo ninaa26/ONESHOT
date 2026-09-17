@@ -1,3 +1,16 @@
+# The keel and rudder below carry an `assumed:` block. Nothing in one was measured
+# for this boat: they are stand-ins that let it be sailed with the models that need
+# keys this config never had (the `finite_span` foils). They sit one level down on
+# purpose. As top-level keys they would be live parameters, and the basic models
+# reject the richer models' keys outright rather than ignore them -- `model_type:
+# basic` with a `span` beside it does not load. Nothing reads `assumed:` today; a
+# consumer that switches a model merges the block in.
+#
+# The sail deliberately has no such block. This boat is a single-sail rig, so
+# `orc_w_jib` is not a model it lacks data for -- it is the wrong model for the
+# boat, and a jib_area here would be inventing rig geometry that does not exist.
+# `orc_main` is the ORC sail for this boat.
+
 simulation:
   dt: 0.02  # [s] solver step
 
@@ -29,6 +42,14 @@ keel:
   area: 0.75    # [m²]    planform area — larger = more lateral lift, less leeway
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
+  # ASSUMED, not measured -- see the note at the top of this file.
+  assumed:
+    # An aspect ratio rather than a `span`: AR 4 on this 0.75 m2 planform implies
+    # a 1.73 m span, longer than the 1.5 m hull it would hang under. These areas
+    # were picked for feel, not struck off a drawing, so stating the AR keeps the
+    # assumption in one honest number instead of inventing an impossible length.
+    effective_aspect_ratio: 4.0  # generic fin keel, no end-plate credit
+    alpha_sep_deg: 25.0          # stall onset ~15 deg, as in flingo_floty
 
 sail:
   model_type: sail
@@ -61,5 +82,14 @@ rudder:
   deadband_deg: 1.5     # small stick noise -> zero command
   center_tau_s: 0.6     # time constant to return to center when cmd==0
   max_rate_deg_s: 120.0 # servo rate limit for manual controllability
+  # ASSUMED, not measured -- see the note at the top of this file. These alone do
+  # not make `finite_span` reachable on this rudder: that model also refuses the
+  # aoa_limit_deg / cl_max / cd_max clamps above, which are live keys here.
+  assumed:
+    # An aspect ratio rather than a `span`: AR 4 on this 0.3 m2 blade implies a
+    # 1.10 m span under a 1.5 m hull. flingo_floty's measured blade is 0.0462 m2
+    # and 0.478 m -- the area here is a steering-feel number, not a drawing.
+    effective_aspect_ratio: 4.0  # generic blade, surface-piercing
+    alpha_sep_deg: 25.0          # stall onset ~15 deg, as in flingo_floty
 
   
