@@ -1,11 +1,11 @@
 """Sail model built on the ORC VPP aerodynamic formulation.
 
 Reference: *ORC VPP Documentation 2023*, Offshore Racing Congress, sections
-5.1-5.2. The CLmax/CD0 envelope in :data:`MAIN_AWA_DEG` / :data:`MAIN_CL` /
-:data:`MAIN_CD0` is Table 5.1 (mainsail, "low" set -- a rig with no adjustable
-check stays, the right choice for a model boat). Those single-sail coefficients
-were last revised in 2016 and are unchanged by the 2026 VPP update, which only
-touched hull residuary resistance.
+5.1-5.5. The CLmax/CD0 envelopes are Table 5.1 (mainsail) and Table 5.4 (jib),
+both the "low" set -- a rig with no adjustable check stays or forestay, the
+right choice for a model boat. Those single-sail coefficients were last revised
+in 2016 and are unchanged by the 2026 VPP update, which only touched hull
+residuary resistance.
 
 Why this shape of model
 -----------------------
@@ -36,13 +36,24 @@ inactive unless the boat's righting moment is configured.
 
 On sloops
 ---------
-Flingo carries a main and a jib, so the single envelope here stands in for both.
-ORC tabulates headsails separately; this model does not, and the jib is 39% of
-Flingo's sail area, so its contribution is being represented by mainsail
-coefficients. A headsail makes somewhat more lift at low apparent wind angles and
-less at high ones, so expect this to understate upwind drive slightly and
-overstate it deep downwind. Blending a real headsail table is the refinement, not
-a different structure.
+ORC tabulates the main and the jib separately and combines them into one
+"collective" rig, section 5.4.1: each coefficient is the area-weighted sum of the
+individual sails' coefficients, normalised by the reference area,
+
+    CLmax = sum_i CLmax_i * bk_i * A_i / Aref            (5.35)
+    CD0   = sum_i CD0_i   * bk_i * A_i / Aref            (5.36)
+    KPP   = sum_i kp_i * CLmax_i^2 * bk_i * A_i / (Aref * CLmax^2)   (5.41)
+
+with ``bk_i`` a blanketing factor. :meth:`envelope` does exactly that when
+``jib_area`` is configured; without it the rig is a single mainsail. The jib
+makes more lift than the main at low apparent wind angles and none past about
+150 degrees, so a sloop points better and runs slower than a main-only rig of
+the same area.
+
+Blanketing is 1 for both sails here. ORC's mainsail blanketing only differs
+from 1 with a mizzen staysail, and the jib's only for an overlapping genoa
+(``fj`` in section 5.6.2 is zero when the jib fits inside the foretriangle),
+neither of which a model sloop carries.
 """
 
 from __future__ import annotations
@@ -62,12 +73,24 @@ MAIN_CD0 = np.array([0.04310, 0.02586, 0.02328, 0.02328, 0.03259, 0.11302, 0.382
 # Two-dimensional quadratic viscous drag coefficient (ORC "kpm").
 KPM = 0.01379
 
+# --- ORC VPP 2023 Table 5.4, jib, "low" coefficient set --------------------
+# The table starts at 7 degrees; np.interp holds the first value below that,
+# which is the CL = 0 luff the mainsail table states explicitly.
+JIB_AWA_DEG = np.array([7.0, 15.0, 20.0, 27.0, 50.0, 60.0, 100.0, 150.0, 180.0])
+JIB_CL = np.array([0.00000, 1.00000, 1.37500, 1.45000, 1.45000, 1.25000, 0.40000, 0.00000, -0.10000])
+JIB_CD0 = np.array([0.05000, 0.03200, 0.03100, 0.03700, 0.25000, 0.35000, 0.73000, 0.95000, 0.90000])
+# ORC "kpj".
+KPJ = 0.016
+
 
 class ORCSail(Model):
     """Single-sail aerodynamic model using the ORC VPP coefficient envelope.
 
     Config keys (all optional except ``area``):
-        area: sail area [m^2]. For a sloop, main plus jib.
+        area: reference sail area [m^2]. For a sloop, main plus jib.
+        jib_area: jib area [m^2], part of ``area``. Absent or zero, the whole
+            area is a mainsail; otherwise the envelope is ORC's area-weighted
+            blend of the main and jib tables.
         heff: effective rig height [m], used for induced drag. Prefer the
             measured masthead height above the waterline. Defaults to
             ``1.8 * sqrt(area)`` when absent.
@@ -81,6 +104,11 @@ class ORCSail(Model):
         """Initialize the ORC sail model."""
         super().__init__(params)
         self.area = float(self.p.get("area", 1.0))
+        self.jib_area = float(self.p.get("jib_area", 0.0))
+        if not 0.0 <= self.jib_area <= self.area:
+            msg = f"ORCSail jib_area must lie within [0, area]: got jib_area={self.jib_area}, area={self.area}"
+            raise ValueError(msg)
+        self.main_area = self.area - self.jib_area
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         self.alpha_opt = np.radians(float(self.p.get("alpha_opt_deg", 22.0)))
         self.flat_floor = float(self.p.get("flat_stall_floor", 0.55))
@@ -104,13 +132,33 @@ class ORCSail(Model):
         self.last_cd = 0.0
 
     # --- coefficient envelope ------------------------------------------
-    def envelope(self, awa_deg: float) -> tuple[float, float]:
-        """Max achievable CL and parasitic CD0 at an apparent wind angle."""
+    def envelope(self, awa_deg: float) -> tuple[float, float, float]:
+        """Return the collective ``(CLmax, CD0, kpp)`` of the rig at an apparent wind angle.
+
+        ORC eqs. 5.35, 5.36 and 5.41: each sail's table value weighted by its
+        share of the reference area. ``kpp`` is weighted by lift squared as
+        well, so the sail doing the lifting sets the quadratic viscous drag.
+        With no jib the result is the mainsail table unchanged.
+        """
         b = float(np.clip(abs(awa_deg), 0.0, 180.0))
-        return (
-            float(np.interp(b, MAIN_AWA_DEG, MAIN_CL)),
-            float(np.interp(b, MAIN_AWA_DEG, MAIN_CD0)),
-        )
+        wm = self.main_area / self.area
+        wj = self.jib_area / self.area
+        cl_m = float(np.interp(b, MAIN_AWA_DEG, MAIN_CL))
+        cd_m = float(np.interp(b, MAIN_AWA_DEG, MAIN_CD0))
+        cl_j = float(np.interp(b, JIB_AWA_DEG, JIB_CL))
+        cd_j = float(np.interp(b, JIB_AWA_DEG, JIB_CD0))
+
+        cl = wm * cl_m + wj * cl_j
+        cd0 = wm * cd_m + wj * cd_j
+        # Eq. 5.41 divides by CLmax^2, which is zero head to wind. kpp then
+        # multiplies CL^2 = 0 so its value is moot; the area-weighted mean keeps
+        # it finite and continuous.
+        lift_weight = wm * cl_m * cl_m + wj * cl_j * cl_j
+        if lift_weight > 1e-12:
+            kpp = (KPM * wm * cl_m * cl_m + KPJ * wj * cl_j * cl_j) / lift_weight
+        else:
+            kpp = wm * KPM + wj * KPJ
+        return cl, cd0, kpp
 
     def flat_from_trim(self, alpha_rad: float) -> float:
         """ORC ``flat`` depowering factor from the sail's angle of attack.
@@ -126,7 +174,7 @@ class ORCSail(Model):
         return float(1.0 - (1.0 - self.flat_floor) * decay)
 
     def flat_for_righting_moment(
-        self, flat: float, beta: float, cl_max: float, cd0: float, q_area: float
+        self, flat: float, beta: float, cl_max: float, cd0: float, q_area: float, kpp: float = KPM,
     ) -> float:
         """Largest `flat` up to `flat` whose heeling moment fits the righting moment.
 
@@ -152,7 +200,7 @@ class ORCSail(Model):
             return flat
 
         ch_max = self.max_heeling_moment / (q_area * self.heel_arm)
-        k = KPM + self.area / (np.pi * self.heff**2)
+        k = kpp + self.area / (np.pi * self.heff**2)
         a = k * cl_max * cl_max * np.sin(beta)
         b = cl_max * np.cos(beta)
         c = cd0 * np.sin(beta)
@@ -212,15 +260,15 @@ class ORCSail(Model):
         boom = abs(float(np.arctan2(tf_tree.transforms["sail"].s, tf_tree.transforms["sail"].c)))
         alpha = beta - boom
 
-        cl_max, cd0 = self.envelope(np.degrees(beta))
+        cl_max, cd0, kpp = self.envelope(np.degrees(beta))
         flat = self.flat_from_trim(alpha) if alpha > 0.0 else 0.0
 
         q = 0.5 * rho * aw_speed * aw_speed * self.area
-        flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q)
+        flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q, kpp)
 
         cl = cl_max * flat
-        # ORC eq.: CDi = [KPM + Aref / (pi * heff^2)] * (CLmax * flat)^2
-        cd_induced = (KPM + self.area / (np.pi * self.heff**2)) * cl * cl
+        # ORC eq.: CDi = [KPP + Aref / (pi * heff^2)] * (CLmax * flat)^2
+        cd_induced = (kpp + self.area / (np.pi * self.heff**2)) * cl * cl
         cd = cd0 + cd_induced
 
         # ORC drive / heel resolution.

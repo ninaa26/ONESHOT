@@ -70,8 +70,11 @@ sail:
   model_type: orc
   # Flingo is a sloop, not the single-sail rig the earlier notes assumed:
   # main 1.196 m² (luff 2.326, AR 4.53) + jib 0.775 m² (luff 2.260, AR 6.59).
-  # The simulator carries one sail, so these are the combined figures.
+  # The simulator carries one sail, so `area` is the combined reference area
+  # and `jib_area` tells the ORC model how much of it to look up in the jib
+  # table (ORC 5.4.1: coefficients blend by area share).
   area: 1.971  # [m²]    main + jib; sail area / displacement^(2/3) = 21.9
+  jib_area: 0.775  # [m²]  measured; 39% of the rig
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   # Rig span for induced drag: masthead is 2.592 m above the waterline.

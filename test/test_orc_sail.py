@@ -5,7 +5,17 @@ import math
 import numpy as np
 import pytest
 
-from sailbench.foils.orc_sail import MAIN_AWA_DEG, MAIN_CL, ORCSail
+from sailbench.foils.orc_sail import (
+    JIB_AWA_DEG,
+    JIB_CD0,
+    JIB_CL,
+    KPJ,
+    KPM,
+    MAIN_AWA_DEG,
+    MAIN_CD0,
+    MAIN_CL,
+    ORCSail,
+)
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -240,3 +250,83 @@ class TestRightingMomentDepower:
             params["heel_arm_m"] = arm
         with pytest.raises(ValueError, match="together"):
             ORCSail(params)
+
+
+class TestSloop:
+    """ORC's collective rig: main and jib tables blended by area share."""
+
+    JIB = 0.775
+
+    def sloop(self, **overrides: float) -> ORCSail:
+        """Flingo's measured rig with the jib declared."""
+        return make_sail(jib_area=self.JIB, **overrides)
+
+    def test_jib_table_matches_the_published_values(self) -> None:
+        """A jib-only rig reproduces Table 5.4 at its own nodes."""
+        sail = make_sail(jib_area=1.971)
+        for awa, cl, cd in zip(JIB_AWA_DEG, JIB_CL, JIB_CD0, strict=True):
+            got = sail.envelope(float(awa))
+            assert got[0] == pytest.approx(float(cl))
+            assert got[1] == pytest.approx(float(cd))
+            assert got[2] == pytest.approx(KPJ)
+
+    def test_no_jib_is_the_mainsail_table(self) -> None:
+        """Configs that do not declare a jib keep exactly the old envelope."""
+        sail = make_sail()
+        for awa in (0.0, 12.0, 28.0, 60.0, 120.0, 180.0):
+            cl, cd, kpp = sail.envelope(awa)
+            assert cl == pytest.approx(float(np.interp(awa, MAIN_AWA_DEG, MAIN_CL)))
+            assert cd == pytest.approx(float(np.interp(awa, MAIN_AWA_DEG, MAIN_CD0)))
+            assert kpp == pytest.approx(KPM)
+
+    def test_blend_is_weighted_by_area_share(self) -> None:
+        """Eqs. 5.35 and 5.36: CL and CD0 are the area-weighted means."""
+        sail = self.sloop()
+        main = make_sail()
+        jib = make_sail(jib_area=1.971)
+        wj = self.JIB / 1.971
+        for awa in (10.0, 27.0, 45.0, 90.0, 150.0):
+            expected_cl = (1 - wj) * main.envelope(awa)[0] + wj * jib.envelope(awa)[0]
+            expected_cd = (1 - wj) * main.envelope(awa)[1] + wj * jib.envelope(awa)[1]
+            assert sail.envelope(awa)[0] == pytest.approx(expected_cl)
+            assert sail.envelope(awa)[1] == pytest.approx(expected_cd)
+
+    def test_kpp_is_weighted_by_lift_squared(self) -> None:
+        """Eq. 5.41: the sail carrying the lift sets the viscous drag slope."""
+        sail = self.sloop()
+        wj = self.JIB / 1.971
+        cl_m = float(np.interp(27.0, MAIN_AWA_DEG, MAIN_CL))
+        cl_j = float(np.interp(27.0, JIB_AWA_DEG, JIB_CL))
+        expected = (KPM * (1 - wj) * cl_m**2 + KPJ * wj * cl_j**2) / ((1 - wj) * cl_m**2 + wj * cl_j**2)
+        assert sail.envelope(27.0)[2] == pytest.approx(expected)
+        assert KPM < sail.envelope(27.0)[2] < KPJ
+
+    def test_kpp_is_finite_head_to_wind(self) -> None:
+        """Both tables give CL = 0 at 0 degrees; the division must not blow up."""
+        kpp = self.sloop().envelope(0.0)[2]
+        assert np.isfinite(kpp)
+        assert KPM <= kpp <= KPJ
+
+    def test_jib_adds_lift_upwind_and_removes_it_downwind(self) -> None:
+        """The stated reason for the blend: a headsail fills early and dies late."""
+        sloop, main = self.sloop(), make_sail()
+        assert sloop.envelope(20.0)[0] > main.envelope(20.0)[0]
+        assert sloop.envelope(27.0)[0] > main.envelope(27.0)[0]
+        assert sloop.envelope(150.0)[0] < main.envelope(150.0)[0]
+
+    def test_more_drive_close_hauled(self) -> None:
+        """At the same trim on a beat the sloop out-drives the main-only rig."""
+        psi = beat(35.0)
+        args = (make_state(psi=psi), tree(math.radians(15.0), psi))
+        assert self.sloop().compute(*args)[0] > make_sail().compute(*args)[0]
+
+    def test_jib_area_must_fit_inside_the_rig(self) -> None:
+        """A jib bigger than the rig, or negative, is a config error."""
+        with pytest.raises(ValueError, match="jib_area"):
+            make_sail(jib_area=2.5)
+        with pytest.raises(ValueError, match="jib_area"):
+            make_sail(jib_area=-0.1)
+
+    def test_whole_rig_as_jib_is_allowed(self) -> None:
+        """jib_area == area is the degenerate but valid jib-only rig."""
+        assert make_sail(jib_area=1.971).main_area == 0.0
