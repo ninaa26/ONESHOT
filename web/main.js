@@ -152,6 +152,9 @@ function makeWsUrl() {
       if (!msg) return;
       if (msg.type === "catalog") {
         streamOnly = false;
+        // Tell the server we'll be sending a setup, so it waits instead of
+        // assuming an older page and sailing its defaults.
+        socket.send(JSON.stringify({ type: "hello" }));
         shipyard.setCatalog(msg);
         return;
       }

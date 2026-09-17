@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from websockets.exceptions import ConnectionClosed
 from websockets.server import WebSocketServerProtocol, serve
 
 from sailbench.models.model import State
@@ -33,6 +34,11 @@ from sailbench.sim.protocol import (
 from sailbench.sim.sailboat_hub import SailboatHub
 from sailbench.sim.shipyard import Catalog, build_catalog, overrides_for, validate_setup
 from sailbench.solvers.rk4 import rk4_step
+
+
+# How long a fresh connection gets to say `hello` before it is taken for a
+# client that predates the shipyard and sailed the CLI defaults on connect.
+HELLO_TIMEOUT_S = 1.0
 
 
 @dataclass(slots=True)
@@ -342,11 +348,25 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
     catalog = build_catalog(cfg.config_file, cfg.policy_model, cfg.policy_config)
     await ws.send(json.dumps(catalog.to_payload()))
 
+    # A page that knows about the shipyard answers the catalog with `hello`
+    # straight away, then takes as long as it likes to pick. A page that does
+    # not (an older checkout of web/) would sit on a blank sea forever, so if
+    # nothing at all arrives promptly, sail the CLI defaults as it expects.
     sim: HubSimulation | None = None
     pending: ControlInputs | None = None
+    greeted = False
     while sim is None:
-        data = json.loads(await ws.recv())
         try:
+            raw = await (ws.recv() if greeted else asyncio.wait_for(ws.recv(), HELLO_TIMEOUT_S))
+        except TimeoutError:
+            setup = default_setup(catalog)
+            sim = build_simulation(cfg, setup, catalog)
+            break
+        data = json.loads(raw)
+        try:
+            if isinstance(data, dict) and data.get("type") == "hello":
+                greeted = True
+                continue
             if isinstance(data, dict) and data.get("type") == "setup":
                 setup = validate_setup(parse_setup_message(data), catalog)
             else:
@@ -368,7 +388,10 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
     }
     await ws.send(json.dumps(ready))
 
-    await hub_simulation_loop(ws, sim)
+    # The page closes the socket to come back to the shipyard, so a closed
+    # connection is the normal end of a sail, not a failure to log.
+    with contextlib.suppress(ConnectionClosed):
+        await hub_simulation_loop(ws, sim)
 
 
 def catalog_defaults(catalog: Catalog, boat_id: str) -> dict[str, str]:
