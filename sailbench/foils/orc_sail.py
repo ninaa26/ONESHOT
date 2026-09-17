@@ -44,8 +44,10 @@ individual sails' coefficients, normalised by the reference area,
     CD0   = sum_i CD0_i   * bk_i * A_i / Aref            (5.36)
     KPP   = sum_i kp_i * CLmax_i^2 * bk_i * A_i / (Aref * CLmax^2)   (5.41)
 
-with ``bk_i`` a blanketing factor. :meth:`envelope` does exactly that when
-``jib_area`` is configured; without it the rig is a single mainsail. The jib
+with ``bk_i`` a blanketing factor. The two rigs are separate models so a config
+says which one it means: :class:`ORCSail` is a single mainsail and refuses a
+``jib_area``; :class:`ORCSloopSail` is main plus jib and requires one. They share
+everything but the list of sails :meth:`ORCSail.envelope` sums over. The jib
 makes more lift than the main at low apparent wind angles and none past about
 150 degrees, so a sloop points better and runs slower than a main-only rig of
 the same area.
@@ -58,6 +60,7 @@ neither of which a model sloop carries.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -82,6 +85,24 @@ JIB_CD0 = np.array([0.05000, 0.03200, 0.03100, 0.03700, 0.25000, 0.35000, 0.7300
 # ORC "kpj".
 KPJ = 0.016
 
+
+@dataclass(frozen=True)
+class SailTable:
+    """One sail's ORC coefficient table: CLmax and CD0 against apparent wind angle, plus its ``kp``."""
+
+    awa_deg: np.ndarray
+    cl: np.ndarray
+    cd0: np.ndarray
+    kp: float
+
+    def at(self, awa_deg: float) -> tuple[float, float]:
+        """Return ``(CLmax, CD0)`` interpolated at an apparent wind angle."""
+        return float(np.interp(awa_deg, self.awa_deg, self.cl)), float(np.interp(awa_deg, self.awa_deg, self.cd0))
+
+
+MAIN_TABLE = SailTable(MAIN_AWA_DEG, MAIN_CL, MAIN_CD0, KPM)
+JIB_TABLE = SailTable(JIB_AWA_DEG, JIB_CL, JIB_CD0, KPJ)
+
 # --- ORC VPP 2023 Figure 5.14, kheff against apparent wind angle ------------
 # The effective rig height is not the masthead. Close-hauled the jib seals
 # against the deck and the two sails act as one taller wing, so the rig sheds
@@ -98,13 +119,14 @@ KHEFF = np.array([
 
 
 class ORCSail(Model):
-    """Single-sail aerodynamic model using the ORC VPP coefficient envelope.
+    """Mainsail-only aerodynamic model using the ORC VPP coefficient envelope.
+
+    For a main-and-jib rig use :class:`ORCSloopSail`. This model rejects a
+    ``jib_area`` rather than ignore it, so a sloop config cannot quietly run as
+    a single sail.
 
     Config keys (all optional except ``area``):
-        area: reference sail area [m^2]. For a sloop, main plus jib.
-        jib_area: jib area [m^2], part of ``area``. Absent or zero, the whole
-            area is a mainsail; otherwise the envelope is ORC's area-weighted
-            blend of the main and jib tables.
+        area: reference sail area [m^2].
         heff: rig height [m], the highest point of the sail plan above the
             waterline (ORC's ``b + HBI``). Defaults to ``1.8 * sqrt(area)``.
         heff_model: ``orc`` scales ``heff`` by ORC's ``kheff`` curve against
@@ -122,11 +144,7 @@ class ORCSail(Model):
         """Initialize the ORC sail model."""
         super().__init__(params)
         self.area = float(self.p.get("area", 1.0))
-        self.jib_area = float(self.p.get("jib_area", 0.0))
-        if not 0.0 <= self.jib_area <= self.area:
-            msg = f"ORCSail jib_area must lie within [0, area]: got jib_area={self.jib_area}, area={self.area}"
-            raise ValueError(msg)
-        self.main_area = self.area - self.jib_area
+        self.sails = self._rig()
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         heff_model = str(self.p.get("heff_model", "constant")).lower()
         if heff_model not in ("constant", "orc"):
@@ -156,6 +174,17 @@ class ORCSail(Model):
         self.last_cd = 0.0
         self.last_heff = self.heff
 
+    # --- rig ------------------------------------------------------------
+    def _rig(self) -> list[tuple[SailTable, float]]:
+        """Return the sails making up the rig as ``(table, area)`` pairs."""
+        if "jib_area" in self.p:
+            msg = (
+                "ORCSail is a single mainsail and got jib_area="
+                f"{self.p['jib_area']!r}; use model_type: orc_sloop for a main-and-jib rig"
+            )
+            raise ValueError(msg)
+        return [(MAIN_TABLE, self.area)]
+
     # --- coefficient envelope ------------------------------------------
     def envelope(self, awa_deg: float) -> tuple[float, float, float]:
         """Return the collective ``(CLmax, CD0, kpp)`` of the rig at an apparent wind angle.
@@ -163,26 +192,23 @@ class ORCSail(Model):
         ORC eqs. 5.35, 5.36 and 5.41: each sail's table value weighted by its
         share of the reference area. ``kpp`` is weighted by lift squared as
         well, so the sail doing the lifting sets the quadratic viscous drag.
-        With no jib the result is the mainsail table unchanged.
+        With a single mainsail the result is the mainsail table unchanged.
         """
         b = float(np.clip(abs(awa_deg), 0.0, 180.0))
-        wm = self.main_area / self.area
-        wj = self.jib_area / self.area
-        cl_m = float(np.interp(b, MAIN_AWA_DEG, MAIN_CL))
-        cd_m = float(np.interp(b, MAIN_AWA_DEG, MAIN_CD0))
-        cl_j = float(np.interp(b, JIB_AWA_DEG, JIB_CL))
-        cd_j = float(np.interp(b, JIB_AWA_DEG, JIB_CD0))
-
-        cl = wm * cl_m + wj * cl_j
-        cd0 = wm * cd_m + wj * cd_j
+        cl = cd0 = 0.0
+        lift_weight = kp_weight = kp_mean = 0.0
+        for table, area in self.sails:
+            w = area / self.area
+            cl_i, cd_i = table.at(b)
+            cl += w * cl_i
+            cd0 += w * cd_i
+            lift_weight += w * cl_i * cl_i
+            kp_weight += table.kp * w * cl_i * cl_i
+            kp_mean += w * table.kp
         # Eq. 5.41 divides by CLmax^2, which is zero head to wind. kpp then
         # multiplies CL^2 = 0 so its value is moot; the area-weighted mean keeps
         # it finite and continuous.
-        lift_weight = wm * cl_m * cl_m + wj * cl_j * cl_j
-        if lift_weight > 1e-12:
-            kpp = (KPM * wm * cl_m * cl_m + KPJ * wj * cl_j * cl_j) / lift_weight
-        else:
-            kpp = wm * KPM + wj * KPJ
+        kpp = kp_weight / lift_weight if lift_weight > 1e-12 else kp_mean
         return cl, cd0, kpp
 
     def effective_height(self, awa_deg: float) -> float:
@@ -327,3 +353,26 @@ class ORCSail(Model):
 
         # Wind from +y pushes the boat toward -y.
         return np.array([q * cr, -wind_side * q * ch], dtype=float)
+
+
+class ORCSloopSail(ORCSail):
+    """Main-and-jib aerodynamic model: ORC's collective rig, section 5.4.1.
+
+    Same config as :class:`ORCSail` plus:
+        jib_area: jib area [m^2], part of ``area``. Required. The envelope is
+            the area-weighted blend of the main and jib tables; ``area`` stays
+            the reference area the coefficients are normalised by.
+    """
+
+    def _rig(self) -> list[tuple[SailTable, float]]:
+        """Return the main and jib, split by ``jib_area``."""
+        jib_area = self.p.get("jib_area")
+        if jib_area is None:
+            msg = "ORCSloopSail needs jib_area; for a single mainsail use model_type: orc"
+            raise ValueError(msg)
+        self.jib_area = float(jib_area)
+        if not 0.0 < self.jib_area <= self.area:
+            msg = f"ORCSloopSail jib_area must lie within (0, area]: got jib_area={self.jib_area}, area={self.area}"
+            raise ValueError(msg)
+        self.main_area = self.area - self.jib_area
+        return [(MAIN_TABLE, self.main_area), (JIB_TABLE, self.jib_area)]

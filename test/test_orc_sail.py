@@ -17,6 +17,7 @@ from sailbench.foils.orc_sail import (
     MAIN_CD0,
     MAIN_CL,
     ORCSail,
+    ORCSloopSail,
 )
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
@@ -28,6 +29,14 @@ def make_sail(**overrides: float) -> ORCSail:
     """Build an ORC sail with Flingo's measured rig."""
     return ORCSail({
         "area": 1.971, "heff": 2.592, "wind_speed": 5.0,
+        "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
+    })
+
+
+def make_sloop(**overrides: float) -> ORCSloopSail:
+    """Build an ORC sloop with Flingo's measured rig and jib."""
+    return ORCSloopSail({
+        "area": 1.971, "jib_area": 0.775, "heff": 2.592, "wind_speed": 5.0,
         "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
     })
 
@@ -254,26 +263,51 @@ class TestRightingMomentDepower:
             ORCSail(params)
 
 
+class TestRigSelection:
+    """`orc` is a mainsail and `orc_sloop` is main plus jib; neither guesses from the config."""
+
+    def test_mainsail_model_refuses_a_jib(self) -> None:
+        """A jib_area handed to the single-sail model is an error, not silently dropped."""
+        with pytest.raises(ValueError, match="orc_sloop"):
+            make_sail(jib_area=0.775)
+
+    def test_sloop_model_requires_a_jib(self) -> None:
+        """The sloop model without a jib_area is a config error pointing at `orc`."""
+        with pytest.raises(ValueError, match="jib_area"):
+            ORCSloopSail({"area": 1.971, "heff": 2.592})
+
+    def test_hub_wires_both_by_model_type(self) -> None:
+        """The hub's registry exposes both rigs under their model_type keys."""
+        from sailbench.sim.sailboat_hub import SAIL_MODELS
+
+        assert SAIL_MODELS["orc"] is ORCSail
+        assert SAIL_MODELS["orc_sloop"] is ORCSloopSail
+
+    def test_sloop_is_a_sail(self) -> None:
+        """Everything but the rig table is shared, so the sloop is substitutable for the main."""
+        assert isinstance(make_sloop(), ORCSail)
+
+
 class TestSloop:
     """ORC's collective rig: main and jib tables blended by area share."""
 
     JIB = 0.775
 
-    def sloop(self, **overrides: float) -> ORCSail:
+    def sloop(self, **overrides: float) -> ORCSloopSail:
         """Flingo's measured rig with the jib declared."""
-        return make_sail(jib_area=self.JIB, **overrides)
+        return make_sloop(jib_area=self.JIB, **overrides)
 
     def test_jib_table_matches_the_published_values(self) -> None:
         """A jib-only rig reproduces Table 5.4 at its own nodes."""
-        sail = make_sail(jib_area=1.971)
+        sail = make_sloop(jib_area=1.971)
         for awa, cl, cd in zip(JIB_AWA_DEG, JIB_CL, JIB_CD0, strict=True):
             got = sail.envelope(float(awa))
             assert got[0] == pytest.approx(float(cl))
             assert got[1] == pytest.approx(float(cd))
             assert got[2] == pytest.approx(KPJ)
 
-    def test_no_jib_is_the_mainsail_table(self) -> None:
-        """Configs that do not declare a jib keep exactly the old envelope."""
+    def test_mainsail_model_is_the_mainsail_table(self) -> None:
+        """The single-sail model is exactly Table 5.1."""
         sail = make_sail()
         for awa in (0.0, 12.0, 28.0, 60.0, 120.0, 180.0):
             cl, cd, kpp = sail.envelope(awa)
@@ -285,7 +319,7 @@ class TestSloop:
         """Eqs. 5.35 and 5.36: CL and CD0 are the area-weighted means."""
         sail = self.sloop()
         main = make_sail()
-        jib = make_sail(jib_area=1.971)
+        jib = make_sloop(jib_area=1.971)
         wj = self.JIB / 1.971
         for awa in (10.0, 27.0, 45.0, 90.0, 150.0):
             expected_cl = (1 - wj) * main.envelope(awa)[0] + wj * jib.envelope(awa)[0]
@@ -323,15 +357,14 @@ class TestSloop:
         assert self.sloop().compute(*args)[0] > make_sail().compute(*args)[0]
 
     def test_jib_area_must_fit_inside_the_rig(self) -> None:
-        """A jib bigger than the rig, or negative, is a config error."""
-        with pytest.raises(ValueError, match="jib_area"):
-            make_sail(jib_area=2.5)
-        with pytest.raises(ValueError, match="jib_area"):
-            make_sail(jib_area=-0.1)
+        """A jib bigger than the rig, zero, or negative, is a config error."""
+        for bad in (2.5, 0.0, -0.1):
+            with pytest.raises(ValueError, match="jib_area"):
+                make_sloop(jib_area=bad)
 
     def test_whole_rig_as_jib_is_allowed(self) -> None:
         """jib_area == area is the degenerate but valid jib-only rig."""
-        assert make_sail(jib_area=1.971).main_area == 0.0
+        assert make_sloop(jib_area=1.971).main_area == 0.0
 
 
 class TestEffectiveHeight:
