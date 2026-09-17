@@ -194,6 +194,11 @@ class ORCMainSail(Model):
         self._check_keys()
         self.area = float(self.p.get("area", 1.0))
         self.sails = self._rig()
+        # The parasitic part of CD0: the least drag the rig makes at any angle,
+        # which is skin friction and windage on the sail itself. Everything
+        # above it is form drag from the sail's projected area, and only that
+        # part answers to trim. See `form_drag_trim_factor`.
+        self.cd0_floor = min(self.envelope(float(b))[1] for b in np.arange(0.0, 181.0, 1.0))
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         heff_model = str(self.p.get("heff_model", "constant")).lower()
         if heff_model != "constant" and heff_model not in KHEFF_CURVES:
@@ -287,6 +292,47 @@ class ORCMainSail(Model):
         """
         k = 1.0 if self.kheff is None else float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, self.kheff))
         return self.eff_span_corr * k * self.heff
+
+    def form_drag_trim_factor(self, beta: float, alpha: float) -> float:
+        """How much of the table's form drag this trim actually presents.
+
+        ORC's CD0 is the drag of a *correctly trimmed* sail: its VPP chooses the
+        trim and never models a badly set one. This simulator does not choose --
+        the helm sets a sheet limit -- so downwind the table was being charged in
+        full whatever the boom was doing. The consequence was measurable and
+        wrong: past about 150 degrees apparent, moving the sheet from centreline
+        to fully squared changed the drive force by exactly zero newtons. A sail
+        strapped flat amidships was running dead downwind at full speed.
+
+        Two facts fix it. Running, a sail is a drag device, and the drag of a
+        bluff surface goes with its projected area, i.e. with ``sin^2`` of the
+        angle between the chord and the flow. And the trim ORC assumes, once
+        past a beam reach, is square to the apparent wind -- the boom fully
+        eased, which the sheet logic caps at 90 degrees. So
+
+            factor = sin^2(alpha) / sin^2(alpha at the fully-eased boom)
+
+        is 1 at the trim ORC assumes and falls to 0 for a sail sheeted
+        edge-on to the wind, which is the behaviour that was missing.
+
+        Clipped at 1 because trim can only be worse than the optimum the table
+        already represents, never better -- the same contract ``flat`` keeps.
+
+        Returns 1.0 at or inside a beam reach. There the sail is a lifting
+        surface, its CD0 is mostly friction rather than form drag, and trim
+        already acts through ``flat``; leaving it alone also means none of the
+        upwind or reaching polar moves.
+        """
+        if beta <= 0.5 * np.pi:
+            return 1.0
+        # Where the boom sits with the sheet fully eased. The hub caps it at 90.
+        alpha_free = beta - 0.5 * np.pi
+        sin_free = np.sin(alpha_free) ** 2
+        if sin_free <= 1e-9:
+            # Just past the beam, every trim is effectively optimal; this is
+            # what keeps the factor continuous across 90 degrees.
+            return 1.0
+        return float(np.clip(np.sin(alpha) ** 2 / sin_free, 0.0, 1.0))
 
     def flat_from_trim(self, alpha_rad: float) -> float:
         """ORC ``flat`` depowering factor from the sail's angle of attack.
@@ -399,6 +445,11 @@ class ORCMainSail(Model):
         cl_max, cd0, kpp = self.envelope(np.degrees(beta))
         heff = self.effective_height(np.degrees(beta))
         flat = self.flat_from_trim(alpha) if alpha > 0.0 else 0.0
+
+        # Only the form-drag part of CD0 answers to trim; the parasitic floor is
+        # there whatever the boom does. Applied before the righting-moment
+        # solve, so depowering sees the drag the rig actually makes.
+        cd0 = self.cd0_floor + (cd0 - self.cd0_floor) * self.form_drag_trim_factor(beta, alpha)
 
         q = 0.5 * rho * aw_speed * aw_speed * self.area
         flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q, kpp, heff)

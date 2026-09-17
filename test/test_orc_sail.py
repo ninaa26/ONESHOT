@@ -1,5 +1,6 @@
 """ORCMainSail: the ORC VPP coefficient envelope, trim depowering and force split."""
 
+import itertools
 import math
 
 import numpy as np
@@ -483,3 +484,76 @@ class TestEffectiveHeight:
         with pytest.raises(ValueError, match="heff_model"):
             make_sail(heff_model="orc")
 
+
+class TestDownwindTrimAnswers:
+    """Running, the sheet has to do something: form drag follows projected area.
+
+    ORC's CD0 is the drag of a correctly trimmed sail, and the simulator was
+    charging it in full whatever the boom did. Measured on Flingo before this:
+    at TWA 160-180, moving the sheet across its entire range changed the drive
+    force by exactly 0.00 N, so a policy had no gradient on sail trim there.
+    """
+
+    def test_beam_and_upwind_are_untouched(self) -> None:
+        """The factor is 1 at or inside a beam reach, so no upwind polar moves."""
+        sail = make_sloop()
+        for beta_deg in (0.0, 30.0, 60.0, 89.0, 90.0):
+            beta = math.radians(beta_deg)
+            for boom_deg in (0.0, 20.0, 45.0, 90.0):
+                alpha = beta - math.radians(boom_deg)
+                assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
+
+    def test_continuous_across_the_beam(self) -> None:
+        """No step at 90 degrees: just past the beam every trim is still optimal."""
+        sail = make_sloop()
+        just_past = sail.form_drag_trim_factor(math.radians(90.5), math.radians(45.0))
+        assert just_past == pytest.approx(1.0)
+
+    def test_squared_sail_gets_the_full_table(self) -> None:
+        """At the trim ORC assumes -- boom fully eased -- the factor is exactly 1."""
+        sail = make_sloop()
+        for beta_deg in (120.0, 150.0, 180.0):
+            beta = math.radians(beta_deg)
+            alpha = beta - math.radians(90.0)  # boom fully eased, capped at 90
+            assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
+
+    def test_centreline_sail_presents_nothing_dead_downwind(self) -> None:
+        """Sheeted flat amidships on a run, the sail is edge-on and makes no form drag."""
+        sail = make_sloop()
+        assert sail.form_drag_trim_factor(math.pi, math.pi) == pytest.approx(0.0, abs=1e-9)
+
+    def test_never_exceeds_the_optimum(self) -> None:
+        """Trim can only be worse than the table, never better -- as `flat` cannot exceed 1."""
+        sail = make_sloop()
+        for beta_deg in np.arange(91.0, 180.1, 1.0):
+            for boom_deg in np.arange(0.0, 90.1, 5.0):
+                beta = math.radians(float(beta_deg))
+                f = sail.form_drag_trim_factor(beta, beta - math.radians(float(boom_deg)))
+                assert 0.0 <= f <= 1.0
+
+    def test_drive_now_rises_monotonically_with_sheet_on_a_run(self) -> None:
+        """The behaviour that was missing: easing the sheet downwind makes drive."""
+        drives = [_drive_at(twa_deg=180.0, boom_deg=b) for b in (0.0, 30.0, 60.0, 90.0)]
+        assert all(b > a for a, b in itertools.pairwise(drives))
+        assert drives[0] < 0.1 * drives[-1]  # centreline makes almost nothing
+
+    @pytest.mark.parametrize("twa", [160.0, 170.0, 180.0])
+    def test_sheet_range_changes_drive_downwind(self, twa: float) -> None:
+        """Regression guard on the actual bug: the spread used to be 0.00 N."""
+        drives = [_drive_at(twa_deg=twa, boom_deg=b) for b in np.arange(0.0, 90.1, 15.0)]
+        assert max(drives) - min(drives) > 0.25 * max(drives)
+
+
+def _drive_at(twa_deg: float, boom_deg: float) -> float:
+    """Boat-frame drive force from the Flingo rig at a wind angle and boom angle."""
+    from sailbench.models.model import State
+    from sailbench.sim.sailboat_hub import SailboatHub
+
+    hub = SailboatHub("flingo_floty.yaml")
+    hub.sail_cfg["wind_speed"] = 5.0
+    hub.sail_cfg["wind_dir_deg"] = 90.0
+    psi = math.radians(270.0 - twa_deg)
+    state = State(x=0.0, y=0.0, psi=(math.cos(psi), math.sin(psi)), u=1.5, v=0.0, r=0.0)
+    hub.sail_actuator.position = math.radians(boom_deg)
+    hub._set_kinematic_frames(state, math.radians(boom_deg), 0.0)
+    return float(hub.sail.compute(state, hub.tf)[0])
