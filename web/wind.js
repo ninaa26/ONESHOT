@@ -1,5 +1,7 @@
 import * as THREE from "three";
 
+import { SIM_Y_TO_WORLD_Z } from "./boat.js";
+
 export function createWind(scene) {
   const windGroup = new THREE.Group();
   scene.add(windGroup);
@@ -15,7 +17,7 @@ export function createWind(scene) {
     if (!wind) return;
     const dirDeg = (wind.dir_deg || 0) % 360;
     const dirRad = (dirDeg * Math.PI) / 180;
-    state.dir.set(Math.cos(dirRad), 0, Math.sin(dirRad)).normalize();
+    state.dir.set(Math.cos(dirRad), 0, SIM_Y_TO_WORLD_Z * Math.sin(dirRad)).normalize();
     state.speedMs = wind.speed || 0;
   }
 

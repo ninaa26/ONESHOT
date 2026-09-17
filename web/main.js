@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createScene, handleResize } from "./scene.js";
 import { createWind } from "./wind.js";
-import { createBoat, updateBoatFromState } from "./boat.js";
+import { SIM_Y_TO_WORLD_Z, createBoat, updateBoatFromState } from "./boat.js";
 import { createForceArrows } from "./forces.js";
 import { setBoat, setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
 import { createShipyard } from "./shipyard.js";
@@ -59,8 +59,9 @@ function updateFollowCamera() {
   camera.position.set(boatPos.x, eyeHeight, boatPos.z);
   // Looking straight down, the default up vector is the direction of view and
   // lookAt has nothing to orient against, so screen-up is given as a world
-  // direction. Sim +y is north and maps to world +z, so this is north-up.
-  camera.up.set(0, 0, 1);
+  // direction. Sim +y is north and maps to world -z, so this is north-up -- and
+  // because the embedding no longer reverses orientation, east is to the right.
+  camera.up.set(0, 0, SIM_Y_TO_WORLD_Z);
   camera.lookAt(boatPos.x, 0, boatPos.z);
 }
 
@@ -249,7 +250,7 @@ function makeWsUrl() {
           waypointMarker.position.set(
             msg.waypoint.x,
             0.4,
-            msg.waypoint.y,
+            SIM_Y_TO_WORLD_Z * msg.waypoint.y,
           );
         }
       }

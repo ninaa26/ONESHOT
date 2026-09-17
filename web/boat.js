@@ -9,6 +9,22 @@ import {
 
 export const WORLD_SCALE = 1.0;
 
+// How the simulator's ground plane is laid into the scene.
+//
+// The sim works in a right-handed plane: +x east, +y north, angles counting
+// counter-clockwise. The scene is y-up, so that plane has to go somewhere, and
+// it goes into world x and z. Sending sim +y to world +z reverses orientation
+// -- looking down on it, a counter-clockwise turn reads clockwise -- which is
+// why the yaw used to be negated on the way in. It also meant that a top-down
+// camera could be north-up or east-right but never both.
+//
+// Sending sim +y to world -z instead preserves orientation, so the overhead
+// view is a chart: north up, east right, and headings that match the picture.
+// Everything that puts a simulator quantity into the scene has to agree, so
+// grep for this constant: the boat's position and yaw, its sail and rudder
+// angles, the force arrows and the wind all go through it.
+export const SIM_Y_TO_WORLD_Z = -1;
+
 const SURFACE_ANIM_RESPONSE = 15.0; // larger = snappier easing
 const RUDDER_MAX_RATE_RAD_S = THREE.MathUtils.degToRad(520.0);
 
@@ -328,11 +344,12 @@ export function updateBoatFromState(
   boatGroup.position.set(
     pos.x * WORLD_SCALE,
     0,
-    pos.y * WORLD_SCALE,
+    SIM_Y_TO_WORLD_Z * pos.y * WORLD_SCALE,
   );
 
   const yawWorld = Math.atan2(heading.sin, heading.cos);
-  const yawVis = -yawWorld;
+  // Orientation is preserved now, so the yaw goes in as it comes.
+  const yawVis = -SIM_Y_TO_WORLD_Z * yawWorld;
   boatGroup.rotation.set(0, yawVis, 0);
 
   const speed = Math.sqrt(
@@ -355,8 +372,9 @@ export function updateBoatFromState(
     setSailForce(sailForce.fx, sailForce.fy);
   }
 
-  sailGroup.userData.targetYaw = THREE.MathUtils.degToRad(-sailAngleDeg);
-  rudderGroup.userData.targetYaw = THREE.MathUtils.degToRad(-rudderAngleDeg);
+  // Deflections are about the same axis as the yaw, so they carry the same sign.
+  sailGroup.userData.targetYaw = THREE.MathUtils.degToRad(-SIM_Y_TO_WORLD_Z * sailAngleDeg);
+  rudderGroup.userData.targetYaw = THREE.MathUtils.degToRad(-SIM_Y_TO_WORLD_Z * rudderAngleDeg);
 
   return {
     wind: wind || null,

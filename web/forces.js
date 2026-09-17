@@ -1,5 +1,7 @@
 import * as THREE from "three";
 
+import { SIM_Y_TO_WORLD_Z } from "./boat.js";
+
 /** Scale factor: N -> m arrow length. 50 N ~ 1 m. */
 const FORCE_SCALE = 0.02;
 /** Max arrow length in meters. */
@@ -105,7 +107,8 @@ export function createForceArrows(boatGroup) {
       arrow.setVisible(true);
 
       // Boat frame: +x forward, +y starboard. Three.js boat: +X forward, +Z starboard.
-      const dir = new THREE.Vector3(fx, 0, fy).normalize();
+      // fy is lateral in the body frame, so it follows the same convention.
+      const dir = new THREE.Vector3(fx, 0, SIM_Y_TO_WORLD_Z * fy).normalize();
       arrow.setArrow(dir, length);
     }
   }
