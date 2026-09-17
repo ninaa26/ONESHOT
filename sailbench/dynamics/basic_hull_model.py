@@ -1,4 +1,24 @@
-"""Basic hull drag model."""
+"""Hull resistance models.
+
+Two hulls, picked by the hull section's ``model_type``:
+
+``basic`` -- :class:`BasicHullModel`
+    Quadratic resistance from L, B, T: a flat skin-friction coefficient,
+    cross-flow drag in sway, strip-theory yaw damping, and optionally the
+    wave-making term set by ``c_wave``. No added mass.
+
+``measured`` -- :class:`MeasuredHullModel`
+    The same resistance with the Hughes skin-friction line in place of the
+    flat coefficient, over a measured ``wetted_surface_m2``, plus strip-theory
+    added mass integrated over measured draft ``sections``. Both are required:
+    a hull that calls itself measured and then runs on the 1.7*L*(B+T) guess
+    for its area is the thing this split exists to prevent.
+
+Each refuses the other's keys rather than half-applying them: a config says
+which hull it means and gets exactly that one.
+"""
+
+from typing import Any
 
 import numpy as np
 
@@ -8,8 +28,27 @@ from sailbench.tf.tf_tree import TFTree2D
 GRAVITY = 9.81  # [m/s^2]
 
 
+# Keys that only make sense for the measured model.
+MEASURED_KEYS = ("sections", "friction_model", "form_factor", "added_mass_section_coeff", "added_mass_surge_fraction")
+
+
 class BasicHullModel(Model):
-    """Quadratic hull drag from simple geometry-based coefficients."""
+    """Quadratic hull drag from simple geometry-based coefficients (``model_type: basic``)."""
+
+    def __init__(self, params: dict[str, Any]) -> None:
+        """Initialize the hull model."""
+        super().__init__(params)
+        self._check_keys()
+
+    def _check_keys(self) -> None:
+        """Reject keys that belong to the measured model."""
+        stray = [k for k in MEASURED_KEYS if k in self.p]
+        if stray:
+            msg = (
+                f"hull model_type: basic got {', '.join(stray)}; "
+                "use model_type: measured for the Hughes friction line and added mass"
+            )
+            raise ValueError(msg)
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute forces on hull model."""
@@ -64,6 +103,55 @@ class BasicHullModel(Model):
         return np.array([fx, fy, mz], dtype=float)
 
     def added_mass(self) -> tuple[float, float, float]:
+        """Surge, sway and yaw added mass. The basic hull carries none."""
+        return 0.0, 0.0, 0.0
+
+    def _friction_coefficient(self, u: float, l: float) -> float:
+        """Flat skin-friction coefficient, a plausible mid-range constant."""
+        del u, l
+        return 0.004
+
+    def _residuary_resistance(self, u: float, rho: float, l: float, t: float) -> float:
+        """Wave-making resistance, the term that makes a displacement hull have a top speed.
+
+        The friction terms grow as u^2 and so never stop the boat: nothing else
+        here resists it past hull speed. For a hull of this size wave-making
+        dominates above roughly Froude 0.3, and its absence is why the boat
+        reached Froude 0.77 against a hull-speed scale of 0.4.
+
+        Buehler et al. (Robotic Sailing, 2018) use a quartic in the ratio of speed
+        to hull speed, which is a hard enough wall to cap the boat near
+        v_hull = 0.4*sqrt(g*L) without a discontinuity. `c_wave` sets how hard;
+        zero, the default, switches the term off.
+        """
+        c_wave = float(self.p.get("c_wave", 0.0))
+        if c_wave <= 0.0 or abs(u) < 1e-9:
+            return 0.0
+
+        v_hull = 0.4 * np.sqrt(GRAVITY * l)
+        q = 0.5 * rho * u * u
+        return float(-np.sign(u) * c_wave * q * (l * t) * (abs(u) / v_hull) ** 4)
+
+
+class MeasuredHullModel(BasicHullModel):
+    """Hull with the Hughes friction line and strip-theory added mass (``model_type: measured``).
+
+    Requires ``wetted_surface_m2`` and at least two draft ``sections``.
+    """
+
+    def _check_keys(self) -> None:
+        """Require the measured geometry."""
+        if not self.p.get("wetted_surface_m2"):
+            msg = "hull model_type: measured needs wetted_surface_m2; for the L*(B+T) estimate use model_type: basic"
+            raise ValueError(msg)
+        if len(self.p.get("sections") or []) < 2:
+            msg = "hull model_type: measured needs at least two draft sections for added mass"
+            raise ValueError(msg)
+        if "friction_model" in self.p:
+            msg = "hull model_type: measured always uses the Hughes friction line; drop friction_model"
+            raise ValueError(msg)
+
+    def added_mass(self) -> tuple[float, float, float]:
         """Surge, sway and yaw added mass, by strip theory over the measured hull.
 
         Water has to be pushed aside for the hull to accelerate, and the boat
@@ -83,13 +171,8 @@ class BasicHullModel(Model):
         its own axis disturbs very little water, and the usual estimate is a small
         fraction of the displacement, which `added_mass_surge_fraction` sets.
 
-        Returns zeros when no `sections` table is configured, so a hull that has
-        not opted in behaves exactly as before.
         """
-        sections = self.p.get("sections") or []
-        if len(sections) < 2:
-            return 0.0, 0.0, 0.0
-
+        sections = self.p["sections"]
         rho = float(self.p.get("rho_water", 1000.0))
         coeff = float(self.p.get("added_mass_section_coeff", 1.0))
         xs = [float(sec["x_m"]) for sec in sections]
@@ -108,49 +191,20 @@ class BasicHullModel(Model):
         return a11, a22, a66
 
     def _friction_coefficient(self, u: float, l: float) -> float:
-        """Skin-friction coefficient, times a form factor.
+        """Hughes skin-friction coefficient, times a form factor.
 
-        The flat 0.004 this replaces is a plausible mid-range number but it does
-        not vary with speed, and skin friction is the one term here that has a
-        well-established empirical line. `friction_model: hughes` opts in to it:
+        The flat 0.004 of the basic hull is a plausible mid-range number but it
+        does not vary with speed, and skin friction is the one term here that
+        has a well-established empirical line:
 
             Re = 0.85 * |u| * L / nu     (0.85 accounts for the boundary layer
                                           not running the full waterline)
             Cf = 0.066 / (log10(Re) - 2.03)^2
             ff = 1.05                     (form factor: a hull is not a flat plate)
-
-        Left unset, the coefficient stays at the previous constant so nothing
-        changes for a config that has not opted in.
         """
-        if str(self.p.get("friction_model", "flat")).lower() != "hughes":
-            return 0.004
-
         nu = float(self.p.get("nu_water", 1.19e-6))  # [m^2/s] fresh water, ~15 C
         re = 0.85 * abs(u) * l / nu
         if re < 1.0e4:  # below this the line is not valid and Cf is not the story
             return 0.004
         cf = 0.066 / (np.log10(re) - 2.03) ** 2
         return cf * float(self.p.get("form_factor", 1.05))
-
-    def _residuary_resistance(self, u: float, rho: float, l: float, t: float) -> float:
-        """Wave-making resistance, the term that makes a displacement hull have a top speed.
-
-        The model above is skin friction only, which grows as u^2 and so never
-        stops the boat: nothing here resisted it past hull speed. For a hull of
-        this size wave-making dominates above roughly Froude 0.3, and its absence
-        is why the boat reached Froude 0.77 against a hull-speed scale of 0.4.
-
-        Buehler et al. (Robotic Sailing, 2018) use a quartic in the ratio of speed
-        to hull speed, which is a hard enough wall to cap the boat near
-        v_hull = 0.4*sqrt(g*L) without a discontinuity. `c_wave` sets how hard.
-
-        Absent from the config, `c_wave` is zero and this term does nothing, so
-        configs that have not opted in keep their previous behaviour exactly.
-        """
-        c_wave = float(self.p.get("c_wave", 0.0))
-        if c_wave <= 0.0 or abs(u) < 1e-9:
-            return 0.0
-
-        v_hull = 0.4 * np.sqrt(GRAVITY * l)
-        q = 0.5 * rho * u * u
-        return float(-np.sign(u) * c_wave * q * (l * t) * (abs(u) / v_hull) ** 4)

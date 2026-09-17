@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from sailbench.dynamics.basic_hull_model import BasicHullModel
+from sailbench.dynamics.basic_hull_model import BasicHullModel, MeasuredHullModel
 from sailbench.dynamics.windage import Windage
 from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
 from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
@@ -26,6 +26,12 @@ SAIL_MODELS: dict[str, type] = {
     "basic": BasicSail,
     "orc_main": ORCMainSail,  # single mainsail
     "orc_w_jib": ORCWithJibSail,  # main + jib, needs `jib_area`
+}
+
+# Selectable hull models, keyed on the hull section's `model_type`.
+HULL_MODELS: dict[str, type] = {
+    "basic": BasicHullModel,  # L, B, T estimates, flat friction, no added mass
+    "measured": MeasuredHullModel,  # Hughes friction + added mass, needs `wetted_surface_m2` and `sections`
 }
 
 # Selectable keel models, keyed on the keel section's `model_type`.
@@ -99,7 +105,7 @@ class SailboatHub:
 
         self.sail = self._sail_model()(self.sail_cfg)
         self.rudder = self._rudder_model()(self.rudder_cfg)
-        self.hull = BasicHullModel(self.hull_cfg)
+        self.hull = self._hull_model()(self.hull_cfg)
         self.keel = self._keel_model()(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
 
@@ -124,13 +130,10 @@ class SailboatHub:
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
         # Added mass: the water the hull drags along with it. Resolved once, from
-        # the hull's own geometry. Zero unless the hull model offers it and is
-        # configured for it, in which case the equations below reduce to the
-        # rigid-body ones exactly.
+        # the hull's own geometry. The basic hull reports zero, in which case the
+        # equations below reduce to the rigid-body ones exactly.
         self.hull_cfg.setdefault("mass", self.m)
-        self.a_surge, self.a_sway, self.a_yaw = (
-            self.hull.added_mass() if hasattr(self.hull, "added_mass") else (0.0, 0.0, 0.0)
-        )
+        self.a_surge, self.a_sway, self.a_yaw = self.hull.added_mass()
 
         # TODO: Change starting position and heading from config
         self.tf.add_frame(
@@ -174,6 +177,10 @@ class SailboatHub:
     def _sail_model(self) -> type:
         """Pick the sail model named by the sail section's `model_type`."""
         return self._pick_model("sail", self.sail_cfg, SAIL_MODELS)
+
+    def _hull_model(self) -> type:
+        """Pick the hull model named by the hull section's `model_type`."""
+        return self._pick_model("hull", self.hull_cfg, HULL_MODELS)
 
     def _keel_model(self) -> type:
         """Pick the keel model named by the keel section's `model_type`."""

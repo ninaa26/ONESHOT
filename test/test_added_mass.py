@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from sailbench.dynamics.basic_hull_model import BasicHullModel
+from sailbench.dynamics.basic_hull_model import BasicHullModel, MeasuredHullModel
 from sailbench.models.model import State
 from sailbench.sim.sailboat_hub import SailboatHub
 from sailbench.solvers.rk4 import rk4_step
@@ -21,22 +21,24 @@ SECTIONS = [
     {"x_m": -0.375, "draft_m": 0.062},
 ]
 BASE = {"L": 1.372, "B": 0.492, "T": 0.110, "rho_water": 1000.0, "mass": 27.0}
+MEASURED = {**BASE, "wetted_surface_m2": 0.571}
 
 
 class TestStripTheory:
     """Integrating rho*pi*T^2 over the measured stations."""
 
-    def test_zero_without_a_section_table(self) -> None:
-        """A hull that has not opted in reports no added mass."""
+    def test_basic_hull_has_none(self) -> None:
+        """The basic hull reports no added mass."""
         assert BasicHullModel(BASE).added_mass() == (0.0, 0.0, 0.0)
 
-    def test_zero_with_a_single_station(self) -> None:
-        """One station cannot be integrated."""
-        assert BasicHullModel({**BASE, "sections": SECTIONS[:1]}).added_mass() == (0.0, 0.0, 0.0)
+    def test_a_single_station_is_a_config_error(self) -> None:
+        """One station cannot be integrated, so the measured hull refuses it."""
+        with pytest.raises(ValueError, match="sections"):
+            MeasuredHullModel({**MEASURED, "sections": SECTIONS[:1]})
 
     def test_sway_added_mass_is_comparable_to_the_boat(self) -> None:
         """For a hull this beamy it is not a correction, it is a second boat."""
-        _, a22, _ = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
+        _, a22, _ = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
         assert 0.8 * BASE["mass"] < a22 < 1.2 * BASE["mass"]
 
     def test_matches_the_trapezoidal_integral(self) -> None:
@@ -44,7 +46,7 @@ class TestStripTheory:
         xs = np.array([s["x_m"] for s in reversed(SECTIONS)])
         ts = np.array([s["draft_m"] for s in reversed(SECTIONS)])
         expected = float(np.trapezoid(1000.0 * math.pi * ts**2, xs))
-        _, a22, _ = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
+        _, a22, _ = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
         assert a22 == pytest.approx(expected)
 
     def test_yaw_term_is_the_same_integral_weighted_by_x_squared(self) -> None:
@@ -52,26 +54,26 @@ class TestStripTheory:
         xs = np.array([s["x_m"] for s in reversed(SECTIONS)])
         ts = np.array([s["draft_m"] for s in reversed(SECTIONS)])
         expected = float(np.trapezoid(1000.0 * math.pi * ts**2 * xs**2, xs))
-        _, _, a66 = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
+        _, _, a66 = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
         assert a66 == pytest.approx(expected)
 
     def test_station_order_does_not_matter(self) -> None:
         """The table may be given bow-first or stern-first."""
-        forward = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
-        reversed_ = BasicHullModel({**BASE, "sections": list(reversed(SECTIONS))}).added_mass()
+        forward = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
+        reversed_ = MeasuredHullModel({**MEASURED, "sections": list(reversed(SECTIONS))}).added_mass()
         assert forward == pytest.approx(reversed_)
 
     def test_surge_is_a_small_fraction_of_displacement(self) -> None:
         """A slender hull moving along its axis disturbs very little water."""
-        a11, a22, _ = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
+        a11, a22, _ = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
         assert a11 == pytest.approx(0.05 * BASE["mass"])
         assert a11 < 0.1 * a22
 
     def test_deeper_sections_carry_more_water(self) -> None:
         """T^2 means draft dominates."""
         deep = [{"x_m": s["x_m"], "draft_m": 2.0 * s["draft_m"]} for s in SECTIONS]
-        _, shallow_a22, _ = BasicHullModel({**BASE, "sections": SECTIONS}).added_mass()
-        _, deep_a22, _ = BasicHullModel({**BASE, "sections": deep}).added_mass()
+        _, shallow_a22, _ = MeasuredHullModel({**MEASURED, "sections": SECTIONS}).added_mass()
+        _, deep_a22, _ = MeasuredHullModel({**MEASURED, "sections": deep}).added_mass()
         assert deep_a22 == pytest.approx(4.0 * shallow_a22)
 
 

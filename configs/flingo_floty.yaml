@@ -21,10 +21,10 @@ boat:
   inertia_z: 3.4  # [kg·m²] yaw about the vertical through the CG
 
 hull:
+  model_type: measured  # Hughes friction line + added mass from the sections below
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   L: 1.372  # [m] length of waterline, at the floating waterline for 27 kg
-  friction_model: hughes  # ITTC-style skin friction instead of a flat 0.004
   c_wave: 0.01   # residuary (wave-making) resistance; caps speed near 0.4*sqrt(g*L)
   B: 0.492  # [m] beam at waterline
   T: 0.110  # [m] hull draft (canoe body, not to keel tip)
