@@ -48,7 +48,7 @@ hull:
 keel:
   # Thicker section (12%) gives better L/D at boat Re than NACA0006 (6%)
   airfoil_name: NACA0010
-  model_type: keel
+  model_type: finite_span
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [2.6e5]  # Re = V*c/nu at 1.5 m/s on the measured 0.175 m mean chord

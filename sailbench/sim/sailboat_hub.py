@@ -8,7 +8,7 @@ import yaml
 
 from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.windage import Windage
-from sailbench.foils.basic_keel import BasicKeel
+from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
 from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
@@ -26,6 +26,12 @@ SAIL_MODELS: dict[str, type] = {
     "basic": BasicSail,
     "orc_main": ORCMainSail,  # single mainsail
     "orc_w_jib": ORCWithJibSail,  # main + jib, needs `jib_area`
+}
+
+# Selectable keel models, keyed on the keel section's `model_type`.
+KEEL_MODELS: dict[str, type] = {
+    "basic": BasicKeel,  # 2-D section polar
+    "finite_span": FiniteSpanKeel,  # induced drag + stall blend, needs `span` and `alpha_sep_deg`
 }
 
 # Selectable rudder models, keyed on the rudder section's `model_type`.
@@ -94,7 +100,7 @@ class SailboatHub:
         self.sail = self._sail_model()(self.sail_cfg)
         self.rudder = self._rudder_model()(self.rudder_cfg)
         self.hull = BasicHullModel(self.hull_cfg)
-        self.keel = BasicKeel(self.keel_cfg)
+        self.keel = self._keel_model()(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
 
 
@@ -168,6 +174,10 @@ class SailboatHub:
     def _sail_model(self) -> type:
         """Pick the sail model named by the sail section's `model_type`."""
         return self._pick_model("sail", self.sail_cfg, SAIL_MODELS)
+
+    def _keel_model(self) -> type:
+        """Pick the keel model named by the keel section's `model_type`."""
+        return self._pick_model("keel", self.keel_cfg, KEEL_MODELS)
 
     def _rudder_model(self) -> type:
         """Pick the rudder model named by the rudder section's `model_type`."""
