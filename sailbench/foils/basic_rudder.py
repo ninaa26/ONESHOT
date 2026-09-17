@@ -50,13 +50,23 @@ class BasicRudder(Foil):
         track = float(np.arctan2(v_local_rudder[1], v_local_rudder[0]))
         aoa = -track
 
-        # Prevent unrealistically large coefficients at extreme deflection/stall.
-        aoa_limit_deg = float(self.p.get("aoa_limit_deg", 25.0))
-        aoa = float(np.clip(aoa, -np.radians(aoa_limit_deg), np.radians(aoa_limit_deg)))
-        cl, cd = self.cl_cd(aoa, re=self.get_reynolds())
-        cl, cd = self.apply_finite_span(cl, cd)
-        cl = float(np.clip(cl, -float(self.p.get("cl_max", 1.0)), float(self.p.get("cl_max", 1.0))))
-        cd = float(np.clip(cd, 0.0, float(self.p.get("cd_max", 1.2))))
+        # Past stall the section polar stops meaning anything. Two ways to handle
+        # that: blend towards a flat plate, or clamp. Blending is smooth and is
+        # used whenever `alpha_sep_deg` is configured; the clamps are the older
+        # behaviour and are kept for configs that have not moved over. They are
+        # alternatives, not layers -- clamping a blended coefficient would put
+        # back the kink the blend exists to remove.
+        if self.stall_blending:
+            cl, cd = self.cl_cd(aoa, re=self.get_reynolds())
+            cl, cd = self.apply_finite_span(cl, cd)
+            cl, cd = self.blend_stall(aoa, cl, cd)
+        else:
+            aoa_limit_deg = float(self.p.get("aoa_limit_deg", 25.0))
+            aoa = float(np.clip(aoa, -np.radians(aoa_limit_deg), np.radians(aoa_limit_deg)))
+            cl, cd = self.cl_cd(aoa, re=self.get_reynolds())
+            cl, cd = self.apply_finite_span(cl, cd)
+            cl = float(np.clip(cl, -float(self.p.get("cl_max", 1.0)), float(self.p.get("cl_max", 1.0))))
+            cd = float(np.clip(cd, 0.0, float(self.p.get("cd_max", 1.2))))
 
         # Dynamic pressure and net foil forces.
         rho = float(self.p.get("rho_water", 1000.0))  # kg/m^3

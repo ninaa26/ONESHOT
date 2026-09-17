@@ -45,6 +45,9 @@ keel:
   # an end plate the effective AR is 8.0, so this is a deep, efficient fin.
   span: 0.700   # [m]     submerged span below the hull
   end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
+  # Post-stall: blend towards a flat plate rather than trusting the section polar
+  # where it has no meaning. alpha_sep 25 deg puts stall onset near 15.
+  alpha_sep_deg: 25.0
   x_pos: 0.184  # [m]    forward of the CG (CG = LCB, fixed by level flotation)
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
@@ -127,9 +130,10 @@ rudder:
   # hand-tuned stand-in for exactly that correction; keeping it would double-count
   # and the boat loses steerage (the audit measured the no-go pushed out to 57 deg).
   effectiveness: 0.6  # scale rudder force to avoid over-steer
-  aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
-  cl_max: 1.0
-  cd_max: 1.2
+  # Blending supersedes the aoa_limit_deg / cl_max / cd_max clamps: those pinned
+  # the coefficients at a constant past stall and left a kink in the derivative
+  # right where a stalled rudder operates.
+  alpha_sep_deg: 25.0
   # Servo dynamics. tau_s is the first-order lag; the simulator solves it exactly
   # for a command held across the step, so it costs no integration accuracy.
   tau_s: 0.1            # [s] rudder servo, literature value for a boat this size

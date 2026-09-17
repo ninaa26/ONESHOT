@@ -98,6 +98,57 @@ class Foil(Model):
         cl_3d = cl * ar / (ar + 2.0)
         return cl_3d, cd + (cl_3d * cl_3d) / (np.pi * ar * e)
 
+
+    # ------------------------
+    # Post-stall blending
+    # ------------------------
+    @property
+    def stall_blending(self) -> bool:
+        """Whether a separation angle is configured."""
+        return float(self.p.get("alpha_sep_deg", 0.0)) > 0.0
+
+    def blend_stall(self, alpha_rad: float, cl: float, cd: float) -> tuple[float, float]:
+        """Blend attached-flow coefficients towards a flat plate past stall.
+
+        A 2-D section polar is only meaningful while the flow stays attached,
+        roughly the first 15 degrees. Beyond that the model here was hard-clamping
+        the angle and the coefficients, which pins them at a constant and leaves a
+        kink in the derivative exactly where a stalled rudder lives. The
+        underlying table is no better: NeuralFoil extrapolated to 45 degrees
+        returns CL 1.12, above its own peak of 1.00 at 10 degrees, which a stalled
+        foil cannot do.
+
+        Buehler et al. (2018) blend with a separation fraction::
+
+            s(alpha) = 1 - exp(-(alpha / alpha_sep)^2)
+
+        which is 0 at zero incidence and approaches 1 well past stall, and is
+        smooth throughout -- no clamp, no kink. The separated end is a flat plate
+        carrying a normal force of ``cn_plate sin(alpha)``, resolved into
+
+            CL_plate = cn_plate sin(alpha) cos(alpha)
+            CD_plate = cn_plate sin^2(alpha)
+
+        Returns the inputs untouched when no separation angle is configured.
+        """
+        if not self.stall_blending:
+            return cl, cd
+
+        alpha_sep = np.radians(float(self.p.get("alpha_sep_deg", 25.0)))
+        cn_plate = float(self.p.get("cn_plate", 2.0))
+
+        ratio = float(alpha_rad) / alpha_sep
+        separated = float(np.exp(-ratio * ratio))
+
+        sin_a, cos_a = np.sin(float(alpha_rad)), np.cos(float(alpha_rad))
+        cl_plate = cn_plate * sin_a * cos_a
+        cd_plate = cn_plate * sin_a * sin_a
+
+        return (
+            float((1.0 - separated) * cl + separated * cl_plate),
+            float((1.0 - separated) * cd + separated * cd_plate),
+        )
+
     # ------------------------
     # CL/CD Interface
     # ------------------------
