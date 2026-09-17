@@ -5,8 +5,10 @@ from numpy.typing import NDArray
 
 from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
+from sailbench.sim.registry import register
 
 
+@register("hull", "linear")
 class LinearHydroModel(Model):
     """Linear viscous drag hydrodynamic hull model."""
 

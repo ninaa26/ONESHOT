@@ -162,11 +162,13 @@ class TestRudderSelection:
                 FiniteSpanRudder({**self.BASE, "span": 0.478, "alpha_sep_deg": 25.0, key: 1.0})
 
     def test_hub_wires_both_by_model_type(self) -> None:
-        """The hub's registry exposes both rudders, and each shipped config gets the one it names."""
-        from sailbench.sim.sailboat_hub import RUDDER_MODELS, SailboatHub
+        """Both rudders register themselves, and each shipped config gets the one it names."""
+        from sailbench.sim.registry import registered
+        from sailbench.sim.sailboat_hub import SailboatHub
 
-        assert RUDDER_MODELS["basic"] is BasicRudder
-        assert RUDDER_MODELS["finite_span"] is FiniteSpanRudder
+        rudders = registered("rudder")
+        assert rudders["basic"] is BasicRudder
+        assert rudders["finite_span"] is FiniteSpanRudder
         assert type(SailboatHub("basic_sailbot.yaml").rudder) is BasicRudder
         assert type(SailboatHub("flingo_floty.yaml").rudder) is FiniteSpanRudder
 

@@ -67,6 +67,7 @@ import numpy as np
 
 import sailbench.utils.coordinate_helper as utils
 from sailbench.models.model import Model, State
+from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
 # --- ORC VPP 2023 Table 5.1, mainsail, "low" coefficient set ----------------
@@ -118,6 +119,7 @@ KHEFF = np.array([
 ])
 
 
+@register("sail", "orc_main")
 class ORCMainSail(Model):
     """Mainsail-only aerodynamic model using the ORC VPP coefficient envelope.
 
@@ -355,6 +357,7 @@ class ORCMainSail(Model):
         return np.array([q * cr, -wind_side * q * ch], dtype=float)
 
 
+@register("sail", "orc_w_jib")
 class ORCWithJibSail(ORCMainSail):
     """Main-and-jib aerodynamic model: ORC's collective rig, section 5.4.1.
 

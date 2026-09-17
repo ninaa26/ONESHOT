@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from sailbench.sim.part_config import model_name
-from sailbench.sim.sailboat_hub import CONFIG_PATH, KEEL_MODELS, RUDDER_MODELS, SAIL_MODELS, SailboatHub
+from sailbench.sim.registry import registered
+from sailbench.sim.sailboat_hub import CONFIG_PATH, SailboatHub
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -62,8 +63,10 @@ PART_OPTIONS: dict[str, list[tuple[str, str, str]]] = {
 }
 
 # Registry aliases: the catalog names one id per model class, so a config that
-# says `model_type: sail` shows up as `basic`.
-_REGISTRIES: dict[str, dict[str, type]] = {"sail": SAIL_MODELS, "keel": KEEL_MODELS, "rudder": RUDDER_MODELS}
+# says `model_type: sail` shows up as `basic`. Read from the registry at call
+# time, not captured here, so a model registered by a module imported later is
+# still canonicalised correctly.
+_ALIASED_PARTS: tuple[str, ...] = ("sail", "keel", "rudder")
 
 # The stats the boat cards show, as (section, key, label, unit).
 BOAT_STATS: list[tuple[str, str, str, str]] = [
@@ -137,9 +140,9 @@ def _canonical(part: str, value: object) -> str | None:
     if value is None:
         return None
     key = str(value).lower()
-    registry = _REGISTRIES.get(part)
-    if registry is None:
+    if part not in _ALIASED_PARTS:
         return key
+    registry = registered(part)
     cls = registry.get(key)
     if cls is None:
         return key

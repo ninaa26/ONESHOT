@@ -2,12 +2,15 @@
 
 import numpy as np
 
+from sailbench.dynamics import friction
 from sailbench.models.model import Model, State
+from sailbench.sim.registry import lookup, register
 from sailbench.tf.tf_tree import TFTree2D
 
 GRAVITY = 9.81  # [m/s^2]
 
 
+@register("hull", "basic")
 class BasicHullModel(Model):
     """Quadratic hull drag from simple geometry-based coefficients."""
 
@@ -108,29 +111,15 @@ class BasicHullModel(Model):
         return a11, a22, a66
 
     def _friction_coefficient(self, u: float, l: float) -> float:
-        """Skin-friction coefficient, times a form factor.
+        """Skin-friction coefficient from the law this hull names.
 
-        The flat 0.004 this replaces is a plausible mid-range number but it does
-        not vary with speed, and skin friction is the one term here that has a
-        well-established empirical line. `friction_model: hughes` opts in to it:
-
-            Re = 0.85 * |u| * L / nu     (0.85 accounts for the boundary layer
-                                          not running the full waterline)
-            Cf = 0.066 / (log10(Re) - 2.03)^2
-            ff = 1.05                     (form factor: a hull is not a flat plate)
-
-        Left unset, the coefficient stays at the previous constant so nothing
-        changes for a config that has not opted in.
+        `friction_model` picks one of the laws in `sailbench.dynamics.friction`,
+        and defaults to `flat`, the constant every config got before the choice
+        existed. A name no law is registered under now raises instead of quietly
+        meaning `flat`, which is what a typo used to buy.
         """
-        if str(self.p.get("friction_model", "flat")).lower() != "hughes":
-            return 0.004
-
-        nu = float(self.p.get("nu_water", 1.19e-6))  # [m^2/s] fresh water, ~15 C
-        re = 0.85 * abs(u) * l / nu
-        if re < 1.0e4:  # below this the line is not valid and Cf is not the story
-            return 0.004
-        cf = 0.066 / (np.log10(re) - 2.03) ** 2
-        return cf * float(self.p.get("form_factor", 1.05))
+        law = lookup(friction.PART, str(self.p.get("friction_model", "flat")))
+        return float(law(u, l, self.p))
 
     def _residuary_resistance(self, u: float, rho: float, l: float, t: float) -> float:
         """Wave-making resistance, the term that makes a displacement hull have a top speed.

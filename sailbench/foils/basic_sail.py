@@ -6,9 +6,11 @@ import numpy as np
 
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
+from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
 
+@register("sail", "basic", "sail")
 class BasicSail(Foil):
     """Basic sail foil model."""
 

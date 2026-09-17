@@ -277,11 +277,13 @@ class TestRigSelection:
             ORCWithJibSail({"area": 1.971, "heff": 2.592})
 
     def test_hub_wires_both_by_model_type(self) -> None:
-        """The hub's registry exposes both rigs under their model_type keys."""
-        from sailbench.sim.sailboat_hub import SAIL_MODELS
+        """Both rigs register themselves under the names a config selects them by."""
+        import sailbench.foils  # noqa: F401  registers the models
+        from sailbench.sim.registry import registered
 
-        assert SAIL_MODELS["orc_main"] is ORCMainSail
-        assert SAIL_MODELS["orc_w_jib"] is ORCWithJibSail
+        sails = registered("sail")
+        assert sails["orc_main"] is ORCMainSail
+        assert sails["orc_w_jib"] is ORCWithJibSail
 
     def test_sloop_is_a_sail(self) -> None:
         """Everything but the rig table is shared, so the sloop is substitutable for the main."""

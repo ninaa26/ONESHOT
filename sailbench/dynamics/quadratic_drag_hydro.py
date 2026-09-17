@@ -4,8 +4,10 @@ import numpy as np
 
 from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
+from sailbench.sim.registry import register
 
 
+@register("hull", "quadratic")
 class QuadraticHydroModel(Model):
     """Quadratic viscous drag hydrodynamic hull model."""
 

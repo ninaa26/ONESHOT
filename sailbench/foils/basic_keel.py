@@ -23,6 +23,7 @@ import numpy as np
 import sailbench.utils.coordinate_helper as utils
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
+from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
 
@@ -30,6 +31,7 @@ from sailbench.tf.tf_tree import TFTree2D
 FINITE_SPAN_KEYS = ("span", "effective_aspect_ratio", "alpha_sep_deg")
 
 
+@register("keel", "basic")
 class BasicKeel(Foil):
     """Keel on the raw 2-D section polar (``model_type: basic``)."""
 
@@ -105,6 +107,7 @@ class BasicKeel(Foil):
         return np.asarray(r_fluid_to_boat @ f_fluid, dtype=float)
 
 
+@register("keel", "finite_span")
 class FiniteSpanKeel(BasicKeel):
     """Keel with lifting-line induced drag and post-stall blending (``model_type: finite_span``).
 

@@ -2,45 +2,30 @@
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import yaml
 
-from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.windage import Windage
-from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
-from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
-from sailbench.foils.basic_sail import BasicSail
-from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
 from sailbench.models.model import State
 from sailbench.sim.actuator import Actuator
 from sailbench.sim.part_config import compose, model_name
+from sailbench.sim.registry import lookup
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
+
+# Importing these two packages is what registers the models in them, and so what
+# decides which names a config may select. The hub no longer keeps a table of its
+# own: a model is offered because it exists and said so, not because this file
+# was remembered to be edited.
+import sailbench.dynamics  # noqa: E402, F401  isort:skip
+import sailbench.foils  # noqa: E402, F401  isort:skip
 
 CONFIG_PATH = "configs/"
 
-# Selectable sail models, keyed on the sail section's `model_type`. The key was
-# previously dead config; wiring it here keeps the choice of model where the rest
-# of a component's parameters already live, rather than hardcoding a class.
-SAIL_MODELS: dict[str, type] = {
-    "sail": BasicSail,  # historical value carried by existing configs
-    "basic": BasicSail,
-    "orc_main": ORCMainSail,  # single mainsail
-    "orc_w_jib": ORCWithJibSail,  # main + jib, needs `jib_area`
-}
-
-# Selectable keel models, keyed on the keel section's `model_type`.
-KEEL_MODELS: dict[str, type] = {
-    "basic": BasicKeel,  # 2-D section polar
-    "finite_span": FiniteSpanKeel,  # induced drag + stall blend, needs `span` and `alpha_sep_deg`
-}
-
-# Selectable rudder models, keyed on the rudder section's `model_type`.
-RUDDER_MODELS: dict[str, type] = {
-    "basic": BasicRudder,  # 2-D section polar, clamped past stall
-    "finite_span": FiniteSpanRudder,  # induced drag + stall blend, needs `span` and `alpha_sep_deg`
-}
+# The parts whose section names a model in the registry. The hull is one of them:
+# `BasicHullModel` and the two hydro models are alternatives for the same slot.
+MODELLED_PARTS: tuple[str, ...] = ("sail", "keel", "rudder", "hull")
 
 
 class SailboatHub:
@@ -63,11 +48,11 @@ class SailboatHub:
         for section, values in (overrides or {}).items():
             cfg.setdefault(section, {}).update(values)
 
-        # Each foil section is reduced to the parameters of the one model it
+        # Each modelled section is reduced to the parameters of the one model it
         # selects. A section that has not been given a `models` mapping is
         # returned as it stands, so this is a no-op for every config written
         # before the shape existed.
-        for part in ("sail", "keel", "rudder"):
+        for part in MODELLED_PARTS:
             cfg[part] = compose(part, cfg[part])
 
         self.simulation_cfg = cfg["simulation"]
@@ -118,10 +103,10 @@ class SailboatHub:
             max_rate=np.radians(float(self.sail_cfg.get("max_rate_deg_s", 0.0))),
         )
 
-        self.sail = self._sail_model()(self.sail_cfg)
-        self.rudder = self._rudder_model()(self.rudder_cfg)
-        self.hull = BasicHullModel(self.hull_cfg)
-        self.keel = self._keel_model()(self.keel_cfg)
+        self.sail = self._model_for("sail", self.sail_cfg)(self.sail_cfg)
+        self.rudder = self._model_for("rudder", self.rudder_cfg)(self.rudder_cfg)
+        self.hull = self._model_for("hull", self.hull_cfg)(self.hull_cfg)
+        self.keel = self._model_for("keel", self.keel_cfg)(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
 
 
@@ -149,9 +134,12 @@ class SailboatHub:
         # configured for it, in which case the equations below reduce to the
         # rigid-body ones exactly.
         self.hull_cfg.setdefault("mass", self.m)
-        self.a_surge, self.a_sway, self.a_yaw = (
+        # Only a hull model with measured stations to integrate offers added mass;
+        # the linear and quadratic hydro models have no geometry to derive it from.
+        added: tuple[float, float, float] = (
             self.hull.added_mass() if hasattr(self.hull, "added_mass") else (0.0, 0.0, 0.0)
         )
+        self.a_surge, self.a_sway, self.a_yaw = added
 
         # TODO: Change starting position and heading from config
         self.tf.add_frame(
@@ -192,28 +180,10 @@ class SailboatHub:
             transform=Transform2D(x=self.sail_cfg.get("x_pos", 0.0), y=self.sail_cfg.get("y_pos", 0.0), c=1.0, s=0.0),
         )
 
-    def _sail_model(self) -> type:
-        """Pick the sail model named by the sail section's `model_type`."""
-        return self._pick_model("sail", self.sail_cfg, SAIL_MODELS)
-
-    def _keel_model(self) -> type:
-        """Pick the keel model named by the keel section's `model_type`."""
-        return self._pick_model("keel", self.keel_cfg, KEEL_MODELS)
-
-    def _rudder_model(self) -> type:
-        """Pick the rudder model named by the rudder section's `model_type`."""
-        return self._pick_model("rudder", self.rudder_cfg, RUDDER_MODELS)
-
     @staticmethod
-    def _pick_model(component: str, cfg: dict, registry: dict[str, type]) -> type:
-        """Look the model a component section names up in its registry; default `basic`."""
-        key = model_name(cfg)
-        try:
-            return registry[key]
-        except KeyError:
-            known = ", ".join(sorted(registry))
-            msg = f"unknown {component} model_type {key!r}; expected one of: {known}"
-            raise ValueError(msg) from None
+    def _model_for(part: str, cfg: Mapping[str, Any]) -> type:
+        """Return the class registered for the model this section names; default `basic`."""
+        return cast("type", lookup(part, model_name(cfg)))
 
     def _apply_environment(self) -> None:
         """Offer the shared `environment` values to every component as defaults.

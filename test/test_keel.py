@@ -94,11 +94,13 @@ class TestKeelSelection:
             FiniteSpanKeel({**self.BASE, "span": 0.7})
 
     def test_hub_wires_both_by_model_type(self) -> None:
-        """The hub's registry exposes both keels, and each shipped config gets the one it names."""
-        from sailbench.sim.sailboat_hub import KEEL_MODELS, SailboatHub
+        """Both keels register themselves, and each shipped config gets the one it names."""
+        from sailbench.sim.registry import registered
+        from sailbench.sim.sailboat_hub import SailboatHub
 
-        assert KEEL_MODELS["basic"] is BasicKeel
-        assert KEEL_MODELS["finite_span"] is FiniteSpanKeel
+        keels = registered("keel")
+        assert keels["basic"] is BasicKeel
+        assert keels["finite_span"] is FiniteSpanKeel
         assert type(SailboatHub("basic_sailbot.yaml").keel) is BasicKeel
         assert type(SailboatHub("flingo_floty.yaml").keel) is FiniteSpanKeel
 
