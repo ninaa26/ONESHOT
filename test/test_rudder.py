@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
@@ -134,3 +134,42 @@ class TestRudder:
         # Its lift is perpendicular to the flow, so at leeway it has a forward
         # body-x component; what must stay negative is the net mechanical power.
         assert fx * u + fy * v < 0
+
+
+class TestRudderSelection:
+    """`basic` is the clamped 2-D section and `finite_span` the lifting-line blend; neither guesses."""
+
+    BASE = {"airfoil_name": "NACA0012", "alpha_min": -179, "alpha_max": 179, "res": [1.2e5], "area": 0.0462}
+
+    def test_basic_refuses_finite_span_keys(self) -> None:
+        """A span handed to the 2-D model is an error, not a half-applied correction."""
+        with pytest.raises(ValueError, match="finite_span"):
+            BasicRudder({**self.BASE, "span": 0.478})
+        with pytest.raises(ValueError, match="finite_span"):
+            BasicRudder({**self.BASE, "alpha_sep_deg": 25.0})
+
+    def test_finite_span_requires_its_keys(self) -> None:
+        """No aspect ratio, or no separation angle, is a config error pointing at `basic`."""
+        with pytest.raises(ValueError, match="span"):
+            FiniteSpanRudder({**self.BASE, "alpha_sep_deg": 25.0})
+        with pytest.raises(ValueError, match="alpha_sep_deg"):
+            FiniteSpanRudder({**self.BASE, "span": 0.478})
+
+    def test_finite_span_refuses_clamps(self) -> None:
+        """Clamping a blended coefficient puts back the kink the blend removes."""
+        for key in ("aoa_limit_deg", "cl_max", "cd_max"):
+            with pytest.raises(ValueError, match=key):
+                FiniteSpanRudder({**self.BASE, "span": 0.478, "alpha_sep_deg": 25.0, key: 1.0})
+
+    def test_hub_wires_both_by_model_type(self) -> None:
+        """The hub's registry exposes both rudders, and each shipped config gets the one it names."""
+        from sailbench.sim.sailboat_hub import RUDDER_MODELS, SailboatHub
+
+        assert RUDDER_MODELS["basic"] is BasicRudder
+        assert RUDDER_MODELS["finite_span"] is FiniteSpanRudder
+        assert type(SailboatHub("basic_sailbot.yaml").rudder) is BasicRudder
+        assert type(SailboatHub("flingo_floty.yaml").rudder) is FiniteSpanRudder
+
+    def test_finite_span_is_a_rudder(self) -> None:
+        """Only the coefficient lookup differs; the force resolution is shared."""
+        assert isinstance(FiniteSpanRudder({**self.BASE, "span": 0.478, "alpha_sep_deg": 25.0}), BasicRudder)

@@ -45,7 +45,7 @@ sail:
 
 rudder:
   airfoil_name: NACA0012
-  model_type: keel
+  model_type: basic
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]

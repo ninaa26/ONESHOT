@@ -9,7 +9,7 @@ import yaml
 from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.windage import Windage
 from sailbench.foils.basic_keel import BasicKeel
-from sailbench.foils.basic_rudder import BasicRudder
+from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
 from sailbench.models.model import State
@@ -26,6 +26,12 @@ SAIL_MODELS: dict[str, type] = {
     "basic": BasicSail,
     "orc_main": ORCMainSail,  # single mainsail
     "orc_w_jib": ORCWithJibSail,  # main + jib, needs `jib_area`
+}
+
+# Selectable rudder models, keyed on the rudder section's `model_type`.
+RUDDER_MODELS: dict[str, type] = {
+    "basic": BasicRudder,  # 2-D section polar, clamped past stall
+    "finite_span": FiniteSpanRudder,  # induced drag + stall blend, needs `span` and `alpha_sep_deg`
 }
 
 
@@ -86,7 +92,7 @@ class SailboatHub:
         )
 
         self.sail = self._sail_model()(self.sail_cfg)
-        self.rudder = BasicRudder(self.rudder_cfg)
+        self.rudder = self._rudder_model()(self.rudder_cfg)
         self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
@@ -161,12 +167,21 @@ class SailboatHub:
 
     def _sail_model(self) -> type:
         """Pick the sail model named by the sail section's `model_type`."""
-        key = str(self.sail_cfg.get("model_type", "basic")).lower()
+        return self._pick_model("sail", self.sail_cfg, SAIL_MODELS)
+
+    def _rudder_model(self) -> type:
+        """Pick the rudder model named by the rudder section's `model_type`."""
+        return self._pick_model("rudder", self.rudder_cfg, RUDDER_MODELS)
+
+    @staticmethod
+    def _pick_model(component: str, cfg: dict, registry: dict[str, type]) -> type:
+        """Look a component section's `model_type` up in its registry; default `basic`."""
+        key = str(cfg.get("model_type", "basic")).lower()
         try:
-            return SAIL_MODELS[key]
+            return registry[key]
         except KeyError:
-            known = ", ".join(sorted(SAIL_MODELS))
-            msg = f"unknown sail model_type {key!r}; expected one of: {known}"
+            known = ", ".join(sorted(registry))
+            msg = f"unknown {component} model_type {key!r}; expected one of: {known}"
             raise ValueError(msg) from None
 
     def _apply_environment(self) -> None:
