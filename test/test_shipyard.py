@@ -204,9 +204,6 @@ class TestParseSetupMessage:
             parse_setup_message({"type": "setup", "boat": "fun_boat.yaml", "parts": {"sail": 3}})
 
 
-BOATS_TIMES_OPTIONS = 36  # 4 shipped boats x 9 options across the four rows
-
-
 class TestDeclaredAvailabilityMatchesReality:
     """The catalog stopped building every option to find out whether it works.
 
@@ -231,7 +228,8 @@ class TestDeclaredAvailabilityMatchesReality:
                         f"{entry['id']} {row}.{option_id}: catalog says {declared!r}, building says {built!r}"
                     )
                     checked += 1
-        assert checked == BOATS_TIMES_OPTIONS, f"expected {BOATS_TIMES_OPTIONS} pairs, walked {checked}"
+        expected = len(catalog.boats) * sum(len(catalog.parts[row]) for row in catalog.parts)
+        assert checked == expected, f"expected {expected} boat/option pairs, walked {checked}"
 
 
 class TestOptionsComeFromTheModels:

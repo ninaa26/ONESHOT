@@ -150,7 +150,18 @@ def _reason_unavailable(part: str, key: str, option_id: str, section: Mapping[st
 
 
 def _pretty_name(stem: str) -> str:
+    """Return a display name derived from a config's filename."""
     return stem.replace("_", " ").replace("-", " ").title()
+
+
+def _boat_name(cfg: dict[str, Any], stem: str) -> str:
+    """Return what to call this boat: its own `boat.name`, else its filename.
+
+    Title-casing a filename cannot know that WPI is an acronym, so a boat that
+    cares says what it is called.
+    """
+    declared = cfg.get("boat", {}).get("name")
+    return str(declared) if declared else _pretty_name(stem)
 
 
 def _describe_boat(path: Path) -> dict[str, Any] | None:
@@ -182,7 +193,7 @@ def _describe_boat(path: Path) -> dict[str, Any] | None:
 
     return {
         "id": path.name,
-        "name": _pretty_name(path.stem),
+        "name": _boat_name(cfg, path.stem),
         "defaults": defaults,
         "available": available,
         "stats": stats,

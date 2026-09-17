@@ -1,0 +1,157 @@
+# WPI SailBot "Wild Goats" — 2025-26 boat
+# Overall winner, 18th International Robotic Sailing Regatta,
+# Merrill Family Sailing Center, Cayuga Lake, Ithaca NY, 7-12 June 2026.
+# Hosted by Cornell University. WPI total 45.9 pts, 1st of 7 teams,
+# winning 4 of 7 events (Station Keeping, Precision Navigation,
+# Collision Avoidance, Presentation). WPI's 5th IRSR title.
+#
+# PROVENANCE
+#   [M] measured/published  — from the WPI SailBot 2025-26 MQP poster,
+#       the 2024-25 MQP report, sailbot.org results, and WPI news.
+#   [E] estimated           — derived from class limits, the published
+#       numbers above, or typical 2 m SailBot-class practice. Flagged
+#       inline so they can be replaced when real numbers surface.
+#
+# Platform: 2 m SailBot class monohull, carbon-fiber hull, freely
+# rotating rigid wingsail with trim tab, bulbed fin keel, dual canted
+# rudders. Jetson Orin Nano + ROS 2 + ESP32, Airmar 220WX, ZED stereo
+# camera w/ YOLO11n buoy detection, Flutter/gRPC ground station.
+#
+# TWO APPROXIMATIONS THIS SIMULATOR FORCES
+#   The rig is a rigid wingsail, not a soft sail. It is sailed here as
+#   `basic`: a symmetric NACA section at a geometric angle of attack,
+#   which is much closer to a rigid wing than to the ORC envelope. No
+#   `orc_main` or `orc_w_jib` block is offered on purpose -- those are
+#   soft-sail VPP coefficients, the wrong physics for a wing, and this
+#   boat has no jib at all.
+#   The boat has two canted rudders on one servo; the simulator carries
+#   one. They are lumped into a single blade of the combined area, and
+#   the aspect ratio stays that of ONE blade, since two blades side by
+#   side shed tip vortices like each other, not like one wing of twice
+#   the area.
+
+simulation:
+  dt: 0.02  # [s] solver step
+
+environment:
+  rho_water: 1000.0  # [kg/m³]  fresh water — Cayuga Lake
+  rho_air: 1.225     # [kg/m³]  sea-level air
+
+boat:
+  name: WPI Wild Goats  # `.title()` on the filename would give "Wpi"
+  mass: 25.0       # [kg] [E] "two-meter ... ~50 lb" (23 kg) reported for the
+                   #      WPI boat; +2 kg for the 2025-26 lengthened keel and
+                   #      new cast-lead bulb.
+  inertia_z: 6.5   # [kg·m²] [E] 25 kg with yaw radius of gyration ≈ 0.25·LOA.
+
+hull:
+  x_pos: 0.0  # [m]     x position relative to boat center of rotation
+  y_pos: 0.0  # [m]     y position relative to boat center of rotation
+  L: 1.85   # [m] waterline length [E] — LOA is 2.00 m [M], the SailBot
+            #     class maximum (rules: LOA <= 2 m, draft <= 1.5 m,
+            #     total height <= 5 m; sail area unrestricted).
+  B: 0.45   # [m] beam  [E] typical for a 2 m SailBot-class hull
+  T: 0.10   # [m] canoe-body draft [E] (keel adds 1.30 m -> 1.40 m total,
+            #     inside the 1.5 m class limit)
+  c_wave: 0.01   # [E] residuary resistance; caps speed near 0.4*sqrt(g*L)
+  friction_model: hughes  # [E] Reynolds-dependent skin friction
+  model: basic
+  models:
+    # The geometry model derives its drag from L, B and T above. The other
+    # two take damping coefficients directly, so this boat carries both
+    # sets: it is the only config here that can be sailed on all three.
+    basic: {}
+    linear:
+      xu1: 22.0   # [N·s/m]     surge  [E]
+      yv1: 45.0   # [N·s/m]     sway   [E]
+      nr1: 18.0   # [N·m·s/rad] yaw    [E]
+    quadratic:
+      xu2: 6.0    # [N·s²/m²]  [E]
+      yv2: 95.0   # [E]
+      nr2: 14.0   # [E]
+
+keel:
+  # 2025-26 redesign: fin lengthened 0.97 m -> 1.30 m while holding the
+  # righting moment, aspect ratio 7.03, taper ratio 0.72, new cast-lead
+  # bulb. Span and AR give S = b²/AR = 1.30²/7.03 = 0.240 m².  [M]
+  airfoil_name: NACA0012   # [E] symmetric section, thickness not published
+  alpha_min: -179 # Minimum and maximum angle of attack in degrees
+  alpha_max: 179
+  res: [3e5]    # [E] Re from 0.185 m mean chord at ~1.5 m/s
+  area: 0.240   # [m²]  [M-derived] span 1.30 m, AR 7.03
+                #       root chord 0.215 m, tip chord 0.155 m (taper 0.72)
+  x_pos: 0.0    # [m]   [E] fin close to the center of rotation
+  y_pos: 0.0    # [m]
+  # A published span and aspect ratio is exactly what the finite-span model
+  # wants, so this boat defaults to it rather than to the 2-D section.
+  model: finite_span
+  models:
+    basic: {}
+    finite_span:
+      span: 1.30   # [m] [M] fin length below the hull
+      # No end_plate_factor: 7.03 is the aspect ratio WPI publishes, and
+      # span²/area already reproduces it (1.30²/0.240 = 7.04). Crediting the
+      # hull as an end plate on top of that would double-count their number.
+      # alpha_sep_deg defaults to 25 in the model.
+
+sail:
+  # Freely rotating rigid wingsail, trim-tab controlled, NACA 0018 section
+  # (2024-25 change from NACA 0020). Carbon mast with foam ribs and film
+  # skin; mast moved to the quarter-chord aerodynamic center so the trim
+  # tab has real authority. 2025-26 added a self-trimming airfoil
+  # counterbalance that raised effective sail area by >10%.  [M]
+  area: 1.50        # [m²] [E] ~3.0 m rig height reported ("10-foot wing-sail"),
+                    #      wing span ~2.75 m x ~0.55 m mean chord. Trim tab
+                    #      adds a further ~0.20 m² [E], not included here.
+  wind_speed: 4.0   # [m/s] [M] regatta week ran 3-8 kt southerly; 4 m/s ~ 8 kt
+  wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
+  x_pos: 0.05       # [m] [E] mast just forward of the keel's center of effort
+  y_pos: 0.0
+  airfoil_name: NACA0018  # [M] the section the 2024-25 team changed to
+  alpha_min: -179 # Minimum and maximum angle of attack in degrees
+  alpha_max: 179
+  res: [2e5]   # [E] Re from 0.55 m chord at ~5 m/s apparent
+  model: basic
+  models:
+    # Only the section model is offered. The ORC rigs are soft-sail envelopes
+    # and this is a rigid wing; orc_w_jib would additionally need a jib the
+    # boat does not have.
+    basic: {}
+  # Coefficients the team's own hybrid wing model would want, kept here as a
+  # record rather than as live keys: HybridSail exists in sailbench/foils but
+  # is not registered, so nothing can select it yet.
+  #   CL_max 1.15  [E] rigid wing, AR ~5, Re 2e5 — higher than a soft sail
+  #   CD0    0.04  [E] clean rigid wing profile drag, not a soft-sail 0.1
+  #   CD1    0.55  [E] gives CD ~1.14 broadside for an 18%-thick wing
+
+rudder:
+  # Dual rudders canted 20 deg so the pair peaks in authority at 20 deg heel;
+  # one servo drives both. 2025-26 reprofiled for more lift at low speed and
+  # a higher stall angle, and the fuzzy-logic rudder controller was
+  # overhauled for path following.  [M]
+  airfoil_name: NACA0012   # [E]
+  alpha_min: -179 # Minimum and maximum angle of attack in degrees
+  alpha_max: 179
+  res: [1.5e5]    # [E] Re from 0.10 m chord at ~1.5 m/s
+  area: 0.044     # [m²] [E] two blades, ~0.22 m span x ~0.10 m chord each
+                  #      (~0.041 m² projected after the 20 deg cant)
+  x_pos: -0.75    # [m]  [E] aft, near the transom of a 2 m hull
+  y_pos: 0.0      # [m]  pair modeled on centerline
+  effectiveness: 0.25   # [E] twin canted blades bite better than a single
+                        #     blade at heel, so above the 0.2 used elsewhere
+  deadband_deg: 1.5     # small stick noise -> zero command
+  center_tau_s: 0.6     # time constant to return to center when cmd==0
+  max_rate_deg_s: 120.0 # servo rate limit for manual controllability
+  model: finite_span
+  models:
+    basic:
+      # Clamps belong to the 2-D model; finite_span refuses them.
+      aoa_limit_deg: 38.0   # [E] raised from 35 — reprofiled for a later stall
+      cl_max: 1.1           # [E] longer chord, more lift at low speed
+      cd_max: 1.25          # [E] and correspondingly more drag
+    finite_span:
+      # The aspect ratio of ONE blade, not of the lumped pair. Two blades side
+      # by side each shed their own tip vortices, so the pair pays induced drag
+      # like a single blade of AR 2.2 -- using the combined area here instead
+      # (0.22²/0.044 = 1.1) would charge it roughly twice over.
+      effective_aspect_ratio: 2.2  # [E] 0.22 m span, 0.10 m chord per blade
