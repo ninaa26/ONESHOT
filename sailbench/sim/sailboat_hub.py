@@ -44,6 +44,13 @@ class SailboatHub:
         self.sail_cfg = cfg["sail"]
         self.environment_cfg = cfg.get("environment", {})
         self.windage_cfg = cfg.get("windage", {})
+        # Keys each component states for itself, captured before anything is
+        # injected. Everything else in a component's parameters came from the
+        # `environment` block and may be refreshed from it.
+        self._component_own_keys = {
+            id(section): set(section)
+            for section in (self.hull_cfg, self.keel_cfg, self.rudder_cfg, self.sail_cfg, self.windage_cfg)
+        }
 
         self.tf = TFTree2D()
         # Last computed sail force in boat frame (Fx, Fy) for diagnostics / UI.
@@ -177,8 +184,13 @@ class SailboatHub:
         override the shared one.
         """
         for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg, self.sail_cfg, self.windage_cfg):
+            own = self._component_own_keys.get(id(cfg), set())
             for key, value in self.environment_cfg.items():
-                cfg.setdefault(key, value)
+                # setdefault would be wrong here: after the first pass the injected
+                # value is indistinguishable from one the component stated itself,
+                # so a later change to `environment` would silently not apply.
+                if key not in own:
+                    cfg[key] = value
 
     def step(
         self,
