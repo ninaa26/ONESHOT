@@ -1,75 +1,176 @@
-# Flingo Floty, measured 2026-09-16 from "Full Boat Assembly Final.SLDASM"
-# (95 components) via a fine binary STL export, 471k triangles, no translation
-# to positive space, assembly coordinate system.
+# Flingo Floty -- measured and estimated boat data
 #
-# Two independent sources:
-#   MP   SolidWorks Mass Properties (mass, CG, inertia tensor)
-#   STL  scripts/hull_envelope.py + scripts/hull_analysis.py (all geometry)
+# Consolidated 2026-09-17. Earlier revisions of this file appended corrections
+# at the bottom while stale values sat at the top; this version carries only
+# final numbers up front, with what changed and why in `superseded` at the end.
 #
-# CAD frame: X longitudinal with +X AFT, Y vertical (+Y up), Z transverse.
-# Sim frame: +x forward, origin at the boat CG, so sim_x = -(CAD_x - 0.0910).
+# SOURCES
+#   MP      SolidWorks Mass Properties on "Full Boat Assembly Final.SLDASM"
+#           (95 components), read 2026-09-16
+#   STL     fine binary STL export of the same assembly, 471k triangles, no
+#           translation to positive space, assembly coordinate system.
+#           Measured with scripts/hull_analysis.py, hull_envelope.py,
+#           mass_budget.py
+#   REPORT  CUSail Mechanical Team, Fall 2025 Report (design intent, predates
+#           the Feb 2026 assembly files)
+#   USER    stated directly by the team
+#
+# FRAMES
+#   CAD  X longitudinal with +X AFT, Y vertical (+Y up), Z transverse.
+#        Established four ways, not assumed: the Top Plane renders horizontal
+#        with the mast normal to it; the keel CG sits at Z = -0.48 mm, i.e. on
+#        centreline; Lzz ~= Lxx + Lyy, so mass is nearly planar in XY and Z is
+#        the thin beam direction; and the rudder is at +X against the keel's ~0.
+#   SIM  +x forward, origin at the boat CG.  sim_x = -(CAD_x - 0.1826)
+#        The 0.1826 m is the mass-weighted CG, which equals the LCB because the
+#        boat floats level -- so it is fixed by hydrostatics, not by material
+#        guesses. The CAD's own volume-weighted CG (0.0910 m) is 92 mm forward
+#        of it and should not be used.
 
-tier_a:
-  rudder:
-    submerged_span_m: 0.570        # STL: waterline (y=-0.1043) to tip (y=-0.674)
-    total_span_m: 0.578
-    planform_area_m2: 0.0468       # STL: projected silhouette, 74% of bbox
-    max_chord_m: 0.110
-    mean_chord_m: 0.082
-    aspect_ratio: 6.96
-    x_pos_m: -0.319                # geometric centre; CG-based estimate gives -0.305
-    verdict: >-
-      flingo_floty.yaml's 0.046 m^2 is right almost exactly (0.0468 measured).
-      real_boat.yaml's 0.3 m^2 is wrong by 6.4x. The span sweep of 0.15-0.30 m
-      brackets the wrong range entirely: the real wetted span is 0.570 m.
+# ---------------------------------------------------------------------------
+# What is in configs/flingo_floty.yaml, and where each value came from
+# ---------------------------------------------------------------------------
+config_values:
+  boat.mass:        {value: 27.0,   source: USER,   note: "weighed; governs everything else"}
+  boat.inertia_z:   {value: 3.4,    source: STL,    note: "band 3.1-4.1, set by plate layout"}
+  hull.L:           {value: 1.372,  source: STL,    was: 1.0}
+  hull.B:           {value: 0.492,  source: STL,    was: 0.5}
+  hull.T:           {value: 0.110,  source: STL,    was: 0.125}
+  keel.area:        {value: 0.1225, source: STL,    was: 0.13,   confirmed_by: REPORT}
+  keel.x_pos:       {value: 0.184,  source: STL,    was: 0.0}
+  keel.res:         {value: 2.6e5,  source: derived, was: 5e5}
+  sail.area:        {value: 1.971,  source: STL,    was: 1.34,   note: "main 1.196 + jib 0.775"}
+  sail.x_pos:       {value: 0.267,  source: STL,    was: 0.1}
+  sail.res:         {value: 1.8e5,  source: derived, was: 1e5}
+  rudder.area:      {value: 0.0462, source: STL,    was: 0.046,  note: "blade only, stock excluded"}
+  rudder.x_pos:     {value: -0.227, source: STL,    was: -0.46}
+  rudder.res:       {value: 1.2e5,  source: derived, was: 5e5}
 
-  keel:
-    submerged_span_m: 0.700        # hull underside (y=-0.214) to tip (y=-0.914)
-    waterline_to_tip_m: 0.810
-    planform_area_m2: 0.1225       # STL: projected silhouette, 73% of bbox
-    max_chord_m: 0.240
-    mean_chord_m: 0.175
-    thickness_m: 0.029             # 12% of max chord, consistent with NACA0012
-    aspect_ratio: 4.00             # on the 0.700 m span below the hull
-    x_pos_m: 0.092                 # geometric centre; CG-based estimate gives 0.104
-    verdict: >-
-      config's 0.13 m^2 is right within 6%. The span sweep of 0.25-0.50 m again
-      misses low: the real span below the hull is 0.700 m.
+  derived_values_caveat: >-
+    The three Reynolds numbers are measured chord over an ASSUMED speed:
+    1.5 m/s through the water for keel and rudder, 6 m/s apparent for the sail.
+    Chords are measured; speeds are not.
 
-  lead:
-    origin: "boat CG, at CAD (90.97, 65.54, 10.74) mm"
-    keel_x_pos_m: 0.092
-    rudder_x_pos_m: -0.319
-    keel_rudder_separation_m: 0.411
-    sail_x_pos_m: null             # mast/sail not yet isolated; see open_items
-    note: >-
-      flingo_floty.yaml has keel 0.0 / sail 0.1; real_boat.yaml has keel 0.1 /
-      sail 0.0. The measurement backs real_boat: the keel is ~0.09-0.10 m
-      FORWARD of the CG, not on it. A zero-lead keel generates no yaw moment.
+  left_alone:
+    hull.xu1_yv1_nr1_xu2_yv2_nr2: "damping; needs tow tests or sailing logs"
+    sail.CL_max_CD0_CD1: >-
+      CAD models the sails as flat panels; the real ones are cambered and
+      battened, so CAD cannot supply these
+    rudder.effectiveness_moment_coeff_cl_max_cd_max: "fudge factors"
+    rudder.servo_terms: "from the servo datasheet"
 
-  waterline_length_m: 1.372        # STL, at the floating waterline for 27 kg
-  yaw_inertia_kg_m2: 7.391         # MP: Lyy at the CG about the vertical axis
+# ---------------------------------------------------------------------------
+# Geometry
+# ---------------------------------------------------------------------------
+hull:
+  loa_m: 1.784                    # REPORT designed 1.8
+  max_beam_m: 0.634
+  depth_m: 0.296
+  laminate_volume_L: 8.795
+  one_skin_area_m2: 1.980
+  modelled_shell_thickness_mm: 4.44   # a placeholder, not the layup
+  construction: >-
+    REPORT: carbon fibre by resin infusion into a CNC'd female foam mould,
+    Duratec and blue gel coat, hull and deck joined with Kevlar. No core is
+    mentioned, so a solid laminate.
 
-tier_b:
-  hydrostatics_at_27kg:
-    waterline_y_m: -0.1043
-    displacement_L: 27.00
-    hull_L: 24.59
-    keel_L: 1.65
-    rudder_L: 0.55
-    other_appendage_L: 0.20
-    L_waterline_m: 1.372
-    B_waterline_m: 0.492
-    T_hull_draft_m: 0.110
-    draft_to_keel_tip_m: 0.810
-    waterplane_area_m2: 0.4856
-    block_coefficient: 0.331
-    wetted_surface_m2: 0.571       # hull outer skin below WL
-    freeboard_m: 0.185
-    hull_volume_to_sheer_L: 157.1  # reserve buoyancy; it floats on 17% of capacity
-    LCB_sim_x_m: -0.102
+keel:
+  span_below_hull_m: 0.700
+  waterline_to_tip_m: 0.810
+  root_chord_m: 0.240
+  tip_chord_m: 0.110
+  mean_chord_m: 0.175
+  thickness_m: 0.029
+  planform_area_m2: 0.1225
+  aspect_ratio: 4.00
+  section: "NACA0012 root -> NACA0010 tip (t/c measured 12.0% / 9.9%)"
+  x_pos_sim_m: 0.184
+  agreement: "REPORT gives 240/110/700 mm and 122500 mm^2 -- identical to the STL"
 
-  sections:                        # submerged area / beam at WL / local draft
+bulb:
+  length_m: 0.300
+  max_radius_m: 0.01875
+  slenderness: "8:1"
+  volume_L: 0.20                  # 0.221 L theoretical for the prolate spheroid
+  fill: "lead epoxy (REPORT); ~1.4 kg, or 2.3 kg if it were solid lead"
+
+rudder:
+  blade_span_m: 0.478             # REPORT agrees exactly
+  blade_planform_m2: 0.0462
+  max_chord_m: 0.110
+  mean_chord_m: 0.0966
+  aspect_ratio: 4.95
+  section: "NACA0012 -> NACA0010 (REPORT)"
+  x_pos_sim_m: -0.227
+  stock: >-
+    The CAD body spans 0.578 m because ~0.10 m of stock sits above the blade.
+    The blade top is 0.092 m below the waterline, so the stock crosses it.
+
+rig:
+  mainsail:
+    area_m2: 1.1955
+    luff_m: 2.326
+    foot_m: 1.028
+    mean_chord_m: 0.514
+    aspect_ratio: 4.53
+    head_above_wl_m: 2.598
+    foot_above_wl_m: 0.272        # 0.086 m above the deck
+    ce_sim_x_m: 0.175             # against the real CG; 0.063 m aft of it before
+    ce_height_above_wl_m: 1.054
+  jib:
+    area_m2: 0.7753
+    luff_m: 2.260
+    foot_m: 0.686
+    mean_chord_m: 0.343
+    aspect_ratio: 6.59
+    head_above_wl_m: 2.446
+    foot_above_wl_m: 0.186        # deck-sweeping, no gap
+    ce_height_above_wl_m: 0.960
+  combined:
+    area_m2: 1.9708
+    ce_sim_x_m: 0.267
+    ce_height_above_wl_m: 1.017
+  mast:
+    top_above_wl_m: 2.592
+    top_above_deck_m: 2.406
+    foot_cad_y_m: -0.116          # steps below the deck, inside the hull
+    segments_in_cad: 3
+  measurement_note: >-
+    Both sails are CLOSED thin solids in the STL, zero boundary edges and
+    1.99 mm panel thickness, so sail area is HALF the mesh surface area.
+  lead: >-
+    Combined CE is 0.083 m forward of the keel CLR, 6.1% of LWL -- low for a
+    conventional rig but the right sign. The MAINSAIL ALONE has its CE aft of
+    the CLR, the wrong sign, so a single-sail model must use the combined
+    figures.
+
+# ---------------------------------------------------------------------------
+# Hydrostatics, solved at 27.0 kg  (scripts/hull_envelope.py)
+# ---------------------------------------------------------------------------
+hydrostatics:
+  waterline_cad_y_m: -0.1043
+  displacement_L: 27.02
+  hull_L: 24.59
+  appendages_L: 2.41
+  L_waterline_m: 1.372
+  B_waterline_m: 0.492
+  T_hull_draft_m: 0.110
+  draft_to_keel_tip_m: 0.810
+  waterplane_area_m2: 0.4856
+  waterplane_I_T_m4: 0.00724
+  block_coefficient: 0.331
+  wetted_surface_m2: 0.571
+  freeboard_m: 0.185
+  hull_volume_to_sheer_L: 157.1   # floats on 17% of capacity
+  LCB_cad_x_m: 0.1826
+  KB_below_wl_m: 0.0649
+  BM_m: 0.2681
+
+  wetted_surface_warning: >-
+    The sim's 1.7*L*(B+T) gives 1.404 m^2 against 0.571 m^2 measured, so
+    basic_hull_model.py overestimates hull friction drag by about 2.5x.
+
+  sections:                       # submerged area / beam at WL / local draft
     - {x_cad: -0.510, area_m2: 0.00169, beam_m: 0.100, draft_m: 0.031}
     - {x_cad: -0.330, area_m2: 0.00818, beam_m: 0.228, draft_m: 0.067}
     - {x_cad: -0.154, area_m2: 0.01679, beam_m: 0.336, draft_m: 0.092}
@@ -78,43 +179,188 @@ tier_b:
     - {x_cad:  0.382, area_m2: 0.03008, beam_m: 0.492, draft_m: 0.093}
     - {x_cad:  0.558, area_m2: 0.02115, beam_m: 0.472, draft_m: 0.062}
 
-  mass:
-    cad_total_kg: 29.782           # MP, but see caveats: densities are wrong
-    config_kg: 27.0
-    cg_cad_mm: [90.97, 65.54, 10.74]
-    inertia_at_cg_kg_m2: {roll_Lxx: 6.577, yaw_Lyy: 7.391, pitch_Lzz: 12.528}
+  mass_sensitivity:               # geometry barely depends on the mass
+    - {mass_kg: 27.00, L_m: 1.372, B_m: 0.492, T_m: 0.110, Cb: 0.331}
+    - {mass_kg: 29.78, L_m: 1.392, B_m: 0.504, T_m: 0.116, Cb: 0.337}
+    - {mass_kg: 32.00, L_m: 1.404, B_m: 0.508, T_m: 0.120, Cb: 0.346}
 
-config_deltas:                     # measured vs configs/flingo_floty.yaml
-  hull.L: {was: 1.0, now: 1.372}
-  hull.B: {was: 0.5, now: 0.492}   # the one value that was already right
-  hull.T: {was: 0.125, now: 0.110}
-  keel.area: {was: 0.13, now: 0.1225}
-  keel.x_pos: {was: 0.0, now: 0.092}
-  rudder.area: {was: 0.046, now: 0.0468}
-  rudder.x_pos: {was: -0.46, now: -0.319}
-  boat.inertia_z: {was: 1.0, now: 7.391}
+# ---------------------------------------------------------------------------
+# Mass and inertia  (scripts/mass_budget.py + the 15 kg of plates)
+# ---------------------------------------------------------------------------
+mass:
+  total_kg: 27.0                  # USER, weighed
+  budget_at_2mm_laminate_kg:
+    hull_and_deck: 6.14           # 1.98 m^2 skin x 2.0 mm CFRP
+    keel_fin: 0.75                # carbon skin + printed core + two Al rods
+    bulb: 1.43                    # 0.20 L lead epoxy
+    rudder: 0.28                  # carbon skin + HD foam
+    spars: 0.29
+    sails: 0.30
+    structural_subtotal: 9.18
+    bench_plates: 15.0            # USER
+    electronics_and_servos: 2.82  # the remainder
+    total: 27.00
 
-caveats:
-  - "Densities: keel and rudder both compute to exactly 1000 kg/m^3, and three
-     more components were flagged by SolidWorks as having no valid density. So
-     29.78 kg is not a real mass and 27.0 kg is unconfirmed. All hydrostatics
-     here were solved at 27.0 kg; rerun hull_envelope.py once the materials are
-     fixed."
-  - "The hull is a thin shell: the mesh encloses 8.8 L of laminate, not
-     displacement. hull_envelope.py fills the outer skin to get buoyancy. The
-     deck is open over the cockpit, so buoyancy integrates from the outer bottom
-     up to the waterline rather than to the inner skin."
-  - "Level flotation was assumed. The LCB sits 0.102 m aft of the CG, so the
-     real boat would trim until they line up -- worth revisiting once the masses
-     are right, because trim moves LWL and the foil immersions."
-  - "The sim's wetted-surface approximation 1.7*L*(B+T) gives 1.404 m^2 against
-     0.571 m^2 measured: it overestimates hull friction drag by about 2.5x."
-  - "A mate error (Coincident8, 10.375 mm) is unresolved in the assembly, and
-     the rudder CG sits 16 mm off centreline."
+  densities_used:
+    cfrp_laminate: 1550
+    carbon_rod: 1600
+    lead_epoxy: 7000
+    aluminium_6061: 2700
+    printed_core_20pct_infill: 220
+    high_density_foam: 200
+    cast_iron_plates: 7200
+    sailcloth_kg_per_m2: 0.15
+
+  cg_cad_mm: [182.6, -151.9, 7.0]
+  cg_height_relative_to_wl_m: -0.0476
+  trim: "level by construction, LCG = LCB"
+  inertia_at_cg_kg_m2: {roll_Lxx: 2.661, yaw_Lyy: 3.120, pitch_Lzz: 5.126}
+
+  plates:
+    mass_kg: 15.0
+    volume_L: 2.08
+    assumed_disc_diameter_m: 0.25
+    stack_height_m: 0.042
+    position_cad_m: {x: 0.2213, y: -0.1911, z: 0.0}
+    position_note: >-
+      x was SOLVED, not assumed: it is where 15 kg has to sit for the LCG to
+      meet the LCB and the boat to float level. That is 1.265 m aft of the bow
+      on a 1.784 m hull, 0.087 m below the waterline. If the real plates are
+      well away from there the boat is trimming, and the waterline figures move.
+
+  yaw_inertia_vs_plate_layout:    # the dominant remaining uncertainty
+    - {layout: "single compact stack", yaw_Lyy: 3.12}
+    - {layout: "2 plates touching, 0.25 m", yaw_Lyy: 3.20}
+    - {layout: "3 plates over 0.40 m", yaw_Lyy: 3.32}
+    - {layout: "spread over 0.60 m", yaw_Lyy: 3.57}
+    - {layout: "spread over 0.90 m", yaw_Lyy: 4.13}
+    - {layout: "spread the length of the bilge", yaw_Lyy: 5.23}
+  yaw_inertia_config_value: 3.4
+
+stability:
+  GM_m: 0.2509
+  heel_at_5ms_deg: 23.9
+  heel_at_8ms_deg: 42.4
+  heel_at_12ms_deg: 56.8
+  note: >-
+    With the ballast low the CG sits 48 mm below the waterline and the boat
+    stands up. Heel is not in the 3-DOF sim, but this check passing is the
+    evidence that the mass distribution is physical.
+
+# ---------------------------------------------------------------------------
+# Windage, above the waterline  (true silhouettes, 2 mm raster)
+# ---------------------------------------------------------------------------
+windage:
+  topsides_hull:  {frontal_m2: 0.1082, lateral_m2: 0.2993, centroid_height_m: 0.097}
+  mast:           {frontal_m2: 0.0331, lateral_m2: 0.0331, centroid_height_m: 1.273}
+  deck_gear:      {frontal_m2: 0.0701, lateral_m2: 0.0737, centroid_height_m: 0.179}
+  sails:          {frontal_m2: 0.4273, lateral_m2: 1.8839, centroid_height_m: 1.057}
+  total_ex_sails: {frontal_m2: 0.1818, lateral_m2: 0.3678, centroid_height_m: 0.342}
+  note: >-
+    Only the union total is additive; the rows overlap in projection. Nothing
+    in sailbench consumes these -- there is no aerodynamic drag term on hull or
+    rig. At 6 m/s apparent with Cd ~0.8 the total is about 3.2 N against
+    roughly 43 N of sail force.
+
+# ---------------------------------------------------------------------------
+# Cross-check against the Fall 2025 report
+# ---------------------------------------------------------------------------
+report_crosscheck:
+  matches_exactly:
+    keel_root_chord_mm: {report: 240, cad: 240.0}
+    keel_tip_chord_mm: {report: 110, cad: 110.0}
+    keel_span_mm: {report: 700, cad: 700.0}
+    keel_planform_mm2: {report: 122500, cad: 122500}
+    keel_aspect_ratio: {report: 4.0, cad: 4.00}
+    bulb_length_mm: {report: 300, cad: 300}
+    bulb_max_radius_mm: {report: 18.75, cad: 19.0}
+    rudder_span_m: {report: 0.478, cad_blade: 0.478}
+    hull_loa_m: {report: 1.8, cad: 1.784}
+    rudder_le_from_bow_m: {report: 1.3885, cad: 1.399}
+
+  conflicts:
+    rudder_chord_m:
+      report_midline: 0.11995
+      cad_mean: 0.0966
+      effect: "0.0573 m^2 by the report against 0.0462 m^2 in the CAD, 19% apart"
+      resolution: >-
+        Span agrees exactly, only chord differs. The CAD is the later artifact
+        (rudder mount is a v2 dated Feb 2026) so the config uses it, but a tape
+        measure on the real blade would settle it.
+    keel_le_from_bow_m: {report: 1.020, cad: 0.923}    # 97 mm forward
+    mast_centre_from_bow_m: {report: 1.015, cad: 0.845}  # 169 mm forward
+    note: >-
+      The rudder matches to 10 mm, so the bow datum is right and these are real
+      post-report changes. The report puts mast and keel leading edge at the
+      same station; the CAD has the mast 77 mm forward of it.
+
+# ---------------------------------------------------------------------------
+# Known problems in the source data
+# ---------------------------------------------------------------------------
+problems:
+  cad_has_no_materials: >-
+    Whole-assembly mean density from MP is 29781.56 g / 29513.29 cm^3 =
+    1.0091 g/cm^3. Every part sits on the SolidWorks default, so the "29.78 kg"
+    is the volume in litres with a unit change, and the CAD's CG and inertia
+    tensor are volume-weighted, not mass-weighted. Do not use them.
+
+  stl_missing_hidden_bodies:
+    mp_volume_L: 29.51
+    stl_volume_L: 20.05
+    gap_L: 9.46
+    cause: >-
+      MP ran with "Include hidden bodies/components" ticked; STL export writes
+      visible geometry only. About 9.5 L of hidden or suppressed components are
+      in the MP figures but not in the mesh. The mesh inertia routine was
+      validated exactly against an analytic box, so this is data, not
+      arithmetic.
+
+  hull_is_a_shell: >-
+    The hull mesh encloses 8.8 L of laminate, not displacement, so
+    hull_envelope.py fills the outer skin. The deck is open over the cockpit,
+    so buoyancy integrates from the outer bottom up to the waterline rather
+    than to the inner skin.
+
+  broken_mate: "Coincident8 is unsatisfied by 10.375 mm; the rudder CG sits 16 mm off centreline"
+
+  level_flotation_assumed: >-
+    The waterline solve does not balance pitch. It is self-consistent here
+    because the plates were positioned to make LCG = LCB, but if they are
+    actually elsewhere the boat trims and LWL, draft and foil immersion move.
+
+# ---------------------------------------------------------------------------
+# What changed, so older notes can be reconciled
+# ---------------------------------------------------------------------------
+superseded:
+  - value: boat.inertia_z
+    history: "1.0 (placeholder) -> 7.391 (CAD volume-weighted) -> 7.9 (materials,
+      ballast spread over 63 bodies) -> 3.4 (materials, 15 kg of plates compact
+      in the bilge)"
+    why: >-
+      The plates are 56% of the boat. Spreading that mass fore and aft roughly
+      doubled the yaw inertia; concentrating it near midships is what the boat
+      actually does. The audit estimate of 3.7 turned out to sit inside the
+      real band.
+  - value: "keel.x_pos, sail.x_pos, rudder.x_pos"
+    history: "all shifted +0.092 m when the origin moved from the CAD's
+      volume-weighted CG (0.0910) to the mass-weighted CG (0.1826)"
+    why: >-
+      The real CG equals the LCB because the boat floats level, so it is fixed
+      by hydrostatics. The rudder's moment arm is 29% shorter than first
+      reported. The lead is unchanged at 0.083 m, as it must be.
+  - value: rudder span and aspect ratio
+    history: "0.570 m / AR 6.96 -> 0.478 m / AR 4.95"
+    why: "the first figure included the stock above the blade"
+  - value: rudder.area
+    history: "0.0468 -> 0.0462"
+    why: "whole body including stock, versus the blade alone"
 
 open_items:
-  - "Sail area, rig height, boom chord: the sail is 9 triangles of open surface
-     in the STL, so it has no measurable volume and its silhouette needs a
-     separate projection. Not done."
-  - "Sail centre of effort x_pos."
-  - "Added mass. The section table above is the input for it; not computed."
+  - "How the plates are actually laid out: one stack or spread is the
+     difference between yaw inertia 3.1 and 4.1."
+  - "Hull laminate thickness and layup -- changes the structural mass, though
+     yaw inertia only moves 5% across 1-3 mm."
+  - "Re-export the STL with hidden components shown, to close the 9.5 L gap."
+  - "Measure the real rudder blade chord to settle the 19% conflict."
+  - "Added mass: the section table is the input; not computed."
+  - "Damping and sail coefficients: need sailing logs, not CAD."

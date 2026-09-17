@@ -1,4 +1,6 @@
-# Geometry measured 2026-09-16 from "Full Boat Assembly Final.SLDASM".
+# Geometry measured from "Full Boat Assembly Final.SLDASM"; mass properties built
+# bottom-up from the Fall 2025 mech report's materials. Positions are relative to
+# the mass-weighted CG (= LCB), NOT the CAD's volume-weighted CG 92 mm forward.
 # Provenance, method and caveats: scripts/solidworks/flingo_floty_measured.yaml
 simulation:
   dt: 0.02  # [s] solver step
@@ -12,7 +14,11 @@ environment:
 
 boat:
   mass: 27.0       # [kg]
-  inertia_z: 7.391  # [kg·m²] yaw inertia about the vertical axis through the CG (MP: Lyy)
+  # Bottom-up from the report's materials, not the CAD mass properties: the CAD
+  # densities are wrong (keel and rudder both compute to 1000 kg/m³), which gave
+  # 7.391. Band is 3.1-4.1 depending on how the 15 kg of bench plates are laid
+  # out; that layout is the single biggest lever on yaw response.
+  inertia_z: 3.4  # [kg·m²] yaw about the vertical through the CG
 
 hull:
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
@@ -39,7 +45,7 @@ keel:
   # an end plate the effective AR is 8.0, so this is a deep, efficient fin.
   span: 0.700   # [m]     submerged span below the hull
   end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
-  x_pos: 0.092  # [m]    forward of the CG — this is the keel/rudder lead
+  x_pos: 0.184  # [m]    forward of the CG (CG = LCB, fixed by level flotation)
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
 sail:
@@ -71,7 +77,7 @@ sail:
   # below it, so roughly 1.47 m.
   # max_heeling_moment_nm: 30.0
   # heel_arm_m: 1.47
-  x_pos: 0.175  # [m]    area-weighted centre of effort (main -0.063, jib +0.543)
+  x_pos: 0.267  # [m]    combined CE, 0.083 m forward of the keel CLR
   y_pos: 0.0
   # NeuralFoil model parameters
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
@@ -105,10 +111,12 @@ rudder:
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [1.2e5]  # Re = V*c/nu at 1.5 m/s on the measured 0.082 m mean chord
-  area: 0.0468  # [m²]    planform area (STL projected silhouette)
-  span: 0.570   # [m]     measured: waterline to tip. Geometric AR 6.94
+  area: 0.0462  # [m²]    blade planform, stock excluded
+  # Blade only. The CAD body spans 0.578 m but ~0.10 m of that is stock above
+  # the blade, which is not a lifting surface. Geometric AR 4.95, not 6.94.
+  span: 0.478   # [m]     blade span
   end_plate_factor: 1.0  # surface-piercing, no image
-  x_pos: -0.319  # [m]    geometric centre (CG-based estimate gives -0.305)
+  x_pos: -0.227  # [m]    aft of the CG; arm 92 mm shorter against the real CG
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   # Retuned 0.2 -> 0.6 alongside the finite-span correction. The old value was a
   # hand-tuned stand-in for exactly that correction; keeping it would double-count
