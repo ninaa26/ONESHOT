@@ -7,6 +7,16 @@
 # Values marked ASSUMED were never measured for this boat. They are stand-ins so
 # it can also be sailed with the models that need keys this config never had.
 #
+# THE FOIL AREAS ARE FEEL-TUNED, NOT DIMENSIONED, AND ARE BEING LEFT THAT WAY.
+# The 0.13 m2 keel is plausible -- a 0.72 m fin, close to flingo_floty's measured
+# 0.700 m. The 0.30 m2 rudder is not: it implies a 1.10 m blade under a 1.5 m hull,
+# and is 6.5x flingo_floty's measured blade.
+# The physics integrates over `area` directly, so the forces this boat makes are
+# not a real boat's; it is a test fixture, and it is a fine one for checking that
+# the models are wired up. flingo_floty and wpi_wild_goats are the configs with
+# measured geometry. Drawn to scale in the web view this shows up as a rudder
+# blade deeper than the keel -- that is the number, not a rendering bug.
+#
 # The sail deliberately offers no orc_w_jib block. This boat is a single-sail
 # rig, so the sloop model is not one it lacks data for -- it is the wrong model
 # for the boat, and a jib_area here would be inventing rig geometry that does not
@@ -81,6 +91,7 @@ rudder:
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]
+  # Feel-tuned, not dimensioned -- see the note at the top of this file.
   area: 0.3    # [m²]    planform area (fin + bulb strut)
   x_pos: -0.4  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
