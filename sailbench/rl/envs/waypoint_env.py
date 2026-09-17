@@ -41,6 +41,12 @@ class WaypointEnvConfig:
     speed_scale: float = 6.0
     yaw_rate_scale: float = 2.0
     wind_speed_scale: float = 15.0
+    # Append the actuators' real positions to the observation. Off by default so
+    # the observation shape, and therefore existing checkpoints, are unchanged.
+    # Turn it on whenever an actuator has a time constant worth noticing: with a
+    # 3 s sheet winch the commanded and actual sheet angles are far apart for
+    # ~150 steps, and without this the policy only ever sees its own command.
+    include_actuator_state: bool = False
     vmg_multiplier: float = 1.0
     joint_penalty: float = 0.0
     dist_multiplier: float = 5.0
@@ -72,7 +78,8 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         self.max_sail_rad = math.radians(self.cfg.max_sail_deg)
 
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(13,), dtype=np.float32)
+        obs_dim = 15 if self.cfg.include_actuator_state else 13
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
 
         self.state = State(x=0.0, y=0.0, psi=(1.0, 0.0), u=0.0, v=0.0, r=0.0)
         self.waypoint = np.zeros(2, dtype=np.float64)
@@ -378,6 +385,16 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             ],
             dtype=np.float32,
         )
+
+        if self.cfg.include_actuator_state:
+            # Where the surfaces actually are, on the same scales as the actions.
+            rudder = self.hub.rudder_actuator.position / max(self.cfg.max_rudder_deg, 1e-9)
+            sheet = math.degrees(abs(self.hub.sail_actuator.position)) / max(self.cfg.max_sail_deg, 1e-9)
+            observation = np.concatenate([
+                observation,
+                np.array([np.clip(rudder, -1.0, 1.0), np.clip(2.0 * sheet - 1.0, -1.0, 1.0)],
+                         dtype=np.float32),
+            ])
         return observation
 
     def _build_info(

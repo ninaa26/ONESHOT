@@ -179,14 +179,9 @@ class TestIntegratorContract:
 
         def run(dt: float, secs: float = 1.0) -> np_.ndarray:
             hub = SailboatHub("flingo_floty.yaml")
-            # Hold the rudder as a constant input. The servo slews by forward
-            # Euler once per step and carries a deadband and an auto-centre, all
-            # of which are first order or worse; with it active it dominates the
-            # trajectory error and this would measure the actuator, not the
-            # integrator. Measured separately: order 0.6-0.9 with the servo
-            # slewing, 4.4 with it snapped.
-            hub.rudder_cfg.update({"max_rate_deg_s": 1e9, "deadband_deg": 0.0, "center_tau_s": 0.0})
-            hub.boat_factory()
+            # No need to disable the actuators: they are sampled at the stage
+            # times, so a surface that is still slewing is integrated at full
+            # order rather than frozen at its start-of-step value.
             psi = beat(45.0)
             st = State.from_array(np_.array([0.0, 0.0, math.cos(psi), math.sin(psi), 1.0, 0.0, 0.0]))
             for _ in range(int(round(secs / dt))):
@@ -195,4 +190,4 @@ class TestIntegratorContract:
 
         errors = [float(np_.linalg.norm(run(dt) - run(dt / 2))) for dt in (0.04, 0.02)]
         order = math.log2(errors[0] / errors[1])
-        assert order > 2.0, f"integration converging at order {order:.2f}; first order means a stale frame"
+        assert order > 2.5, f"integration converging at order {order:.2f}; near 1 means a frozen frame or actuator"

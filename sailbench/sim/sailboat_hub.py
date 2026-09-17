@@ -13,6 +13,7 @@ from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCSail
 from sailbench.models.model import State
+from sailbench.sim.actuator import Actuator
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 CONFIG_PATH = "configs/"
@@ -52,14 +53,29 @@ class SailboatHub:
         # Per-component forces (boat frame) for visualization.
         self.last_forces: dict[str, tuple[float, float]] = {}
 
-        # Rudder "servo" state (for manual controllability).
-        self._rudder_angle_deg: float = 0.0
+        # Actuators are built in boat_factory, from the component configs.
 
         self.boat_factory()
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
         self._apply_environment()
+
+        # Rudder and sheet are the same kind of actuator with different
+        # constants. Legacy defaults are preserved for configs that have not
+        # stated tau_s, so their behaviour is unchanged.
+        self.rudder_actuator = Actuator(
+            tau_s=float(self.rudder_cfg.get("tau_s", 0.0)),
+            max_rate=float(self.rudder_cfg.get("max_rate_deg_s", 120.0)),
+            deadband=float(self.rudder_cfg.get("deadband_deg", 1.5)),
+            center_tau_s=float(self.rudder_cfg.get("center_tau_s", 0.6)),
+        )
+        # The sheet moves in radians. Unset, tau is 0 and there is no rate limit,
+        # which is the previous behaviour: the sail tracked its command instantly.
+        self.sail_actuator = Actuator(
+            tau_s=float(self.sail_cfg.get("tau_s", 0.0)),
+            max_rate=np.radians(float(self.sail_cfg.get("max_rate_deg_s", 0.0))),
+        )
 
         self.sail = self._sail_model()(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
@@ -168,19 +184,29 @@ class SailboatHub:
         not as a rigid commanded sail angle.
         """
 
-        sheet_limit_rad = float(np.abs(sail_angle))
         self._sync_wind()
 
-        # Advance the actuator BEFORE integrating, so `rudder_angle` is in effect
-        # during the step that commanded it. Advancing it afterwards left the boat
+        # Advance the actuators BEFORE integrating, so a command is in effect
+        # during the step that issued it. Advancing them afterwards left the boat
         # sailing each step on the previous step's rudder: a one-step input lag,
         # which shrinks linearly with dt and so pins the whole integration to
         # first order no matter how good the solver is.
-        self._advance_rudder_servo(rudder_angle, dt)
+        #
+        # Both are held constant across the step, which is what makes the lag
+        # exact rather than merely small.
+        sheet_cmd = float(np.abs(sail_angle))
+        rudder_cmd = float(rudder_angle)
 
-        def dynamics(arr: np.ndarray) -> np.ndarray:
+        def dynamics(arr: np.ndarray, t_offset: float) -> np.ndarray:
             """State derivative; arr = [x, y, c, s, u, v, r]."""
             state_vec = State.from_array(arr)
+
+            # Sample the actuators where they will actually be at this stage.
+            # Freezing them at their start-of-step values is a first-order
+            # approximation of a surface that is still moving, and measurement
+            # showed that was setting the accuracy of the whole trajectory.
+            sheet = self.sail_actuator.position_at(sheet_cmd, t_offset)
+            rudder = self.rudder_actuator.position_at(rudder_cmd, t_offset)
 
             # The sail resolves its force through the boat and sail frames, and
             # the rudder through the rudder frame. Left alone, those frames hold
@@ -189,7 +215,7 @@ class SailboatHub:
             # collapses to first order -- four force evaluations per step buying
             # Euler-grade accuracy. Re-deriving them from this stage's state is
             # what makes the fourth-order behaviour real.
-            self._set_kinematic_frames(state_vec, sheet_limit_rad)
+            self._set_kinematic_frames(state_vec, abs(sheet), rudder)
 
             fx, fy, mz = self._forces(state_vec)
 
@@ -215,9 +241,9 @@ class SailboatHub:
         next_arr = solver(dynamics, state.to_array(), dt)
         next_state = State.from_array(next_arr)
 
-        # --- leave the tf tree consistent with the state we return ---
-        # Kinematics only: the servo already advanced for this step.
-        self._set_kinematic_frames(next_state, sheet_limit_rad)
+        # --- commit the actuators, then leave the tf tree consistent ---
+        self._advance_actuators(sheet_cmd, rudder_cmd, dt)
+        self._set_kinematic_frames(next_state, abs(self.sail_actuator.position))
 
         # --- rebuild state ---
         return next_state
@@ -238,13 +264,17 @@ class SailboatHub:
             if key in self.sail_cfg:
                 self.windage_cfg[key] = self.sail_cfg[key]
 
-    def _set_kinematic_frames(self, state: State, sheet_limit_rad: float) -> None:
-        """Set the boat and sail frames from an instantaneous state.
+    def _set_kinematic_frames(
+        self, state: State, sheet_limit_rad: float, rudder_angle_deg: float | None = None
+    ) -> None:
+        """Set the boat, sail and rudder frames.
 
-        A pure function of the state, so it is safe to call inside an integrator
-        stage. The rudder frame is deliberately not set here: its angle is servo
-        state advanced once per step, and slewing it once per RK4 stage would
-        quadruple the effective servo rate.
+        A pure function of the state and the actuator positions handed to it, so
+        it is safe to call inside an integrator stage. The actuators themselves
+        are never advanced here -- they are sampled, which is what keeps one
+        step's worth of slew from being applied once per RK4 stage.
+
+        `rudder_angle_deg` defaults to wherever the rudder actuator currently is.
         """
         self.tf.add_frame(
             name="boat",
@@ -265,31 +295,21 @@ class SailboatHub:
             ),
         )
 
-    def _advance_rudder_servo(self, rudder_angle_deg: float, dt: float) -> None:
-        """Advance the rudder servo one step and set the rudder frame.
+        rudder_deg = self.rudder_actuator.position if rudder_angle_deg is None else float(rudder_angle_deg)
+        self._place_rudder_frame(rudder_deg)
+
+    def _advance_actuators(self, sail_angle_rad: float, rudder_angle_deg: float, dt: float) -> None:
+        """Advance both actuators one step and set the rudder frame.
 
         Actuator state, not a function of the boat state: call exactly once per
         step, outside the integrator.
         """
-        # Rudder: smooth + auto-center for easier manual control.
-        cmd_deg = float(rudder_angle_deg)
-        deadband_deg = float(self.rudder_cfg.get("deadband_deg", 1.5))
-        center_tau_s = float(self.rudder_cfg.get("center_tau_s", 0.6))
-        max_rate_deg_s = float(self.rudder_cfg.get("max_rate_deg_s", 120.0))
+        self.sail_actuator.advance(float(np.abs(sail_angle_rad)), dt)
+        self._place_rudder_frame(self.rudder_actuator.advance(float(rudder_angle_deg), dt))
 
-        if abs(cmd_deg) <= deadband_deg:
-            cmd_deg = 0.0
-
-        if center_tau_s > 0.0 and cmd_deg == 0.0:
-            # Exponential return-to-center when you "let go".
-            alpha = float(np.clip(dt / center_tau_s, 0.0, 1.0))
-            self._rudder_angle_deg = (1.0 - alpha) * self._rudder_angle_deg
-        else:
-            # Rate-limit toward commanded angle.
-            max_step = max_rate_deg_s * float(dt)
-            err = cmd_deg - self._rudder_angle_deg
-            self._rudder_angle_deg += float(np.clip(err, -max_step, max_step))
-        rudder_rad = float(np.radians(self._rudder_angle_deg))
+    def _place_rudder_frame(self, rudder_angle_deg: float) -> None:
+        """Put the rudder frame at a given deflection."""
+        rudder_rad = float(np.radians(rudder_angle_deg))
         self.tf.add_frame(
             name="rudder",
             parent="boat",

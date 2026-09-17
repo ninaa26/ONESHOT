@@ -83,6 +83,11 @@ sail:
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [1.8e5]  # Re at 6 m/s apparent on the measured 0.447 m mean chord (air)
+  # Sheet winch dynamics. The sail used to track its command instantly while the
+  # rudder was rate-limited -- backwards, since a winch is far slower than a
+  # rudder servo. Literature puts a sheet winch near 3 s.
+  tau_s: 3.0            # [s]
+  max_rate_deg_s: 60.0  # winch slew limit
 
 
 windage:
@@ -125,6 +130,12 @@ rudder:
   aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
   cl_max: 1.0
   cd_max: 1.2
-  deadband_deg: 1.5     # small stick noise -> zero command
-  center_tau_s: 0.6     # time constant to return to center when cmd==0
-  max_rate_deg_s: 120.0 # servo rate limit for manual controllability
+  # Servo dynamics. tau_s is the first-order lag; the simulator solves it exactly
+  # for a command held across the step, so it costs no integration accuracy.
+  tau_s: 0.1            # [s] rudder servo, literature value for a boat this size
+  max_rate_deg_s: 120.0 # servo slew limit
+  # Both of the following are manual-helm aids and are OFF here. A deadband makes
+  # small commands vanish, and an auto-centre moves the rudder the helm did not
+  # ask for, so a learned policy cannot tell what its own action did.
+  deadband_deg: 0.0
+  center_tau_s: 0.0
