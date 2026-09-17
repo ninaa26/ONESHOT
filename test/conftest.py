@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from sailbench.foils.basic_keel import BasicKeel
+from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 from sailbench.foils.basic_rudder import BasicRudder
@@ -44,6 +45,12 @@ def sail(config: dict[str, Any]) -> HybridSail:
     sail_cfg = config["sail"]
     return HybridSail(sail_cfg)
     
+@pytest.fixture
+def basic_sail(config: dict[str, Any]) -> BasicSail:
+    """Create a NeuralFoil-backed sail with fixed wind."""
+    sail_cfg = config["sail"]
+    return BasicSail(sail_cfg)
+
 @pytest.fixture
 def rudder(config: dict[str, Any]) -> BasicRudder:
     """Generate a BasicRudder instance for testing."""

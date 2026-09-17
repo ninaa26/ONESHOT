@@ -54,8 +54,12 @@ class BasicSail(Foil):
         if speed < 1e-6:
             return np.array([0.0, 0.0], dtype=float)
 
-        # alpha is angle from sail +x (chord) to local apparent-wind direction.
-        aoa_rad = float(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
+        # Apparent-wind (flow) direction in the sail frame. Sail +x points from the
+        # clew toward the mast (the bow when the boom is centred), so the chord line
+        # (leading edge -> trailing edge) runs along sail -x. NeuralFoil's alpha is
+        # measured from the chord, so it is the flow angle taken relative to -x.
+        flow_rad = float(np.arctan2(apparent_wind_sail[1], apparent_wind_sail[0]))
+        aoa_rad = float(np.arctan2(-apparent_wind_sail[1], -apparent_wind_sail[0]))
 
         cl, cd = self.cl_cd(aoa_rad, re=self.get_reynolds())
 
@@ -77,8 +81,8 @@ class BasicSail(Foil):
         # Force in fluid frame (x = wind direction; drag opposes motion => +drag along flow)
         f_fluid = np.array([drag, lift], dtype=float)
 
-        # Rotate fluid → sail
-        c, s = np.cos(aoa_rad), np.sin(aoa_rad)
+        # Rotate fluid → sail (fluid +x is the flow direction, not the chord)
+        c, s = np.cos(flow_rad), np.sin(flow_rad)
         r_fluid_to_sail = np.array([[c, -s], [s, c]], dtype=float)
 
         f_sail = r_fluid_to_sail @ f_fluid

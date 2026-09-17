@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
@@ -106,3 +107,61 @@ class TestSail:
 
         assert not np.isclose(fx0, fx1)
         assert not np.isclose(fy0, fy1)
+
+
+def set_sail_angle(tf_tree: TFTree2D, angle_deg: float) -> None:
+    """Rotate the sail frame relative to the boat (positive = boom swings to starboard)."""
+    c, s = np.cos(np.radians(angle_deg)), np.sin(np.radians(angle_deg))
+    tf_tree.add_frame(name="sail", parent="boat", transform=Transform2D(0.0, 0.0, c, s))
+
+
+class TestBasicSail:
+    """NeuralFoil sail: angle of attack must be measured from the chord, not the mast."""
+
+    def test_aoa_measured_from_chord(self, basic_sail: BasicSail, tf_tree: TFTree2D) -> None:
+        """Close-hauled with the boom sheeted in, the foil should see a small AoA, not ~180°."""
+        basic_sail.p["wind_speed"] = 5.0
+        basic_sail.p["wind_dir_deg"] = 225.0  # blows toward SW: wind from ahead-and-port for a boat facing east
+        set_sail_angle(tf_tree, 30.0)  # boom 30° to starboard
+        fed: list[float] = []
+        orig = basic_sail.cl_cd
+        basic_sail.cl_cd = lambda alpha_rad, re: fed.append(alpha_rad) or orig(alpha_rad, re)
+        state = make_state()
+
+        basic_sail.compute(state, tf_tree)
+
+        # Apparent wind is at -135° in the boat frame, -165° in the sail frame;
+        # relative to the chord (sail -x) that is a 15° angle of attack.
+        assert len(fed) == 1
+        assert np.isclose(np.degrees(fed[0]), 15.0, atol=0.5)
+
+    def test_beam_reach_drives_forward(self, basic_sail: BasicSail, tf_tree: TFTree2D) -> None:
+        """Sail force on a beam reach should push the boat forward and to leeward."""
+        basic_sail.p["wind_speed"] = 5.0
+        basic_sail.p["wind_dir_deg"] = 90.0  # blows toward north: wind from starboard for a boat facing east
+        set_sail_angle(tf_tree, -45.0)  # boom eased 45° to port (leeward)
+        state = make_state()
+
+        fx, fy = basic_sail.compute(state, tf_tree)
+
+        assert fx > 1.0  # drive
+        assert fy > 1.0  # heeling/side force, to leeward (+y = port)
+
+    def test_luff_zeroes_lift_below_threshold(self, basic_sail: BasicSail, tf_tree: TFTree2D) -> None:
+        """Below luff_deg the sail flogs: only drag, along the apparent wind, remains."""
+        basic_sail.p["wind_speed"] = 5.0
+        basic_sail.p["wind_dir_deg"] = 180.0  # headwind for a boat facing east
+        basic_sail.p["luff_deg"] = 14.0
+        basic_sail.p["luff_ramp_deg"] = 4.0
+        state = make_state()
+
+        set_sail_angle(tf_tree, 10.0)  # 10° AoA: inside the luff band
+        fx_luff, fy_luff = basic_sail.compute(state, tf_tree)
+        set_sail_angle(tf_tree, 25.0)  # 25° AoA: fully powered
+        fx_full, fy_full = basic_sail.compute(state, tf_tree)
+
+        # Luffing: pure drag straight downwind, no lateral lift component.
+        assert fx_luff < 0.0
+        assert abs(fy_luff) < 1e-9
+        # Powered: a clear lateral lift component appears.
+        assert abs(fy_full) > 1.0

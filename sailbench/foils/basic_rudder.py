@@ -45,9 +45,14 @@ class BasicRudder(Foil):
         if speed < 1e-6:
             return np.array([0.0, 0.0], dtype=float)
 
-        # Resolve local velocity in rudder frame; AoA is opposite of local track angle.
+        # Resolve local velocity in rudder frame. The flow over the rudder is the
+        # negative of its velocity through the water. Rudder +x points toward the
+        # bow, so the chord line (leading edge -> trailing edge) runs along -x and
+        # the foil AoA is the flow angle measured from -x, i.e. the angle of the
+        # velocity vector itself.
         v_local_rudder = tf_tree.vector_to_frame(v_local_boat, "boat", "rudder")
-        aoa = -float(np.arctan2(v_local_rudder[1], v_local_rudder[0]))
+        flow_angle = float(np.arctan2(-v_local_rudder[1], -v_local_rudder[0]))
+        aoa = float(np.arctan2(v_local_rudder[1], v_local_rudder[0]))
 
         # Prevent unrealistically large coefficients at extreme deflection/stall.
         aoa_limit_deg = float(self.p.get("aoa_limit_deg", 25.0))
@@ -66,9 +71,9 @@ class BasicRudder(Foil):
         lift = cl * q * area * effectiveness
 
         # Convert local fluid-frame forces to rudder frame, then to boat frame.
-        # Fluid x-axis aligns with local flow direction.
+        # Fluid x-axis aligns with the (unclipped) local flow direction.
         f_fluid = np.array([drag, lift], dtype=float)
-        c, s = np.cos(aoa), np.sin(aoa)
+        c, s = np.cos(flow_angle), np.sin(flow_angle)
         r_fluid_to_rudder = np.array([[c, -s], [s, c]], dtype=float)
         f_rudder = r_fluid_to_rudder @ f_fluid
         return tf_tree.vector_to_frame(f_rudder, "rudder", "boat")
