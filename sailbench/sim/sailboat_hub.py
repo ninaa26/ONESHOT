@@ -78,6 +78,11 @@ class SailboatHub:
         self.windage = Windage(self.windage_cfg) if has_windage else None
         if self.windage is not None:
             self.components.append(self.windage)
+            # Sync at construction as well as per step. Without this the windage
+            # model carries no wind until the first step(), so anything calling
+            # compute() directly -- a test, an analysis script, the first frame
+            # of the web UI -- silently gets zero windage.
+            self._sync_wind()
         self.m = self.boat_cfg.get("mass", self.boat_cfg.get("m", 27.0))
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 

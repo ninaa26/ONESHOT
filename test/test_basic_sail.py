@@ -41,39 +41,40 @@ def beat(twa_deg: float) -> float:
     return math.radians(WIND_TO_DEG) - math.pi + math.radians(twa_deg)
 
 
+def drive_coefficient(sail: BasicSail, twa_deg: float, u: float = 1.0) -> float:
+    """Best achievable CR = Fx / (q * A) over trim, driven through compute().
+
+    Deliberately measured from the force the model returns rather than from a
+    coefficient looked up in the test: a test that recomputes the angle of attack
+    itself cannot fail when the model computes it wrongly.
+    """
+    psi = beat(twa_deg)
+    st = make_state(u=u, psi=psi)
+    v_world = np.array([math.cos(psi), math.sin(psi)]) * u
+    aw = np.array([5.0 * math.cos(math.radians(WIND_TO_DEG)),
+                   5.0 * math.sin(math.radians(WIND_TO_DEG))]) - v_world
+    q_area = 0.5 * 1.225 * float(np.dot(aw, aw)) * float(sail.p["area"])
+    return max(sail.compute(st, tree(math.radians(-t), psi))[0] for t in range(5, 90, 5)) / q_area
+
+
 class TestAngleOfAttack:
-    """The lookup angle must be the angle of attack, not the flow direction."""
+    """The lookup angle must be the angle of attack, not the flow direction.
 
-    def test_zero_at_head_to_wind(self) -> None:
-        """Dead into the wind with the sail centred, the angle of attack is zero."""
+    Regression: the model used one variable for both, which put the lookup about
+    180 degrees out and returned negative lift upwind. These thresholds sit
+    between the correct values and the ones that bug produces (at TWA 30, CR is
+    0.256 correct against 0.086 buggy).
+    """
+
+    @pytest.mark.parametrize(("twa_deg", "floor"), [(30, 0.20), (45, 0.45), (60, 0.60)])
+    def test_drive_coefficient_is_physical(self, twa_deg: float, floor: float) -> None:
+        """A real sail converts a decent fraction of dynamic pressure into drive."""
+        assert drive_coefficient(make_sail(), twa_deg) > floor
+
+    def test_drive_improves_as_the_boat_bears_away(self) -> None:
+        """Drive coefficient rises from close-hauled towards a reach."""
         sail = make_sail()
-        sail.compute(make_state(u=0.0, psi=beat(0.0)), tree(0.0))
-        # alpha is recomputed inside compute(); assert via the coefficient instead
-        assert abs(sail.cl_cd(0.0, re=sail.get_reynolds())[0]) < 1e-6
-
-    @pytest.mark.parametrize("awa_deg", [10, 20, 30, 45])
-    def test_lookup_stays_in_the_valid_envelope(self, awa_deg: float) -> None:
-        """Alpha must stay small, not sit near +-180 where the polar is invalid.
-
-        The old code looked the sail up at roughly 180 - AWA, which is far outside
-        NeuralFoil's range and gave negative lift upwind.
-        """
-        flow = math.radians(180.0 - awa_deg)
-        aw = np.array([math.cos(flow), math.sin(flow)])
-        alpha = math.degrees(math.atan2(-aw[1], -aw[0]))
-        assert abs(alpha) == pytest.approx(awa_deg, abs=1e-6)
-        assert abs(alpha) < 90.0
-
-    def test_lift_peaks_upwind_not_downwind(self) -> None:
-        """A sail makes its most lift on a beat, not on a broad reach."""
-        sail = make_sail()
-        cl = {}
-        for awa in (30, 45, 135, 150):
-            flow = math.radians(180.0 - awa)
-            aw = np.array([math.cos(flow), math.sin(flow)])
-            cl[awa] = abs(sail.cl_cd(math.atan2(-aw[1], -aw[0]), re=sail.get_reynolds())[0])
-        assert cl[45] > cl[135]
-        assert cl[30] > cl[150]
+        assert drive_coefficient(sail, 30) < drive_coefficient(sail, 45) < drive_coefficient(sail, 60)
 
 
 class TestLuffing:
@@ -131,3 +132,67 @@ class TestDrive:
         light = make_sail(rho_air=1.0).compute(*args)
         heavy = make_sail(rho_air=2.0).compute(*args)
         assert heavy[0] == pytest.approx(2.0 * light[0], rel=1e-9)
+
+
+class TestIntegratorContract:
+    """Properties of the hub's integration that the force models depend on.
+
+    Both are regressions with no other coverage: mutating either back to its old
+    behaviour left the whole suite green.
+    """
+
+    def test_rudder_acts_during_the_step_that_commands_it(self) -> None:
+        """A rudder command must bite immediately, not one step later.
+
+        The servo used to advance after the integration, so each step sailed on
+        the previous step's rudder -- a one-step input lag that shrinks with dt
+        and pinned the integrator to first order.
+        """
+        import numpy as np_
+
+        from sailbench.sim.sailboat_hub import SailboatHub
+        from sailbench.solvers.rk4 import rk4_step
+
+        def yaw_after_one_step(rudder_deg: float) -> float:
+            hub = SailboatHub("flingo_floty.yaml")
+            st = State.from_array(np_.array([0.0, 0.0, 1.0, 0.0, 1.5, 0.0, 0.0]))
+            return hub.step(st, 0.02, rk4_step, math.radians(20.0), rudder_deg).r
+
+        # Opposite commands must already diverge after a single step. Asserting
+        # merely that yaw is non-zero is too weak: the sail's own moment turns the
+        # boat whatever the rudder does.
+        port, starboard = yaw_after_one_step(-25.0), yaw_after_one_step(25.0)
+        assert abs(starboard - port) > 1e-6, "rudder had no effect in its own step"
+
+    def test_integration_is_better_than_first_order(self) -> None:
+        """Self-convergence: halving dt must do better than halving the error.
+
+        Forces used to be evaluated against frames held from the end of the
+        previous step, so every RK4 stage saw a stale attitude and the method
+        degraded to first order. Order is measured without a reference solution,
+        as log2 of successive |y(dt) - y(dt/2)|.
+        """
+        import numpy as np_
+
+        from sailbench.sim.sailboat_hub import SailboatHub
+        from sailbench.solvers.rk4 import rk4_step
+
+        def run(dt: float, secs: float = 1.0) -> np_.ndarray:
+            hub = SailboatHub("flingo_floty.yaml")
+            # Hold the rudder as a constant input. The servo slews by forward
+            # Euler once per step and carries a deadband and an auto-centre, all
+            # of which are first order or worse; with it active it dominates the
+            # trajectory error and this would measure the actuator, not the
+            # integrator. Measured separately: order 0.6-0.9 with the servo
+            # slewing, 4.4 with it snapped.
+            hub.rudder_cfg.update({"max_rate_deg_s": 1e9, "deadband_deg": 0.0, "center_tau_s": 0.0})
+            hub.boat_factory()
+            psi = beat(45.0)
+            st = State.from_array(np_.array([0.0, 0.0, math.cos(psi), math.sin(psi), 1.0, 0.0, 0.0]))
+            for _ in range(int(round(secs / dt))):
+                st = hub.step(st, dt, rk4_step, math.radians(20.0), 8.0)
+            return np_.array([st.x, st.y, st.u, st.v, st.r])
+
+        errors = [float(np_.linalg.norm(run(dt) - run(dt / 2))) for dt in (0.04, 0.02)]
+        order = math.log2(errors[0] / errors[1])
+        assert order > 2.0, f"integration converging at order {order:.2f}; first order means a stale frame"

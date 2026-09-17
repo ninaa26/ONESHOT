@@ -130,3 +130,47 @@ class TestForce:
         slow = make_windage().compute(make_state(u=0.5, psi=psi), tree(psi))
         fast = make_windage().compute(make_state(u=2.0, psi=psi), tree(psi))
         assert abs(fast[0]) > abs(slow[0])
+
+
+class TestHubIntegration:
+    """The hub must hand windage the same wind the sail is using."""
+
+    def test_wind_is_live_before_any_step(self) -> None:
+        """Windage carries wind from construction, not from the first step().
+
+        Regression: it used to be populated only inside step(), so calling
+        compute() directly returned a force built on zero wind.
+        """
+        from sailbench.sim.sailboat_hub import SailboatHub
+
+        hub = SailboatHub("flingo_floty.yaml")
+        assert hub.windage is not None
+        assert hub.windage_cfg.get("wind_speed") == hub.sail_cfg.get("wind_speed")
+        assert hub.windage_cfg.get("wind_dir_deg") == hub.sail_cfg.get("wind_dir_deg")
+
+    def test_force_is_along_the_apparent_wind_without_stepping(self) -> None:
+        """The force must be parallel to the apparent wind straight away."""
+        import sailbench.utils.coordinate_helper as utils
+        from sailbench.sim.sailboat_hub import SailboatHub
+
+        hub = SailboatHub("flingo_floty.yaml")
+        psi = beat(60.0)
+        st = make_state(u=1.8, psi=psi)
+        hub._set_kinematic_frames(st, math.radians(20.0))
+        aw = utils.apparent_wind_boat(st, hub.tf, 5.0, WIND_TO_DEG)
+        f = np.asarray(hub.windage.compute(st, hub.tf), dtype=float)
+        cos = float(np.dot(f, aw) / (np.linalg.norm(f) * np.linalg.norm(aw)))
+        assert cos == pytest.approx(1.0, abs=1e-9)
+
+    def test_changing_the_sails_wind_reaches_windage(self) -> None:
+        """The web runner writes wind into sail_cfg; windage must follow."""
+        import numpy as np_
+
+        from sailbench.models.model import State as S
+        from sailbench.sim.sailboat_hub import SailboatHub
+        from sailbench.solvers.rk4 import rk4_step
+
+        hub = SailboatHub("flingo_floty.yaml")
+        hub.sail_cfg["wind_speed"] = 11.0
+        hub.step(S.from_array(np_.array([0, 0, 1, 0, 1.0, 0, 0], float)), 0.02, rk4_step, 0.3, 0.0)
+        assert hub.windage_cfg["wind_speed"] == 11.0
