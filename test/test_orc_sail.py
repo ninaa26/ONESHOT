@@ -289,6 +289,54 @@ class TestRigSelection:
         assert isinstance(make_sloop(), ORCMainSail)
 
 
+class TestSectionKeysRefused:
+    """The ORC envelope is not a section model, and says so instead of ignoring the keys.
+
+    Same contract the hull, keel and rudder keep. flingo_floty.yaml carried
+    `span`, `end_plate_factor`, `alpha_min`, `alpha_max` and `res` in its sail
+    section for several commits; none were read, and the comment beside them
+    documented an effective aspect ratio the model never computed.
+    """
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("span", 2.592),
+            ("end_plate_factor", 1.39),
+            ("alpha_min", -179),
+            ("alpha_max", 179),
+            ("res", [1.8e5]),
+            ("airfoil_name", "NACA0012"),
+            ("alpha_sep_deg", 25.0),
+        ],
+    )
+    def test_section_key_is_refused(self, key: str, value: object) -> None:
+        """Each NeuralFoil key is rejected rather than silently carried."""
+        with pytest.raises(ValueError, match="section-polar keys"):
+            make_sail(**{key: value})
+
+    def test_sloop_refuses_them_too(self) -> None:
+        """The check lives on the shared base, so the sloop inherits it."""
+        with pytest.raises(ValueError, match="section-polar keys"):
+            ORCWithJibSail({"area": 1.971, "jib_area": 0.775, "heff": 2.592, "span": 2.592})
+
+    def test_orc_keys_still_accepted(self) -> None:
+        """The refusal is narrow: every key the ORC model actually reads still works."""
+        sail = ORCWithJibSail({
+            "area": 1.971, "jib_area": 0.775, "heff": 2.592,
+            "heff_model": "orc-2022", "eff_span_corr": 1.057,
+            "alpha_opt_deg": 22.0, "flat_stall_floor": 0.55,
+        })
+        assert sail.eff_span_corr == pytest.approx(1.057)
+
+    def test_basic_sail_refuses_orc_keys(self) -> None:
+        """And the mirror: the section sail refuses the envelope's keys."""
+        from sailbench.foils.basic_sail import BasicSail
+
+        with pytest.raises(ValueError, match="ORC keys"):
+            BasicSail({"area": 1.971, "heff": 2.592})
+
+
 class TestSloop:
     """ORC's collective rig: main and jib tables blended by area share."""
 
@@ -434,3 +482,4 @@ class TestEffectiveHeight:
             make_sail(heff_model="fancy")
         with pytest.raises(ValueError, match="heff_model"):
             make_sail(heff_model="orc")
+

@@ -129,6 +129,40 @@ KHEFF_2023 = np.array([
 ])
 KHEFF_CURVES = {"orc-2022": KHEFF_2022, "orc-2023": KHEFF_2023}
 
+# Keys that belong to a NeuralFoil section model, not to the ORC envelope. The
+# ORC sail is not a Foil: it looks its coefficients up against apparent wind
+# angle from Tables 5.1/5.4, and charges induced drag against `heff`, so a
+# section polar, a Reynolds number and a geometric span have nothing to act on
+# here. Carrying them silently is how flingo_floty.yaml came to document an
+# "effective AR of 4.75" from `span` and `end_plate_factor` that nothing read.
+FOIL_ONLY_KEYS = (
+    "airfoil_name",
+    "alpha_min",
+    "alpha_max",
+    "alpha_sep_deg",
+    "cn_plate",
+    "effective_aspect_ratio",
+    "end_plate_factor",
+    "luff_deg",
+    "luff_ramp_deg",
+    "oswald_efficiency",
+    "polar_step_deg",
+    "re",
+    "res",
+    "span",
+)
+
+# The mirror of the above: keys that only the ORC envelope reads.
+ORC_ONLY_KEYS = (
+    "eff_span_corr",
+    "flat_stall_floor",
+    "heel_arm_m",
+    "heff",
+    "heff_model",
+    "jib_area",
+    "max_heeling_moment_nm",
+)
+
 
 class ORCMainSail(Model):
     """Mainsail-only aerodynamic model using the ORC VPP coefficient envelope.
@@ -157,6 +191,7 @@ class ORCMainSail(Model):
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the ORC sail model."""
         super().__init__(params)
+        self._check_keys()
         self.area = float(self.p.get("area", 1.0))
         self.sails = self._rig()
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
@@ -188,6 +223,23 @@ class ORCMainSail(Model):
         self.last_cl = 0.0
         self.last_cd = 0.0
         self.last_heff = self.heff
+
+    def _check_keys(self) -> None:
+        """Reject keys that belong to the NeuralFoil section model.
+
+        Same contract the hull, keel and rudder keep: a config says which model
+        it means and gets exactly that one, rather than carrying keys that read
+        as meaningful and are never looked at.
+        """
+        stray = [k for k in FOIL_ONLY_KEYS if k in self.p]
+        if stray:
+            msg = (
+                f"sail model_type: {self.p.get('model_type', 'orc_main')} is the ORC coefficient "
+                f"envelope and got section-polar keys {', '.join(stray)}; the ORC model takes its "
+                "coefficients from apparent wind angle and its induced drag from heff/eff_span_corr, "
+                "so these do nothing. Use model_type: basic for the NeuralFoil section sail"
+            )
+            raise ValueError(msg)
 
     # --- rig ------------------------------------------------------------
     def _rig(self) -> list[tuple[SailTable, float]]:

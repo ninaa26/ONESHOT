@@ -99,12 +99,13 @@ sail:
   jib_area: 0.775  # [m²]  measured; 39% of the rig
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
-  # Rig span for induced drag: masthead is 2.592 m above the waterline.
-  span: 2.592   # [m]     geometric AR on the combined area = 3.41
-  # The jib is deck-sweeping and takes the endplate; the main has a 0.086 m gap
-  # between foot and deck and does not. Weighted by area (jib 39%, main 61%)
-  # that is 1 + 0.39, giving an effective AR of 4.75.
-  end_plate_factor: 1.39
+  # NOTE: the rig's span and endplate are NOT config keys here. ORC charges
+  # induced drag against heff and eff_span_corr below, not against a geometric
+  # aspect ratio, so `span` and `end_plate_factor` would be read by nothing --
+  # the sail model now refuses them rather than carry them. The measurements
+  # they used to hold are kept for the record: masthead 2.592 m above the
+  # waterline (geometric AR 3.41 on the combined area), the jib deck-sweeping
+  # and the main with a 0.086 m foot gap.
   # Rig height for ORC induced drag: measured masthead above the waterline,
   # ORC's (b + HBI). Both sails hang from roughly this height.
   heff: 2.592   # [m]
@@ -138,10 +139,9 @@ sail:
   # heel_arm_m: 1.47
   x_pos: 0.267  # [m]    combined CE, 0.083 m forward of the keel CLR
   y_pos: 0.0
-  # NeuralFoil model parameters
-  alpha_min: -179 # Minimum and maximum angle of attack in degrees
-  alpha_max: 179
-  res: [1.8e5]  # Re at 6 m/s apparent on the measured 0.447 m mean chord (air)
+  # No NeuralFoil parameters: the ORC model never opens a section polar, so
+  # alpha_min/alpha_max/res would do nothing. (Re on the measured 0.447 m mean
+  # chord at 6 m/s apparent is 1.8e5, if a section model is ever fitted here.)
   # Sheet winch dynamics. The sail used to track its command instantly while the
   # rudder was rate-limited -- backwards, since a winch is far slower than a
   # rudder servo. Literature puts a sheet winch near 3 s.
