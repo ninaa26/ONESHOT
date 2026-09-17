@@ -114,9 +114,14 @@ class TestOverridesFor:
     """A parts pick maps onto the config key each part reads."""
 
     def test_maps_each_part_to_its_selector_key(self) -> None:
-        """Foils use model_type; the hull uses friction_model."""
+        """Foils are overridden through `model`; the hull uses friction_model.
+
+        `model_type` is still read, but an override has to write the key that
+        wins, or it would be silently ignored on a boat that had migrated to
+        `model` and left a stale `model_type` beside it.
+        """
         assert overrides_for({"sail": "orc_main", "hull": "hughes"}) == {
-            "sail": {"model_type": "orc_main"},
+            "sail": {"model": "orc_main"},
             "hull": {"friction_model": "hughes"},
         }
 

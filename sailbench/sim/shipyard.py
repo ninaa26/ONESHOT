@@ -16,20 +16,28 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from sailbench.sim.part_config import model_name
 from sailbench.sim.sailboat_hub import CONFIG_PATH, KEEL_MODELS, RUDDER_MODELS, SAIL_MODELS, SailboatHub
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from sailbench.sim.protocol import SetupInputs
 
 RUNS_PATH = "runs/"
 
-# Which YAML key selects each part's model, and what to call the options. The
-# option ids for the foils are the hub's registry keys; the hull has no
-# registry, its "model" is the friction law BasicHullModel reads.
+# Which YAML key an override sets to select each part's model, and what to call
+# the options. The option ids for the foils are the hub's registry keys; the hull
+# has no registry, its "model" is the friction law BasicHullModel reads.
+#
+# The foils are overridden through `model` rather than `model_type` on purpose.
+# Both spellings are accepted, `model` wins, and a config may use either -- so an
+# override that wrote `model_type` would be quietly ignored on any boat that had
+# already migrated to `model`.
 PART_KEY: dict[str, str] = {
-    "sail": "model_type",
-    "keel": "model_type",
-    "rudder": "model_type",
+    "sail": "model",
+    "keel": "model",
+    "rudder": "model",
     "hull": "friction_model",
 }
 
@@ -112,6 +120,18 @@ class Catalog:
         return None
 
 
+def _selected(part: str, section: Mapping[str, Any]) -> str:
+    """Return the model a boat's section currently names, before canonicalisation.
+
+    The foils accept either spelling of the selector key, so the reading of it
+    lives in one place; the hull is not in a registry and names its friction law
+    under a key of its own.
+    """
+    if part == "hull":
+        return str(section.get(PART_KEY["hull"], "flat")).lower()
+    return model_name(section)
+
+
 def _canonical(part: str, value: object) -> str | None:
     """Map a config's selector value to the catalog option id for the same model."""
     if value is None:
@@ -146,9 +166,9 @@ def _describe_boat(path: Path) -> dict[str, Any] | None:
         return None
 
     defaults: dict[str, str] = {}
-    for part, key in PART_KEY.items():
+    for part in PART_KEY:
         fallback = "flat" if part == "hull" else "basic"
-        defaults[part] = _canonical(part, cfg.get(part, {}).get(key, fallback)) or fallback
+        defaults[part] = _canonical(part, _selected(part, cfg.get(part, {}))) or fallback
 
     # Try every option on this boat. Constructing a hub is milliseconds, and the
     # error message is the model's own account of what it is missing.

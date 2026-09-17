@@ -15,6 +15,7 @@ from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
 from sailbench.models.model import State
 from sailbench.sim.actuator import Actuator
+from sailbench.sim.part_config import compose, model_name
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 CONFIG_PATH = "configs/"
@@ -49,14 +50,25 @@ class SailboatHub:
         """Initialize the SailboatHub with configuration from a YAML file.
 
         `overrides` is layered on top of the file, one mapping per section
-        (`{"sail": {"model_type": "orc_main"}}`), so a caller can swap a
-        component's model or a parameter without editing the YAML. The web
-        shipyard uses this; the YAML stays the boat's record.
+        (`{"sail": {"model": "orc_main"}}`), so a caller can swap a component's
+        model or a parameter without editing the YAML. The web shipyard uses
+        this; the YAML stays the boat's record.
+
+        Overrides land before composition, which is what lets one of them pick a
+        different model and get that model's own block rather than the block the
+        file happened to select.
         """
         with Path(CONFIG_PATH + config_file).open() as file:
             cfg = yaml.safe_load(file)
         for section, values in (overrides or {}).items():
             cfg.setdefault(section, {}).update(values)
+
+        # Each foil section is reduced to the parameters of the one model it
+        # selects. A section that has not been given a `models` mapping is
+        # returned as it stands, so this is a no-op for every config written
+        # before the shape existed.
+        for part in ("sail", "keel", "rudder"):
+            cfg[part] = compose(part, cfg[part])
 
         self.simulation_cfg = cfg["simulation"]
         self.boat_cfg = cfg["boat"]
@@ -194,8 +206,8 @@ class SailboatHub:
 
     @staticmethod
     def _pick_model(component: str, cfg: dict, registry: dict[str, type]) -> type:
-        """Look a component section's `model_type` up in its registry; default `basic`."""
-        key = str(cfg.get("model_type", "basic")).lower()
+        """Look the model a component section names up in its registry; default `basic`."""
+        key = model_name(cfg)
         try:
             return registry[key]
         except KeyError:
