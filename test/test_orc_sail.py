@@ -1,4 +1,4 @@
-"""ORCSail: the ORC VPP coefficient envelope, trim depowering and force split."""
+"""ORCMainSail: the ORC VPP coefficient envelope, trim depowering and force split."""
 
 import math
 
@@ -16,8 +16,8 @@ from sailbench.foils.orc_sail import (
     MAIN_AWA_DEG,
     MAIN_CD0,
     MAIN_CL,
-    ORCSail,
-    ORCSloopSail,
+    ORCMainSail,
+    ORCWithJibSail,
 )
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
@@ -25,17 +25,17 @@ from sailbench.tf.tf_tree import TFTree2D, Transform2D
 WIND_TO_DEG = 90.0
 
 
-def make_sail(**overrides: float) -> ORCSail:
+def make_sail(**overrides: float) -> ORCMainSail:
     """Build an ORC sail with Flingo's measured rig."""
-    return ORCSail({
+    return ORCMainSail({
         "area": 1.971, "heff": 2.592, "wind_speed": 5.0,
         "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
     })
 
 
-def make_sloop(**overrides: float) -> ORCSloopSail:
+def make_sloop(**overrides: float) -> ORCWithJibSail:
     """Build an ORC sloop with Flingo's measured rig and jib."""
-    return ORCSloopSail({
+    return ORCWithJibSail({
         "area": 1.971, "jib_area": 0.775, "heff": 2.592, "wind_speed": 5.0,
         "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
     })
@@ -176,11 +176,11 @@ class TestRightingMomentDepower:
 
     ARM = 1.47  # CE above the centre of lateral resistance
 
-    def limited(self, limit: float) -> ORCSail:
+    def limited(self, limit: float) -> ORCMainSail:
         """A sail depowered to `limit` newton-metres of heeling moment."""
         return make_sail(max_heeling_moment_nm=limit, heel_arm_m=self.ARM)
 
-    def heeling_moment(self, sail: ORCSail, twa_deg: float = 35.0, trim_deg: float = 20.0) -> float:
+    def heeling_moment(self, sail: ORCMainSail, twa_deg: float = 35.0, trim_deg: float = 20.0) -> float:
         """Heeling moment the rig actually generates, in newton-metres."""
         psi = beat(twa_deg)
         return abs(sail.compute(make_state(psi=psi), tree(math.radians(trim_deg), psi))[1]) * self.ARM
@@ -260,32 +260,32 @@ class TestRightingMomentDepower:
         if arm is not None:
             params["heel_arm_m"] = arm
         with pytest.raises(ValueError, match="together"):
-            ORCSail(params)
+            ORCMainSail(params)
 
 
 class TestRigSelection:
-    """`orc` is a mainsail and `orc_sloop` is main plus jib; neither guesses from the config."""
+    """`orc_main` is a mainsail and `orc_w_jib` is main plus jib; neither guesses from the config."""
 
     def test_mainsail_model_refuses_a_jib(self) -> None:
         """A jib_area handed to the single-sail model is an error, not silently dropped."""
-        with pytest.raises(ValueError, match="orc_sloop"):
+        with pytest.raises(ValueError, match="orc_w_jib"):
             make_sail(jib_area=0.775)
 
     def test_sloop_model_requires_a_jib(self) -> None:
         """The sloop model without a jib_area is a config error pointing at `orc`."""
         with pytest.raises(ValueError, match="jib_area"):
-            ORCSloopSail({"area": 1.971, "heff": 2.592})
+            ORCWithJibSail({"area": 1.971, "heff": 2.592})
 
     def test_hub_wires_both_by_model_type(self) -> None:
         """The hub's registry exposes both rigs under their model_type keys."""
         from sailbench.sim.sailboat_hub import SAIL_MODELS
 
-        assert SAIL_MODELS["orc"] is ORCSail
-        assert SAIL_MODELS["orc_sloop"] is ORCSloopSail
+        assert SAIL_MODELS["orc_main"] is ORCMainSail
+        assert SAIL_MODELS["orc_w_jib"] is ORCWithJibSail
 
     def test_sloop_is_a_sail(self) -> None:
         """Everything but the rig table is shared, so the sloop is substitutable for the main."""
-        assert isinstance(make_sloop(), ORCSail)
+        assert isinstance(make_sloop(), ORCMainSail)
 
 
 class TestSloop:
@@ -293,7 +293,7 @@ class TestSloop:
 
     JIB = 0.775
 
-    def sloop(self, **overrides: float) -> ORCSloopSail:
+    def sloop(self, **overrides: float) -> ORCWithJibSail:
         """Flingo's measured rig with the jib declared."""
         return make_sloop(jib_area=self.JIB, **overrides)
 

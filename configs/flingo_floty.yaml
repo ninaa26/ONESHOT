@@ -67,10 +67,10 @@ sail:
   # ORC VPP coefficient envelope against apparent wind angle. The alternative,
   # `basic`, looks a symmetric NACA section up at a geometric angle of attack,
   # which is the wrong shape for a cambered membrane.
-  model_type: orc_sloop
+  model_type: orc_w_jib
   # Flingo is a sloop, not the single-sail rig the earlier notes assumed:
   # main 1.196 m² (luff 2.326, AR 4.53) + jib 0.775 m² (luff 2.260, AR 6.59).
-  # `orc_sloop` is the main-and-jib model (`orc` is mainsail only and will
+  # `orc_w_jib` is the main-and-jib model (`orc_main` is mainsail only and will
   # refuse a jib_area). The simulator carries one sail, so `area` is the
   # combined reference area and `jib_area` tells the model how much of it to
   # look up in the jib table (ORC 5.4.1: coefficients blend by area share).

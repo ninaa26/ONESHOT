@@ -45,9 +45,9 @@ individual sails' coefficients, normalised by the reference area,
     KPP   = sum_i kp_i * CLmax_i^2 * bk_i * A_i / (Aref * CLmax^2)   (5.41)
 
 with ``bk_i`` a blanketing factor. The two rigs are separate models so a config
-says which one it means: :class:`ORCSail` is a single mainsail and refuses a
-``jib_area``; :class:`ORCSloopSail` is main plus jib and requires one. They share
-everything but the list of sails :meth:`ORCSail.envelope` sums over. The jib
+says which one it means: :class:`ORCMainSail` is a single mainsail and refuses a
+``jib_area``; :class:`ORCWithJibSail` is main plus jib and requires one. They share
+everything but the list of sails :meth:`ORCMainSail.envelope` sums over. The jib
 makes more lift than the main at low apparent wind angles and none past about
 150 degrees, so a sloop points better and runs slower than a main-only rig of
 the same area.
@@ -118,10 +118,10 @@ KHEFF = np.array([
 ])
 
 
-class ORCSail(Model):
+class ORCMainSail(Model):
     """Mainsail-only aerodynamic model using the ORC VPP coefficient envelope.
 
-    For a main-and-jib rig use :class:`ORCSloopSail`. This model rejects a
+    For a main-and-jib rig use :class:`ORCWithJibSail`. This model rejects a
     ``jib_area`` rather than ignore it, so a sloop config cannot quietly run as
     a single sail.
 
@@ -148,7 +148,7 @@ class ORCSail(Model):
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         heff_model = str(self.p.get("heff_model", "constant")).lower()
         if heff_model not in ("constant", "orc"):
-            msg = f"ORCSail heff_model must be 'constant' or 'orc': got {heff_model!r}"
+            msg = f"ORCMainSail heff_model must be 'constant' or 'orc': got {heff_model!r}"
             raise ValueError(msg)
         self.heff_varies = heff_model == "orc"
         self.eff_span_corr = float(self.p.get("eff_span_corr", 1.0))
@@ -161,7 +161,7 @@ class ORCSail(Model):
         arm = self.p.get("heel_arm_m")
         if (limit is None) != (arm is None):
             msg = (
-                "ORCSail needs max_heeling_moment_nm and heel_arm_m together: "
+                "ORCMainSail needs max_heeling_moment_nm and heel_arm_m together: "
                 f"got max_heeling_moment_nm={limit!r}, heel_arm_m={arm!r}"
             )
             raise ValueError(msg)
@@ -179,8 +179,8 @@ class ORCSail(Model):
         """Return the sails making up the rig as ``(table, area)`` pairs."""
         if "jib_area" in self.p:
             msg = (
-                "ORCSail is a single mainsail and got jib_area="
-                f"{self.p['jib_area']!r}; use model_type: orc_sloop for a main-and-jib rig"
+                "ORCMainSail is a single mainsail and got jib_area="
+                f"{self.p['jib_area']!r}; use model_type: orc_w_jib for a main-and-jib rig"
             )
             raise ValueError(msg)
         return [(MAIN_TABLE, self.area)]
@@ -355,10 +355,10 @@ class ORCSail(Model):
         return np.array([q * cr, -wind_side * q * ch], dtype=float)
 
 
-class ORCSloopSail(ORCSail):
+class ORCWithJibSail(ORCMainSail):
     """Main-and-jib aerodynamic model: ORC's collective rig, section 5.4.1.
 
-    Same config as :class:`ORCSail` plus:
+    Same config as :class:`ORCMainSail` plus:
         jib_area: jib area [m^2], part of ``area``. Required. The envelope is
             the area-weighted blend of the main and jib tables; ``area`` stays
             the reference area the coefficients are normalised by.
@@ -368,11 +368,11 @@ class ORCSloopSail(ORCSail):
         """Return the main and jib, split by ``jib_area``."""
         jib_area = self.p.get("jib_area")
         if jib_area is None:
-            msg = "ORCSloopSail needs jib_area; for a single mainsail use model_type: orc"
+            msg = "ORCWithJibSail needs jib_area; for a single mainsail use model_type: orc_main"
             raise ValueError(msg)
         self.jib_area = float(jib_area)
         if not 0.0 < self.jib_area <= self.area:
-            msg = f"ORCSloopSail jib_area must lie within (0, area]: got jib_area={self.jib_area}, area={self.area}"
+            msg = f"ORCWithJibSail jib_area must lie within (0, area]: got jib_area={self.jib_area}, area={self.area}"
             raise ValueError(msg)
         self.main_area = self.area - self.jib_area
         return [(MAIN_TABLE, self.main_area), (JIB_TABLE, self.jib_area)]

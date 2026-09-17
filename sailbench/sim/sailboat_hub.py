@@ -11,7 +11,7 @@ from sailbench.dynamics.windage import Windage
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
-from sailbench.foils.orc_sail import ORCSail, ORCSloopSail
+from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
 from sailbench.models.model import State
 from sailbench.sim.actuator import Actuator
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
@@ -24,8 +24,8 @@ CONFIG_PATH = "configs/"
 SAIL_MODELS: dict[str, type] = {
     "sail": BasicSail,  # historical value carried by existing configs
     "basic": BasicSail,
-    "orc": ORCSail,  # single mainsail
-    "orc_sloop": ORCSloopSail,  # main + jib, needs `jib_area`
+    "orc_main": ORCMainSail,  # single mainsail
+    "orc_w_jib": ORCWithJibSail,  # main + jib, needs `jib_area`
 }
 
 
