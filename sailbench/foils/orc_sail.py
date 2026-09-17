@@ -25,6 +25,15 @@ achievable* lift at each apparent wind angle and ``flat`` scales it down for tri
 that is not optimal. An over-eased sail drives ``flat`` to zero, so luffing falls
 out of the model rather than needing a hand-rolled ramp.
 
+Depowering
+----------
+ORC does not read ``flat`` off a trim curve and stop there: it *chooses* ``flat``
+(and ``reef``) so the rig's heeling moment stays inside the boat's righting
+moment. Without that constraint the model sails at permanent full power, which in
+a 3-DOF simulator with no heel degree of freedom means the boat never pays for
+the side force it generates. :meth:`flat_for_righting_moment` supplies it. It is
+inactive unless the boat's righting moment is configured.
+
 On sloops
 ---------
 Flingo carries a main and a jib, so the single envelope here stands in for both.
@@ -74,6 +83,19 @@ class ORCSail(Model):
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         self.alpha_opt = np.radians(float(self.p.get("alpha_opt_deg", 22.0)))
         self.flat_floor = float(self.p.get("flat_stall_floor", 0.55))
+        # Righting-moment limit. Both keys are needed or neither: a limit without
+        # an arm cannot be turned into a force, and an arm without a limit does
+        # nothing. Absent, the sail carries whatever the trim curve asks for.
+        limit = self.p.get("max_heeling_moment_nm")
+        arm = self.p.get("heel_arm_m")
+        if (limit is None) != (arm is None):
+            msg = (
+                "ORCSail needs max_heeling_moment_nm and heel_arm_m together: "
+                f"got max_heeling_moment_nm={limit!r}, heel_arm_m={arm!r}"
+            )
+            raise ValueError(msg)
+        self.max_heeling_moment = None if limit is None else float(limit)
+        self.heel_arm = 0.0 if arm is None else float(arm)
         # Diagnostics for the HUD / debugging.
         self.last_awa_deg = 0.0
         self.last_flat = 0.0
@@ -101,6 +123,66 @@ class ORCSail(Model):
             return float(np.sin(0.5 * np.pi * np.clip(x, 0.0, 1.0)))
         decay = float(np.clip((x - 1.0) / 1.5, 0.0, 1.0))
         return float(1.0 - (1.0 - self.flat_floor) * decay)
+
+    def flat_for_righting_moment(
+        self, flat: float, beta: float, cl_max: float, cd0: float, q_area: float
+    ) -> float:
+        """Largest `flat` up to `flat` whose heeling moment fits the righting moment.
+
+        The heel coefficient is a quadratic in ``flat``::
+
+            CH(f) = k cl_max^2 sin(beta) f^2 + cl_max cos(beta) f + cd0 sin(beta)
+
+        opening upward, so the values satisfying ``CH(f) <= CH_max`` form an
+        interval and the answer is closed-form -- no iteration, and no assumption
+        that CH rises with f.
+
+        That assumption fails downwind, which is not a detail. Past 90 degrees
+        cos(beta) is negative, so *more* lift reduces heel, and the heel force is
+        dominated by ``cd0 sin(beta)`` that no amount of easing touches. The
+        constraint can then be infeasible with ``flat`` alone: ORC reduces sail
+        *area* with ``reef`` for exactly this case, which is not modelled here.
+        When that happens this returns the least-heeling trim available rather
+        than easing further and making it worse.
+
+        Returns `flat` unchanged when no righting moment is configured.
+        """
+        if self.max_heeling_moment is None or q_area <= 0.0 or self.heel_arm <= 0.0:
+            return flat
+
+        ch_max = self.max_heeling_moment / (q_area * self.heel_arm)
+        k = KPM + self.area / (np.pi * self.heff**2)
+        a = k * cl_max * cl_max * np.sin(beta)
+        b = cl_max * np.cos(beta)
+        c = cd0 * np.sin(beta)
+
+        def ch(f: float) -> float:
+            return a * f * f + b * f + c
+
+        if ch(flat) <= ch_max:
+            return flat  # the trim the helm asked for already fits
+
+        if abs(a) < 1e-12:
+            if abs(b) < 1e-12:
+                return flat  # no lift and no induced drag: nothing to depower
+            eased = (ch_max - c) / b
+            return float(np.clip(eased, 0.0, flat)) if b > 0.0 else flat
+
+        disc = b * b - 4.0 * a * (c - ch_max)
+        if disc > 0.0:
+            root = np.sqrt(disc)
+            lo = (-b - root) / (2.0 * a)
+            hi = (-b + root) / (2.0 * a)
+            # Feasible trims are [lo, hi]; intersect with what the helm can ease to.
+            if max(lo, 0.0) <= min(hi, flat):
+                return float(min(hi, flat))
+
+        # Infeasible with flat alone: give the least heel available on [0, flat].
+        vertex = -b / (2.0 * a)
+        candidates = [0.0, flat]
+        if 0.0 < vertex < flat:
+            candidates.append(float(vertex))
+        return float(min(candidates, key=ch))
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Return ``[Fx, Fy]`` in the boat frame [N]."""
@@ -131,6 +213,9 @@ class ORCSail(Model):
         cl_max, cd0 = self.envelope(np.degrees(beta))
         flat = self.flat_from_trim(alpha) if alpha > 0.0 else 0.0
 
+        q = 0.5 * rho * aw_speed * aw_speed * self.area
+        flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q)
+
         cl = cl_max * flat
         # ORC eq.: CDi = [KPM + Aref / (pi * heff^2)] * (CLmax * flat)^2
         cd_induced = (KPM + self.area / (np.pi * self.heff**2)) * cl * cl
@@ -139,8 +224,6 @@ class ORCSail(Model):
         # ORC drive / heel resolution.
         cr = cl * np.sin(beta) - cd * np.cos(beta)
         ch = cl * np.cos(beta) + cd * np.sin(beta)
-
-        q = 0.5 * rho * aw_speed * aw_speed * self.area
 
         self.last_awa_deg = float(np.degrees(awa))
         self.last_flat = float(flat)

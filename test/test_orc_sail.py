@@ -147,3 +147,96 @@ class TestForces:
         sail.compute(make_state(psi=psi), tree(math.radians(80.0), psi))
         assert sail.last_flat == 0.0
         assert sail.last_cl == 0.0
+
+
+class TestRightingMomentDepower:
+    """ORC chooses `flat` against a righting-moment limit; without it the rig
+    sails at permanent full power, which a 3-DOF hull never pays for."""
+
+    ARM = 1.47  # CE above the centre of lateral resistance
+
+    def limited(self, limit: float) -> ORCSail:
+        """A sail depowered to `limit` newton-metres of heeling moment."""
+        return make_sail(max_heeling_moment_nm=limit, heel_arm_m=self.ARM)
+
+    def heeling_moment(self, sail: ORCSail, twa_deg: float = 35.0, trim_deg: float = 20.0) -> float:
+        """Heeling moment the rig actually generates, in newton-metres."""
+        psi = beat(twa_deg)
+        return abs(sail.compute(make_state(psi=psi), tree(math.radians(trim_deg), psi))[1]) * self.ARM
+
+    def test_inactive_by_default(self) -> None:
+        """A sail with no righting moment configured is untouched."""
+        assert make_sail().max_heeling_moment is None
+        assert make_sail().flat_for_righting_moment(0.8, 0.6, 1.3, 0.03, 100.0) == 0.8
+
+    @pytest.mark.parametrize("limit", [40.0, 25.0, 15.0, 8.0])
+    def test_caps_the_heeling_moment(self, limit: float) -> None:
+        """Whatever the trim asks for, the rig stays inside the limit."""
+        assert self.heeling_moment(self.limited(limit)) <= limit * 1.001
+
+    def test_slack_limit_changes_nothing(self) -> None:
+        """A limit above what the rig generates must not depower it."""
+        free = self.heeling_moment(make_sail())
+        assert self.heeling_moment(self.limited(free * 2.0)) == pytest.approx(free)
+
+    def test_tighter_limit_costs_drive(self) -> None:
+        """Depowering trades drive away; that is the point of the constraint."""
+        psi = beat(35.0)
+        args = (make_state(psi=psi), tree(math.radians(20.0), psi))
+        drives = [self.limited(lim).compute(*args)[0] for lim in (15.0, 25.0, 40.0)]
+        assert drives == sorted(drives)
+
+    def test_flat_never_exceeds_the_trim_value(self) -> None:
+        """The constraint only ever removes power, never adds it."""
+        psi = beat(35.0)
+        args = (make_state(psi=psi), tree(math.radians(20.0), psi))
+        loose = make_sail(); loose.compute(*args)
+        tight = self.limited(15.0); tight.compute(*args)
+        assert 0.0 <= tight.last_flat <= loose.last_flat
+
+    def test_impossible_limit_fully_depowers(self) -> None:
+        """If even a luffing rig cannot satisfy the limit, flat goes to zero."""
+        sail = self.limited(1e-6)
+        psi = beat(35.0)
+        sail.compute(make_state(psi=psi), tree(math.radians(20.0), psi))
+        assert sail.last_flat == 0.0
+
+    def test_downwind_constraint_can_be_infeasible(self) -> None:
+        """Deep downwind, heel is drag-dominated and easing cannot fix it.
+
+        Past 90 degrees cos(beta) is negative, so more lift *reduces* heel, and
+        cd0*sin(beta) sets a floor that trim cannot touch. ORC reefs for this.
+        The requirement here is that the solve returns the least-heeling trim
+        available rather than easing further and making things worse.
+        """
+        free = self.heeling_moment(make_sail(), twa_deg=150.0, trim_deg=80.0)
+        capped = self.heeling_moment(self.limited(10.0), twa_deg=150.0, trim_deg=80.0)
+        assert capped <= free + 1e-9
+
+    def test_downwind_never_eases_into_more_heel(self) -> None:
+        """Across the whole downwind range the constraint never increases heel."""
+        for twa in (100.0, 120.0, 150.0, 170.0):
+            free = self.heeling_moment(make_sail(), twa_deg=twa, trim_deg=70.0)
+            capped = self.heeling_moment(self.limited(5.0), twa_deg=twa, trim_deg=70.0)
+            assert capped <= free + 1e-9, f"TWA {twa}: {capped:.3f} > {free:.3f}"
+
+    def test_half_the_arm_allows_twice_the_force(self) -> None:
+        """The limit is a moment, so it scales with the arm."""
+        long_arm = make_sail(max_heeling_moment_nm=25.0, heel_arm_m=self.ARM)
+        short_arm = make_sail(max_heeling_moment_nm=25.0, heel_arm_m=self.ARM / 2.0)
+        psi = beat(35.0)
+        args = (make_state(psi=psi), tree(math.radians(20.0), psi))
+        assert abs(short_arm.compute(*args)[1]) > abs(long_arm.compute(*args)[1])
+
+    @pytest.mark.parametrize(
+        ("limit", "arm"), [(25.0, None), (None, 1.47)],
+    )
+    def test_both_keys_required(self, limit: float | None, arm: float | None) -> None:
+        """Half a constraint is a configuration error, not a silent no-op."""
+        params = {"area": 1.971, "heff": 2.592}
+        if limit is not None:
+            params["max_heeling_moment_nm"] = limit
+        if arm is not None:
+            params["heel_arm_m"] = arm
+        with pytest.raises(ValueError, match="together"):
+            ORCSail(params)

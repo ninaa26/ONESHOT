@@ -62,6 +62,15 @@ sail:
   # Effective rig height for ORC induced drag: measured masthead above the
   # waterline. Both sails hang from roughly this height.
   heff: 2.592   # [m]
+  # ORC depowering. Both keys together, or neither. UNSET because the righting
+  # moment is not measured: the CAD CG sits 0.17 m ABOVE the waterline, which
+  # would give GM ~0.09 m, but that rests on the densities the measurement file
+  # flags as wrong (keel and rudder both compute to 1000 kg/m^3). An inclining
+  # test gives it directly. The arm is the sail CE above the centre of lateral
+  # resistance: CE is 1.017 m above the waterline and the keel spans 0.110-0.810
+  # below it, so roughly 1.47 m.
+  # max_heeling_moment_nm: 30.0
+  # heel_arm_m: 1.47
   x_pos: 0.175  # [m]    area-weighted centre of effort (main -0.063, jib +0.543)
   y_pos: 0.0
   # NeuralFoil model parameters
