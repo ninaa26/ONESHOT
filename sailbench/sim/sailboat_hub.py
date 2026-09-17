@@ -10,10 +10,20 @@ from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.foils.basic_keel import BasicKeel
 from sailbench.foils.basic_rudder import BasicRudder
 from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.orc_sail import ORCSail
 from sailbench.models.model import State
 from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 CONFIG_PATH = "configs/"
+
+# Selectable sail models, keyed on the sail section's `model_type`. The key was
+# previously dead config; wiring it here keeps the choice of model where the rest
+# of a component's parameters already live, rather than hardcoding a class.
+SAIL_MODELS: dict[str, type] = {
+    "sail": BasicSail,  # historical value carried by existing configs
+    "basic": BasicSail,
+    "orc": ORCSail,
+}
 
 
 class SailboatHub:
@@ -49,7 +59,7 @@ class SailboatHub:
         """Instantiate boat components from configs."""
         self._apply_environment()
 
-        self.sail = BasicSail(self.sail_cfg)
+        self.sail = self._sail_model()(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
         self.hull = BasicHullModel(self.hull_cfg)
         self.keel = BasicKeel(self.keel_cfg)
@@ -95,6 +105,16 @@ class SailboatHub:
             parent="boat",
             transform=Transform2D(x=self.sail_cfg.get("x_pos", 0.0), y=self.sail_cfg.get("y_pos", 0.0), c=1.0, s=0.0),
         )
+
+    def _sail_model(self) -> type:
+        """Pick the sail model named by the sail section's `model_type`."""
+        key = str(self.sail_cfg.get("model_type", "basic")).lower()
+        try:
+            return SAIL_MODELS[key]
+        except KeyError:
+            known = ", ".join(sorted(SAIL_MODELS))
+            msg = f"unknown sail model_type {key!r}; expected one of: {known}"
+            raise ValueError(msg) from None
 
     def _apply_environment(self) -> None:
         """Offer the shared `environment` values to every component as defaults.

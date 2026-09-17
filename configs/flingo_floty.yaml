@@ -43,7 +43,10 @@ keel:
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
 
 sail:
-  model_type: sail
+  # ORC VPP coefficient envelope against apparent wind angle. The alternative,
+  # `basic`, looks a symmetric NACA section up at a geometric angle of attack,
+  # which is the wrong shape for a cambered membrane.
+  model_type: orc
   # Flingo is a sloop, not the single-sail rig the earlier notes assumed:
   # main 1.196 m² (luff 2.326, AR 4.53) + jib 0.775 m² (luff 2.260, AR 6.59).
   # The simulator carries one sail, so these are the combined figures.
@@ -56,6 +59,9 @@ sail:
   # between foot and deck and does not. Weighted by area (jib 39%, main 61%)
   # that is 1 + 0.39, giving an effective AR of 4.75.
   end_plate_factor: 1.39
+  # Effective rig height for ORC induced drag: measured masthead above the
+  # waterline. Both sails hang from roughly this height.
+  heff: 2.592   # [m]
   x_pos: 0.175  # [m]    area-weighted centre of effort (main -0.063, jib +0.543)
   y_pos: 0.0
   # NeuralFoil model parameters
