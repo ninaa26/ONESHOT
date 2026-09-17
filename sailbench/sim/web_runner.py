@@ -345,6 +345,15 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
     """
     del path  # unused
 
+    # The page closes the socket to come back to the shipyard, and a reload
+    # closes it mid-pick, so a closed connection is the normal end of a visit,
+    # not a failure to log.
+    with contextlib.suppress(ConnectionClosed):
+        await _serve_client(ws, cfg)
+
+
+async def _serve_client(ws: WebSocketServerProtocol, cfg: HubSimulationConfig) -> None:
+    """Catalog, setup handshake, then the sail."""
     catalog = build_catalog(cfg.config_file, cfg.policy_model, cfg.policy_config)
     await ws.send(json.dumps(catalog.to_payload()))
 
@@ -388,10 +397,7 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
     }
     await ws.send(json.dumps(ready))
 
-    # The page closes the socket to come back to the shipyard, so a closed
-    # connection is the normal end of a sail, not a failure to log.
-    with contextlib.suppress(ConnectionClosed):
-        await hub_simulation_loop(ws, sim)
+    await hub_simulation_loop(ws, sim)
 
 
 def catalog_defaults(catalog: Catalog, boat_id: str) -> dict[str, str]:
