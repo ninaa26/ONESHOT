@@ -82,19 +82,31 @@ JIB_CD0 = np.array([0.05000, 0.03200, 0.03100, 0.03700, 0.25000, 0.35000, 0.7300
 # ORC "kpj".
 KPJ = 0.016
 
-# --- ORC VPP 2023 Figure 5.14, kheff against apparent wind angle ------------
+# --- ORC Figure 5.14, kheff against apparent wind angle -------------------
 # The effective rig height is not the masthead. Close-hauled the jib seals
 # against the deck and the two sails act as one taller wing, so the rig sheds
 # less tip vortex than its height suggests; eased onto a reach that seal is
 # lost and the interaction turns unfavourable. ORC gives the curve only as a
-# figure, with the text pinning 1.4513 at 20 degrees and 0.80 from 80. These
-# values are traced from the published plot at 5-degree intervals and held at
-# 0.80 past 80 degrees, where the figure ends flat.
+# figure; these are traced from the published plots at 5-degree intervals and
+# held at 0.80 past 80 degrees, where both figures end flat.
+#
+# Two editions are carried because the peak is a rating parameter, not a
+# measurement. ORC raised it from 1.22 to 1.4513 in 2023 as one half of a
+# "package" whose other half was deeper depowering (minimum flat 0.62 -> 0.42)
+# and a stronger twist function. Inside the VPP those offset. In a simulator
+# with no righting-moment limit only the power-adding half is felt, so the
+# 2022 curve is the more defensible choice until that limit is configured.
+# Below 1.0 -- the reaching side -- the two curves are nearly identical.
 KHEFF_AWA_DEG = np.arange(0.0, 81.0, 5.0)
-KHEFF = np.array([
+KHEFF_2022 = np.array([
+    1.000, 1.093, 1.169, 1.210, 1.2200, 1.178, 1.118, 1.059, 0.999,
+    0.939, 0.899, 0.871, 0.845, 0.824, 0.809, 0.801, 0.800,
+])
+KHEFF_2023 = np.array([
     1.000, 1.195, 1.350, 1.433, 1.4513, 1.365, 1.248, 1.133, 1.028,
     0.948, 0.899, 0.868, 0.844, 0.825, 0.810, 0.802, 0.800,
 ])
+KHEFF_CURVES = {"orc-2022": KHEFF_2022, "orc-2023": KHEFF_2023}
 
 
 class ORCSail(Model):
@@ -107,9 +119,11 @@ class ORCSail(Model):
             blend of the main and jib tables.
         heff: rig height [m], the highest point of the sail plan above the
             waterline (ORC's ``b + HBI``). Defaults to ``1.8 * sqrt(area)``.
-        heff_model: ``orc`` scales ``heff`` by ORC's ``kheff`` curve against
-            apparent wind angle (Figure 5.14), so the rig is effectively taller
-            close-hauled and shorter on a reach. Absent, ``heff`` is constant.
+        heff_model: ``orc-2022`` or ``orc-2023`` scales ``heff`` by that
+            edition's ``kheff`` curve against apparent wind angle (Figure 5.14),
+            so the rig is effectively taller close-hauled and shorter on a
+            reach. The editions differ only in the close-hauled peak, 1.22
+            against 1.45; see :data:`KHEFF_CURVES`. Absent, ``heff`` is constant.
         eff_span_corr: ORC's sail-plan correction to effective span, eq. 5.42,
             from roach, fractionality and overlap. Default 1.0 (no correction).
         wind_speed, wind_dir_deg: true wind (direction it blows *to*).
@@ -129,10 +143,11 @@ class ORCSail(Model):
         self.main_area = self.area - self.jib_area
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         heff_model = str(self.p.get("heff_model", "constant")).lower()
-        if heff_model not in ("constant", "orc"):
-            msg = f"ORCSail heff_model must be 'constant' or 'orc': got {heff_model!r}"
+        if heff_model != "constant" and heff_model not in KHEFF_CURVES:
+            known = ", ".join(["constant", *sorted(KHEFF_CURVES)])
+            msg = f"ORCSail heff_model must be one of {known}: got {heff_model!r}"
             raise ValueError(msg)
-        self.heff_varies = heff_model == "orc"
+        self.kheff = KHEFF_CURVES.get(heff_model)
         self.eff_span_corr = float(self.p.get("eff_span_corr", 1.0))
         self.alpha_opt = np.radians(float(self.p.get("alpha_opt_deg", 22.0)))
         self.flat_floor = float(self.p.get("flat_stall_floor", 0.55))
@@ -192,7 +207,7 @@ class ORCSail(Model):
         With ``heff_model`` unset ``kheff`` is 1 and this is the configured
         height scaled by ``eff_span_corr`` alone.
         """
-        k = float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, KHEFF)) if self.heff_varies else 1.0
+        k = 1.0 if self.kheff is None else float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, self.kheff))
         return self.eff_span_corr * k * self.heff
 
     def flat_from_trim(self, alpha_rad: float) -> float:

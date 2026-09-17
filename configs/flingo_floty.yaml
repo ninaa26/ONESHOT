@@ -88,11 +88,17 @@ sail:
   heff: 2.592   # [m]
   # ORC 5.4.3 does not use that height as-is. Close-hauled the deck-sweeping
   # jib seals against the hull and the two sails work as one taller wing, so
-  # the effective height is 1.45x the masthead at 20 deg AWA (Figure 5.14),
-  # falling to 0.80x once the sheets are eased past 80. Induced drag goes as
-  # 1/heff^2, so holding heff at the masthead over-charged the rig about 2x on
-  # a beat. `orc` applies the curve; unset, heff is constant.
-  heff_model: orc
+  # the effective height peaks at 20 deg AWA (Figure 5.14) and falls to 0.80x
+  # once the sheets are eased past 80. Induced drag goes as 1/heff^2, so
+  # holding heff at the masthead over-charged the rig on a beat.
+  #
+  # Which edition of the curve is a choice, and it is made here on purpose:
+  #   orc-2022  peak 1.22   used with ORC's milder depowering (min flat 0.62)
+  #   orc-2023  peak 1.45   raised as a package WITH deeper depowering (0.42)
+  # This boat has no righting-moment limit yet, so it cannot pay the 2023
+  # package's other half. Stay on 2022 until max_heeling_moment_nm is set,
+  # then move to 2023. Unset, heff is constant.
+  heff_model: orc-2022
   # ORC eq. 5.42 sail-plan correction, from the measured rig:
   #   roach         0.000  main area 1.1955 equals 0.5 * luff * foot exactly
   #   fractionality 0.937  jib head 2.260 / main head 2.412, both above deck
