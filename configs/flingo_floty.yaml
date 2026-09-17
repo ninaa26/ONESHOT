@@ -25,7 +25,28 @@ hull:
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   L: 1.372  # [m] length of waterline, at the floating waterline for 27 kg
-  c_wave: 0.01   # residuary (wave-making) resistance; caps speed near 0.4*sqrt(g*L)
+  # Residuary (wave-making) resistance. Calibrated 2026-09-17 against the
+  # resistance curve, not guessed: at 0.01 the term was too weak to do the job
+  # its own comment claimed. Residuary only overtook friction at Fn 0.47 (a
+  # displacement hull crosses at 0.30-0.35), specific resistance R/W ran about
+  # half the published band at every speed, and the boat topped out at Fn 0.63
+  # on a hull whose DLR is ~292. At 0.05 the polar peak is 1.80 m/s = Fn 0.489,
+  # inside the 0.45-0.50 a displacement hull should cap at. 0.08 gives Fn 0.453
+  # if a more central value is wanted; it costs ~0.13 m/s off the whole polar.
+  c_wave: 0.05
+  # Yaw damping, as a cross-flow Cd. Strip theory says this should equal
+  # cross_flow_cd (1.0) and it defaults to that, but the model has no term for
+  # the circulatory lift a yawing hull sheds, so the derived value leaves the
+  # boat badly under-damped: full rudder produced 99 deg/s against a real
+  # 15-40, it turned inside 1.5 LWL against a real 2-4, and a tack cost 96% of
+  # boat speed against a real 40-70%. Swept 2026-09-17 over 1-14; 7.0 is the
+  # only region where all four measurements land in band at once:
+  #   max yaw 36 deg/s (15-40) | turning circle 3.69 LWL (2-4)
+  #   speed held in turn 71%   | speed held through a tack 35% (30-60)
+  # Below 6 the tack collapses again; above 10 the turning circle opens past
+  # 4 LWL. Straight-line speed is untouched across the whole sweep. A
+  # measured turning circle should replace this.
+  yaw_damping_cd: 7.0
   B: 0.492  # [m] beam at waterline
   T: 0.110  # [m] hull draft (canoe body, not to keel tip)
   # Measured hull skin below the waterline. The 1.7*L*(B+T) approximation this
