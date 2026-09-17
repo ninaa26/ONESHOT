@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SailBench — Test Bench</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Run a controller against the SailBench waypoint task in the browser: real physics, real wind, the same observation and action a trained policy sees."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./game/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 L26 24 H16 Z' fill='%235ee0ff'/%3E%3Cpath d='M14 8 L5 24 H14 Z' fill='%23ffffff' opacity='.55'/%3E%3C/svg%3E"
+    />
+  </head>
+
+  <body>
+    <canvas id="stage"></canvas>
+
+    <div id="ui">
+      <!-- instruments -->
+      <section class="panel" id="panel-instruments">
+        <h2>Instruments</h2>
+        <div class="big">
+          <span class="big-val" id="i-speed">0.00</span><span class="big-unit">m/s</span>
+        </div>
+        <div class="rows">
+          <div><span>heading</span><b id="i-heading">—</b></div>
+          <div><span>TWA</span><b id="i-twa">—</b></div>
+          <div><span>point of sail</span><b id="i-pos">—</b></div>
+          <div><span>VMG to goal</span><b id="i-vmg">—</b></div>
+          <div><span>sheet limit</span><b id="i-sheet">—</b></div>
+          <div><span>rudder</span><b id="i-rudder">—</b></div>
+        </div>
+        <div class="meter">
+          <div class="meter-head"><span>vs polar target</span><b id="i-target">—</b></div>
+          <div class="meter-track"><div class="meter-fill" id="i-target-fill"></div></div>
+        </div>
+        <div class="tells" id="i-tells"></div>
+      </section>
+
+      <!-- wind -->
+      <section class="panel" id="panel-wind">
+        <h2>Wind</h2>
+        <canvas id="rose"></canvas>
+        <div class="rows">
+          <div><span>true</span><b id="w-true">—</b></div>
+          <div><span>apparent</span><b id="w-app">—</b></div>
+          <div><span>blows toward</span><b id="w-dir">—</b></div>
+        </div>
+        <label class="slider">
+          <span>wind speed <b id="w-speed-val">5.0 m/s</b></span>
+          <input id="w-speed" type="range" min="0" max="14" step="0.5" value="5" />
+        </label>
+        <label class="slider">
+          <span>wind direction <b id="w-dir-val">90°</b></span>
+          <input id="w-dirdeg" type="range" min="-180" max="180" step="5" value="90" />
+        </label>
+      </section>
+
+      <!-- episode + scoreboard -->
+      <section class="panel" id="panel-episode">
+        <div class="race-row">
+          <div class="race-cell"><span>driver</span><b id="e-mode">manual</b></div>
+          <div class="race-cell"><span>step / 1000</span><b id="e-step">0</b></div>
+          <div class="race-cell"><span>elapsed</span><b id="e-time">0.0 s</b></div>
+          <div class="race-cell"><span>to goal</span><b id="e-dist">—</b></div>
+          <div class="race-cell"><span>state</span><b id="e-result">running</b></div>
+        </div>
+        <div class="score-row">
+          <span>episodes <b id="s-episodes">0</b></span>
+          <span>success <b id="s-rate">—</b></span>
+          <span>mean time <b id="s-time">—</b></span>
+          <span>path eff. <b id="s-eff">—</b></span>
+          <span>tacks <b id="s-tacks">0</b></span>
+          <span>gybes <b id="s-gybes">0</b></span>
+        </div>
+      </section>
+
+      <!-- observation / action, what the controller actually sees -->
+      <section class="panel" id="panel-obs">
+        <h2>Observation → action</h2>
+        <div class="obs-list" id="obs-list"></div>
+        <div class="act-list" id="act-list"></div>
+      </section>
+
+      <!-- map -->
+      <section class="panel" id="panel-map">
+        <h2>Water · 400 × 400 m</h2>
+        <canvas id="minimap"></canvas>
+      </section>
+
+      <!-- controls -->
+      <section class="panel" id="panel-help">
+        <div class="mode-row" id="modes"></div>
+        <div class="keys">
+          <span><i class="kbd">←</i><i class="kbd">→</i> rudder</span>
+          <span><i class="kbd">↑</i><i class="kbd">↓</i> sheet</span>
+          <span><i class="kbd">click</i> set waypoint</span>
+          <span><i class="kbd">N</i> new episode</span>
+          <span><i class="kbd">space</i> pause</span>
+        </div>
+        <div class="toggles" id="toggles"></div>
+        <div class="links">
+          <a href="./index.html">3D view</a> ·
+          <a href="./physics.html">Physics lab</a>
+        </div>
+      </section>
+
+      <div id="banner"></div>
+    </div>
+
+    <script type="module" src="./game/main.js"></script>
+  </body>
+</html>
