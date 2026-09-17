@@ -391,6 +391,9 @@ export function createShipyard({ onLaunch }) {
     describe,
     isOpen: () => open,
     hasCatalog: () => catalog !== null,
+    // This app does present a boat picker, so the sim should greet the
+    // server and let it hold the catalog open until a build is chosen.
+    wantsCatalog: () => true,
   };
 }
 

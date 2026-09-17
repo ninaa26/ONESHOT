@@ -7,7 +7,7 @@
 
 import { lineChart } from "../charts.js";
 import { slider, mount, pycode, chips } from "../ui.js";
-import { RAD, clCd, luffScale, clamp } from "../models.js";
+import { RAD, clCd, luffScale, clamp } from "../../shared/physics/models.js";
 import { state, subscribe, touched } from "../state.js";
 
 const SHEET_SRC = `def _resolve_sail_angle_from_sheet(self, state, sheet_limit_rad):

@@ -1,541 +1,123 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>sailbench – CUSail Simulation Software</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sailbench</title>
     <style>
-      html,
+      :root {
+        --bg: #061019;
+        --panel: rgba(10, 26, 42, 0.72);
+        --line: rgba(120, 190, 255, 0.22);
+        --text: #dceaf7;
+        --muted: #7f9bb3;
+        --accent: #5ee0ff;
+      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          sans-serif;
-        background: radial-gradient(circle at top, #1e3c72, #090909);
-        color: #e8f0ff;
-      }
-
-      #app {
-        position: relative;
-        width: 100%;
-        height: 100%;
-      }
-
-      canvas {
-        display: block;
-      }
-
-      .hud {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        padding: 10px 14px;
-        border-radius: 8px;
-        background: rgba(5, 10, 30, 0.72);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65);
-        border: 1px solid rgba(120, 190, 255, 0.3);
-        font-size: 13px;
-        line-height: 1.5;
-        max-width: 280px;
-      }
-
-      .hud h1 {
-        margin: 0 0 4px;
-        font-size: 15px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #9cd5ff;
-      }
-
-      .hud-row {
+        min-height: 100vh;
+        padding: 48px 16px;
+        background:
+          radial-gradient(1100px 620px at 50% -10%, #12395c 0%, var(--bg) 62%);
+        color: var(--text);
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
+        align-items: center;
       }
-
-      .hud-label {
-        opacity: 0.75;
+      header { text-align: center; margin-bottom: 40px; }
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        letter-spacing: 0.16em;
+        text-transform: lowercase;
+        font-weight: 600;
       }
-
-      .hud-value {
-        font-variant-numeric: tabular-nums;
-        margin-left: 12px;
+      .tagline { margin-top: 8px; color: var(--muted); font-size: 14px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+        width: 100%;
+        max-width: 880px;
       }
-
-      #hud-boat {
-        text-align: right;
-        font-size: 11px;
-      }
-
-      .hud-help {
-        margin-top: 6px;
-        opacity: 0.7;
-        font-size: 11px;
-      }
-
-      .hud-link {
-        display: inline-block;
-        margin-top: 8px;
-        padding: 5px 10px;
-        border-radius: 6px;
-        border: 1px solid rgba(120, 190, 255, 0.35);
-        background: rgba(120, 190, 255, 0.08);
-        color: #9cd5ff;
+      a.card {
+        display: block;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
         text-decoration: none;
+        color: inherit;
+        transition: border-color 0.15s, transform 0.15s;
+      }
+      a.card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+      }
+      .card h2 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .card p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+      .needs {
         font-size: 11px;
         letter-spacing: 0.04em;
+        color: #64839c;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
       }
-
-      .hud-link:hover {
-        background: rgba(120, 190, 255, 0.16);
-      }
-
-      .forces-section {
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(120, 190, 255, 0.2);
-      }
-
-      .forces-section h2 {
-        margin: 0 0 6px;
-        font-size: 12px;
-        letter-spacing: 0.05em;
-        color: #9cd5ff;
-        cursor: pointer;
-        user-select: none;
-      }
-
-      .forces-section h2:hover {
-        opacity: 0.9;
-      }
-
-      .forces-section.collapsed .forces-chart {
-        display: none;
-      }
-
-      .forces-chart {
-        font-size: 11px;
-      }
-
-      .forces-chart-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 4px;
-      }
-
-      .forces-chart-label {
-        width: 48px;
-        flex-shrink: 0;
-      }
-
-      .forces-chart-bars {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex: 1;
-        min-width: 0;
-      }
-
-      .forces-chart-bar-wrap {
-        flex: 1;
-        height: 8px;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 2px;
-        overflow: hidden;
-        min-width: 20px;
-      }
-
-      .forces-chart-bar {
-        height: 100%;
-        transition: width 0.1s;
-      }
-
-      .forces-chart-val {
-        width: 28px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        font-size: 10px;
-      }
-
-      /* --- Shipyard (pre-sail selection screen) --- */
-
-      #shipyard {
-        position: absolute;
-        inset: 0;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(4, 8, 24, 0.78);
-        backdrop-filter: blur(14px);
-        transition: opacity 0.25s ease;
-      }
-
-      #shipyard.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .shipyard-panel {
-        width: min(920px, calc(100% - 32px));
-        max-height: calc(100% - 32px);
-        overflow-y: auto;
-        padding: 22px 28px 24px;
-        border-radius: 14px;
-        background: rgba(5, 10, 30, 0.82);
-        border: 1px solid rgba(120, 190, 255, 0.3);
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-      }
-
-      .shipyard-panel h1 {
-        margin: 0;
-        font-size: 22px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: #9cd5ff;
-      }
-
-      .shipyard-sub {
-        margin: 4px 0 16px;
-        font-size: 12px;
-        opacity: 0.7;
-      }
-
-      #shipyard-status {
-        padding: 18px 0 8px;
-        font-size: 14px;
-        opacity: 0.8;
-      }
-
-      #shipyard-error {
-        margin: 0 0 12px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        background: rgba(255, 80, 80, 0.15);
-        border: 1px solid rgba(255, 120, 120, 0.5);
-        color: #ffb3b3;
-        font-size: 12px;
-        white-space: pre-wrap;
-      }
-
-      .shipyard-section {
-        padding: 8px 10px;
-        margin: 0 -10px;
-        border-radius: 10px;
-        border: 1px solid transparent;
-      }
-
-      .shipyard-section.active {
-        border-color: rgba(120, 190, 255, 0.35);
-        background: rgba(120, 190, 255, 0.06);
-      }
-
-      .section-title {
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: #9cd5ff;
-        opacity: 0.8;
-        margin-bottom: 8px;
-      }
-
-      #shipyard-boats {
-        display: flex;
-        gap: 12px;
-        overflow-x: auto;
-        padding-bottom: 4px;
-      }
-
-      .boat-card {
-        flex: 0 0 150px;
-        padding: 8px 8px 10px;
-        border-radius: 10px;
-        border: 2px solid rgba(120, 190, 255, 0.2);
-        background: rgba(10, 20, 50, 0.7);
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-        text-align: center;
-        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-      }
-
-      .boat-card:hover {
-        border-color: rgba(120, 190, 255, 0.5);
-      }
-
-      .boat-card.selected {
-        transform: translateY(-4px) scale(1.04);
-        border-color: #ffdd55;
-        box-shadow: 0 0 22px rgba(255, 221, 85, 0.35);
-      }
-
-      .boat-silhouette {
-        width: 100%;
-        height: 96px;
-      }
-
-      .boat-silhouette .hull {
-        fill: #2f6ea3;
-        stroke: #9cd5ff;
-        stroke-width: 1.5;
-      }
-
-      .boat-silhouette .sail {
-        fill: rgba(232, 240, 255, 0.85);
-        stroke: #9cd5ff;
-        stroke-width: 1;
-      }
-
-      .boat-silhouette .mast {
-        stroke: #e8f0ff;
-        stroke-width: 2;
-      }
-
-      .boat-name {
-        font-weight: 600;
-        font-size: 14px;
-        margin-top: 4px;
-      }
-
-      .boat-file {
-        font-size: 10px;
-        opacity: 0.55;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-
-      #shipyard-stats {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 4px 24px;
-        margin: 10px 0 14px;
-        font-size: 12px;
-      }
-
-      .stat {
-        display: grid;
-        grid-template-columns: 90px 1fr 84px;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .stat-label {
-        opacity: 0.75;
-      }
-
-      .stat-bar {
-        height: 8px;
-        border-radius: 3px;
-        background: rgba(0, 0, 0, 0.35);
-        overflow: hidden;
-      }
-
-      .stat-fill {
-        display: block;
-        height: 100%;
-        background: linear-gradient(90deg, #4ea3ff, #9cd5ff);
-        transition: width 0.2s ease;
-      }
-
-      .stat-value {
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .part-row {
-        display: grid;
-        grid-template-columns: 70px 1fr;
-        grid-template-areas: "label options" "blank blurb";
-        align-items: center;
-        gap: 2px 12px;
-        padding: 6px 10px;
-        margin: 0 -10px;
-        border-radius: 8px;
-        border: 1px solid transparent;
-      }
-
-      .part-row.active {
-        border-color: rgba(120, 190, 255, 0.35);
-        background: rgba(120, 190, 255, 0.06);
-      }
-
-      .part-label {
-        grid-area: label;
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: #9cd5ff;
-      }
-
-      .part-row.active .part-label::before {
-        content: "▶ ";
-        color: #ffdd55;
-      }
-
-      .part-options {
-        grid-area: options;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-
-      .part-blurb {
-        grid-area: blurb;
-        font-size: 11px;
-        opacity: 0.6;
-        min-height: 14px;
-      }
-
-      .chip {
-        padding: 5px 12px;
-        border-radius: 999px;
-        border: 1px solid rgba(120, 190, 255, 0.3);
-        background: rgba(10, 20, 50, 0.7);
-        color: inherit;
-        font: inherit;
-        font-size: 12px;
-        cursor: pointer;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-      }
-
-      .chip:hover {
-        border-color: rgba(120, 190, 255, 0.6);
-      }
-
-      .chip.selected {
-        border-color: #ffdd55;
-        background: rgba(255, 221, 85, 0.12);
-        box-shadow: 0 0 12px rgba(255, 221, 85, 0.25);
-      }
-
-      .chip.disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-        text-decoration: line-through;
-      }
-
-      .shipyard-footer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-top: 14px;
-      }
-
-      .shipyard-hint {
-        font-size: 11px;
-        opacity: 0.6;
-      }
-
-      #shipyard-launch {
-        padding: 10px 26px;
-        border-radius: 8px;
-        border: 1px solid #ffdd55;
-        background: rgba(255, 221, 85, 0.18);
-        color: #fff2b3;
-        font: inherit;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        cursor: pointer;
-      }
-
-      #shipyard-launch:hover:not(:disabled) {
-        background: rgba(255, 221, 85, 0.3);
-      }
-
-      #shipyard-launch:disabled {
-        opacity: 0.5;
-        cursor: wait;
-      }
-
+      footer { margin-top: 36px; font-size: 12px; color: #5b768e; text-align: center; }
+      code { color: #9cd5ff; }
     </style>
   </head>
-
   <body>
-    <div id="app">
-      <div class="hud">
-        <h1>sailbench</h1>
-        <div class="hud-row">
-          <span class="hud-label">Speed</span>
-          <span class="hud-value" id="hud-speed">0.0 m/s</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Heading</span>
-          <span class="hud-value" id="hud-heading">0°</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Sail angle</span>
-          <span class="hud-value" id="hud-sail-angle">0°</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Rudder angle</span>
-          <span class="hud-value" id="hud-rudder-angle">0°</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Sail force</span>
-          <span class="hud-value" id="hud-sail-force">Fx 0.0 N, Fy 0.0 N</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Boat</span>
-          <span class="hud-value" id="hud-boat">—</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Connection</span>
-          <span class="hud-value" id="hud-conn">disconnected</span>
-        </div>
-        <div class="hud-row">
-          <span class="hud-label">Control mode</span>
-          <span class="hud-value" id="hud-control-mode">manual</span>
-        </div>
-        <div class="hud-help">
-          Rudder: ←/→ or A/D · Sail: ↑/↓ or W/S · F: Forces · C: Cam · Esc: Shipyard
-        </div>
-        <a class="hud-link" href="./sail.html">Test bench →</a>
-        <a class="hud-link" href="./physics.html">Physics Lab →</a>
-        <div class="forces-section" id="forces-section">
-          <h2 id="forces-toggle">Forces (Fx, Fy) ▼</h2>
-          <div class="forces-chart" id="hud-forces-chart">
-            <span class="hud-label">No forces</span>
-          </div>
-        </div>
-      </div>
-      <div id="shipyard">
-        <div class="shipyard-panel">
-          <h1>Shipyard</h1>
-          <div class="shipyard-sub">Assemble your boat before you sail.</div>
-          <div id="shipyard-status">Connecting to the sim backend…</div>
-          <div id="shipyard-error" hidden></div>
-          <div id="shipyard-grid" hidden>
-            <div class="shipyard-section">
-              <div class="section-title">Boat</div>
-              <div id="shipyard-boats"></div>
-            </div>
-            <div id="shipyard-stats"></div>
-            <div id="shipyard-parts"></div>
-            <div class="shipyard-footer">
-              <div class="shipyard-hint">
-                ↑/↓ row · ←/→ choose · Enter to launch · Esc while sailing comes back here
-              </div>
-              <button type="button" id="shipyard-launch">Set sail &nbsp;⏎</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <header>
+      <h1>sailbench</h1>
+      <div class="tagline">CUSail simulation software</div>
+    </header>
+
+    <div class="grid">
+      <a class="card" href="./sim/">
+        <h2>Simulation →</h2>
+        <p>
+          The 3D sim. Sail the boat the backend was launched with, by hand.
+        </p>
+        <div class="needs">needs web_runner · ws:8765</div>
+      </a>
+
+      <a class="card" href="./shipyard/">
+        <h2>Shipyard →</h2>
+        <p>
+          Assemble a boat from the backend's catalog — hull, sail, keel, rudder,
+          helm — then sail it in the same 3D sim.
+        </p>
+        <div class="needs">needs web_runner · ws:8765</div>
+      </a>
+
+      <a class="card" href="./physics/">
+        <h2>Physics Lab →</h2>
+        <p>
+          Charts and derivations behind the model: foil polars, hull resistance,
+          sheeting, steering, and validation against the Python hub.
+        </p>
+        <div class="needs">runs in the browser · no backend</div>
+      </a>
+
+      <a class="card" href="./game/">
+        <h2>Game →</h2>
+        <p>
+          Race the course against autopilot boats, on a JS port of the same
+          physics models.
+        </p>
+        <div class="needs">runs in the browser · no backend</div>
+      </a>
     </div>
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-          "three/examples/jsm/": "https://unpkg.com/three@0.162.0/examples/jsm/"
-        }
-      }
-    </script>
-    <script type="module" src="./main.js"></script>
+
+    <footer>
+      Backend for the first two: <code>uv run python -m sailbench.sim.web_runner</code>
+    </footer>
   </body>
 </html>
-

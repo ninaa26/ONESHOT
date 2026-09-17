@@ -7,7 +7,7 @@
 
 import { lineChart } from "../charts.js";
 import { slider, readout, uval, fmt, mount, pycode } from "../ui.js";
-import { hullCoeffs, hullForce } from "../models.js";
+import { hullCoeffs, hullForce } from "../../shared/physics/models.js";
 import { state, subscribe, touched } from "../state.js";
 
 const HULL_SRC = `s = 1.7 * l * (b + t)      # wetted surface

@@ -14,7 +14,7 @@
  *   sailbench/sim/sailboat_hub.py            SailboatHub._resolve_sail_angle_from_sheet,
  *                                            _update_dynamic_frames, _forces, step
  *
- * `web/physics.html` validates this port against forces recorded from the
+ * `web/physics/index.html` validates this port against forces recorded from the
  * Python core (see the "Mirror check" section).
  */
 

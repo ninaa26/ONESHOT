@@ -8,7 +8,7 @@
 
 import { lineChart } from "../charts.js";
 import { h, readout, uval, fmt, mount } from "../ui.js";
-import { RAD, solveAt } from "../models.js";
+import { RAD, solveAt } from "../../shared/physics/models.js";
 import { state, update } from "../state.js";
 
 const PORT = 8765;

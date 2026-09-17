@@ -8,7 +8,7 @@
  */
 
 import { slider, h } from "./ui.js";
-import { DATA, CONFIG_NAMES } from "./models.js";
+import { DATA, CONFIG_NAMES } from "../shared/physics/models.js";
 import { state, update } from "./state.js";
 
 import * as overview from "./sections/overview.js";

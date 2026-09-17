@@ -15,8 +15,8 @@ import { el, arrowPath } from "../charts.js";
 import { h, slider, readout, uval, fmt, mount, chips } from "../ui.js";
 import {
   DEG, RAD, solveAt, stepSim, rudderServoStep, clamp,
-} from "../models.js";
-import { polarAt } from "../analysis.js";
+} from "../../shared/physics/models.js";
+import { polarAt } from "../../shared/physics/analysis.js";
 import { state, subscribe, update, touched } from "../state.js";
 
 const SIZE = 560;

@@ -4,7 +4,7 @@
 
 import { lineChart } from "../charts.js";
 import { slider, readout, uval, fmt, mount, chips } from "../ui.js";
-import { RAD, clCd, keelForce, foilCurve } from "../models.js";
+import { RAD, clCd, keelForce, foilCurve } from "../../shared/physics/models.js";
 import { state, subscribe, touched } from "../state.js";
 
 /** Section 07 — keel side force against leeway angle. */

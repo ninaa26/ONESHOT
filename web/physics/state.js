@@ -7,7 +7,7 @@
  * the 3D viewer.
  */
 
-import { boatConfig } from "./models.js";
+import { boatConfig } from "../shared/physics/models.js";
 
 const listeners = new Set();
 

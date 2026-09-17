@@ -8,7 +8,7 @@
 
 import { lineChart } from "../charts.js";
 import { h, mount, table } from "../ui.js";
-import { DATA, RAD, solveAt, boatConfig } from "../models.js";
+import { DATA, RAD, solveAt, boatConfig } from "../../shared/physics/models.js";
 
 const COMPONENTS = [
   ["hull", "var(--c-hull)"],

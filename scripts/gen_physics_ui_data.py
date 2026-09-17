@@ -1,4 +1,4 @@
-"""Generate the dataset behind the SailBench physics UI (``web/physics.html``).
+"""Generate the dataset behind the SailBench physics UI (``web/physics/index.html``).
 
 Everything the page shows is produced here from the *real* simulator models, so
 the browser never has to re-invent the physics:
@@ -297,14 +297,14 @@ def foil_tables(res: list[float]) -> dict[str, Any]:
 
 
 def main() -> None:
-    """Build ``web/physics/data.js``."""
+    """Build ``web/shared/physics/data.js``."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--twa-step", type=float, default=5.0, help="TWA resolution (deg)")
     parser.add_argument("--sail-step", type=float, default=5.0, help="Sheet-limit sweep step (deg)")
     parser.add_argument("--workers", type=int, default=8, help="Parallel worker processes")
     parser.add_argument("--validation-cases", type=int, default=120)
     parser.add_argument("--skip-polars", action="store_true", help="Foil + config data only")
-    parser.add_argument("--output", type=str, default="web/physics/data.js")
+    parser.add_argument("--output", type=str, default="web/shared/physics/data.js")
     args = parser.parse_args()
 
     config_names = ["basic_sailbot.yaml", "flingo_floty.yaml", "real_boat.yaml", "fun_boat.yaml"]

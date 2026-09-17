@@ -23,8 +23,8 @@
  *      and from a simple half-the-wind-angle rule when it has not.
  */
 
-import { DEG, RAD, clamp } from "../physics/models.js";
-import { polarAt } from "../physics/analysis.js";
+import { DEG, RAD, clamp } from "../shared/physics/models.js";
+import { polarAt } from "../shared/physics/analysis.js";
 import { TASK, encodeAction } from "./task.js";
 
 const DEFAULTS = {

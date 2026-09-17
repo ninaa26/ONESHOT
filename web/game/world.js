@@ -6,7 +6,7 @@
  * rather than the world sliding underneath it.
  */
 
-import { rot, RAD, DEG } from "../physics/models.js";
+import { rot, RAD, DEG } from "../shared/physics/models.js";
 import { hullShape, rigDimensions } from "./boats.js";
 import { TASK } from "./task.js";
 

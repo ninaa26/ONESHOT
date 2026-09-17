@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sailbench – Simulation</title>
+    <link rel="stylesheet" href="../shared/sim.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="hud">
+        <h1>sailbench</h1>
+        <div class="hud-row">
+          <span class="hud-label">Speed</span>
+          <span class="hud-value" id="hud-speed">0.0 m/s</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Heading</span>
+          <span class="hud-value" id="hud-heading">0°</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Sail angle</span>
+          <span class="hud-value" id="hud-sail-angle">0°</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Rudder angle</span>
+          <span class="hud-value" id="hud-rudder-angle">0°</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Sail force</span>
+          <span class="hud-value" id="hud-sail-force">Fx 0.0 N, Fy 0.0 N</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Boat</span>
+          <span class="hud-value" id="hud-boat">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Connection</span>
+          <span class="hud-value" id="hud-conn">disconnected</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">Control mode</span>
+          <span class="hud-value" id="hud-control-mode">manual</span>
+        </div>
+        <div class="hud-help">
+          Rudder: ←/→ or A/D · Sail: ↑/↓ or W/S · F: Forces · C: Cam
+        </div>
+        <a class="hud-link" href="../game/">Game →</a>
+        <a class="hud-link" href="../physics/">Physics Lab →</a>
+        <div class="forces-section" id="forces-section">
+          <h2 id="forces-toggle">Forces (Fx, Fy) ▼</h2>
+          <div class="forces-chart" id="hud-forces-chart">
+            <span class="hud-label">No forces</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+          "three/examples/jsm/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

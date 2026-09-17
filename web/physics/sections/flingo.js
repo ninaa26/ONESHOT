@@ -7,8 +7,8 @@
 
 import { el } from "../charts.js";
 import { h, spec, mount, table } from "../ui.js";
-import { DATA, hullCoeffs, boatConfig } from "../models.js";
-import { polarAt, polarStats } from "../analysis.js";
+import { DATA, hullCoeffs, boatConfig } from "../../shared/physics/models.js";
+import { polarAt, polarStats } from "../../shared/physics/analysis.js";
 import { update } from "../state.js";
 
 const SUBJECT = "flingo_floty.yaml";

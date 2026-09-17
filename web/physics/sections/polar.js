@@ -8,8 +8,8 @@
 
 import { polarChart, lineChart } from "../charts.js";
 import { h, spec, mount, chips, table } from "../ui.js";
-import { DATA } from "../models.js";
-import { polarsFor, polarAt, polarStats } from "../analysis.js";
+import { DATA } from "../../shared/physics/models.js";
+import { polarsFor, polarAt, polarStats } from "../../shared/physics/analysis.js";
 import { state, subscribe, touched } from "../state.js";
 
 const WIND_COLORS = ["#3c7fb1", "var(--c-sail)", "#a8e8ff"];

@@ -7,8 +7,8 @@
 
 import { el } from "../charts.js";
 import { h, fmt, mount } from "../ui.js";
-import { DATA } from "../models.js";
-import { polarAt, polarStats } from "../analysis.js";
+import { DATA } from "../../shared/physics/models.js";
+import { polarAt, polarStats } from "../../shared/physics/analysis.js";
 import { state, subscribe, touched } from "../state.js";
 
 const COMPONENTS = [

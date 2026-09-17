@@ -19,8 +19,8 @@
 
 import {
   RAD, DEG, clamp, boatConfig, CONFIG_NAMES, solveAt, stepSim, rudderServoStep,
-} from "../physics/models.js";
-import { polarAt } from "../physics/analysis.js";
+} from "../shared/physics/models.js";
+import { polarAt } from "../shared/physics/analysis.js";
 import { createRenderer, drawMinimap, drawWindRose, WORLD_HALF } from "./world.js";
 import { createHud } from "./hud.js";
 import {

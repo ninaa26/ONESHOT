@@ -9,7 +9,7 @@
  * Keep this in step with `WaypointEnvConfig` when the env changes.
  */
 
-import { RAD, clamp } from "../physics/models.js";
+import { RAD, clamp } from "../shared/physics/models.js";
 
 /** Defaults copied from `WaypointEnvConfig`. */
 export const TASK = {

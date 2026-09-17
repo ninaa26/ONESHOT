@@ -58,7 +58,7 @@ Once you've installed the packages, you can play sailbench with manual control w
    python -m http.server 8000
    ```
 
-3. Open http://localhost:8000 in your browser.
+3. Open http://localhost:8000/sim/ in your browser.
 
 The page opens on the **shipyard**: pick a boat (any boat config under
 `configs/`), then the sail, keel, rudder and hull models and who holds the helm
@@ -83,12 +83,12 @@ To run a trained RL model in sailbench, perform the following.
    cd web
    python -m http.server 8000
    ```
-3. Open http://localhost:8000. The red/yellow marker shows the current waypoint.
+3. Open http://localhost:8000/sim/. The red/yellow marker shows the current waypoint.
 
 
 ## Test bench
 
-`web/sail.html` is where a controller gets driven against the real physics. It runs the same
+`web/game/` is where a controller gets driven against the real physics. It runs the same
 waypoint task policies are trained on — `sailbench/rl/envs/waypoint_env.py` — with the same
 observation vector, the same normalised `[rudder, sheet]` action and the same termination rules,
 ported to the browser in `web/game/task.js`.
@@ -98,7 +98,7 @@ cd web
 python -m http.server 8000
 ```
 
-Open <http://localhost:8000/sail.html>.
+Open <http://localhost:8000/game/>.
 
 ### Three drivers, scored the same way
 
@@ -159,7 +159,7 @@ Per-boat colours and sail marks live in `web/game/boats.js` and do not touch the
 
 ## Physics Lab
 
-`web/physics.html` is a second, standalone UI that pulls the boat physics apart — one section
+`web/physics/` is a second, standalone UI that pulls the boat physics apart — one section
 per model, each figure computed live by a JavaScript port of the real Python models.
 
 It needs no backend. Serve `web/` and open it:
@@ -169,7 +169,7 @@ cd web
 python -m http.server 8000
 ```
 
-Then open <http://localhost:8000/physics.html> (there is also a **Physics Lab →** link in the 3D
+Then open <http://localhost:8000/physics/> (there is also a **Physics Lab →** link in the 3D
 simulator's HUD).
 
 **You can sail it.** The force board has a *sail it* mode: arrow keys steer exactly as they do in
@@ -194,7 +194,7 @@ What it covers:
 
 ### Regenerating the lab's data
 
-`web/physics/data.js` holds the NeuralFoil polars, the parsed configs, the VPP sweeps and the
+`web/shared/physics/data.js` holds the NeuralFoil polars, the parsed configs, the VPP sweeps and the
 validation cases. Regenerate it after changing a model or a config:
 
 ```bash
@@ -238,7 +238,7 @@ uv run python scripts/train_waypoint_sb3.py \
   --watch-web
 ```
 
-Then run the frontend in another terminal and open `http://localhost:8000`:
+Then run the frontend in another terminal and open `http://localhost:8000/sim/`:
 
 ```bash
 cd web

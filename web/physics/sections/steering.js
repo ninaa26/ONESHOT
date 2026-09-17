@@ -8,7 +8,7 @@
 
 import { lineChart } from "../charts.js";
 import { h, slider, readout, uval, fmt, mount, pycode } from "../ui.js";
-import { RAD, DEG, rudderForce, rudderServoStep } from "../models.js";
+import { RAD, DEG, rudderForce, rudderServoStep } from "../../shared/physics/models.js";
 import { state, subscribe, touched } from "../state.js";
 
 const RUDDER_SRC = `# local inflow at the blade, not at the CG
