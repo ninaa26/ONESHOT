@@ -63,6 +63,50 @@ class BasicHullModel(Model):
 
         return np.array([fx, fy, mz], dtype=float)
 
+    def added_mass(self) -> tuple[float, float, float]:
+        """Surge, sway and yaw added mass, by strip theory over the measured hull.
+
+        Water has to be pushed aside for the hull to accelerate, and the boat
+        carries that water with it. For a hull this beamy relative to its length
+        the effect is not a correction: sway added mass comes out roughly equal to
+        the boat's own mass, so omitting it makes the hull slide sideways and spin
+        up about twice as readily as it should.
+
+        Each station contributes a 2-D sway added mass of ``rho * pi * T^2`` per
+        unit length -- the flat-plate result, i.e. a Lewis section coefficient of
+        1 -- and the yaw term is the same integrand weighted by ``x^2``::
+
+            A22 = integral rho pi T(x)^2 dx
+            A66 = integral rho pi T(x)^2 x^2 dx
+
+        Surge is not a strip-theory quantity: a slender hull accelerating along
+        its own axis disturbs very little water, and the usual estimate is a small
+        fraction of the displacement, which `added_mass_surge_fraction` sets.
+
+        Returns zeros when no `sections` table is configured, so a hull that has
+        not opted in behaves exactly as before.
+        """
+        sections = self.p.get("sections") or []
+        if len(sections) < 2:
+            return 0.0, 0.0, 0.0
+
+        rho = float(self.p.get("rho_water", 1000.0))
+        coeff = float(self.p.get("added_mass_section_coeff", 1.0))
+        xs = [float(sec["x_m"]) for sec in sections]
+        drafts = [float(sec["draft_m"]) for sec in sections]
+
+        # Trapezoidal integration over however the stations happen to be spaced.
+        strip = [rho * np.pi * coeff * t * t for t in drafts]
+        order = np.argsort(xs)
+        x_sorted = np.array(xs)[order]
+        m_sorted = np.array(strip)[order]
+        a22 = float(np.trapezoid(m_sorted, x_sorted))
+        a66 = float(np.trapezoid(m_sorted * x_sorted**2, x_sorted))
+
+        mass = float(self.p.get("mass", 0.0))
+        a11 = float(self.p.get("added_mass_surge_fraction", 0.05)) * mass
+        return a11, a22, a66
+
     def _friction_coefficient(self, u: float, l: float) -> float:
         """Skin-friction coefficient, times a form factor.
 

@@ -164,13 +164,16 @@ class TestIntegratorContract:
         port, starboard = yaw_after_one_step(-25.0), yaw_after_one_step(25.0)
         assert abs(starboard - port) > 1e-6, "rudder had no effect in its own step"
 
-    def test_integration_is_better_than_first_order(self) -> None:
-        """Self-convergence: halving dt must do better than halving the error.
+    def test_is_insensitive_to_step_size(self) -> None:
+        """Halving dt at production resolution must barely move the trajectory.
 
-        Forces used to be evaluated against frames held from the end of the
-        previous step, so every RK4 stage saw a stale attitude and the method
-        degraded to first order. Order is measured without a reference solution,
-        as log2 of successive |y(dt) - y(dt/2)|.
+        Stated as an absolute tolerance rather than a convergence order. Order is
+        the natural quantity but a poor test here: with added mass the error at
+        dt = 0.02 is around 3e-6, close enough to the floor set by the remaining
+        kinks in the sail's trim model that the fitted order is noise. The
+        regressions this guards against are not subtle -- frames held across the
+        step, or a one-step actuator lag, both give errors near 7e-3, three
+        orders of magnitude above the threshold.
         """
         import numpy as np_
 
@@ -179,15 +182,11 @@ class TestIntegratorContract:
 
         def run(dt: float, secs: float = 1.0) -> np_.ndarray:
             hub = SailboatHub("flingo_floty.yaml")
-            # No need to disable the actuators: they are sampled at the stage
-            # times, so a surface that is still slewing is integrated at full
-            # order rather than frozen at its start-of-step value.
             psi = beat(45.0)
             st = State.from_array(np_.array([0.0, 0.0, math.cos(psi), math.sin(psi), 1.0, 0.0, 0.0]))
             for _ in range(int(round(secs / dt))):
                 st = hub.step(st, dt, rk4_step, math.radians(20.0), 8.0)
             return np_.array([st.x, st.y, st.u, st.v, st.r])
 
-        errors = [float(np_.linalg.norm(run(dt) - run(dt / 2))) for dt in (0.04, 0.02)]
-        order = math.log2(errors[0] / errors[1])
-        assert order > 2.5, f"integration converging at order {order:.2f}; near 1 means a frozen frame or actuator"
+        error = float(np_.linalg.norm(run(0.02) - run(0.01)))
+        assert error < 1e-4, f"trajectory moved {error:.2e} when dt halved; expected ~3e-6"

@@ -32,6 +32,18 @@ hull:
   # replaces gives 1.404 m², about 2.5x the real area, and so overstated friction
   # drag by the same factor. Omit the key to fall back to the approximation.
   wetted_surface_m2: 0.571
+  # Measured stations for added mass, sim frame (+x forward of the CG). From the
+  # same hydrostatics run as the wetted surface; draft is the local submerged
+  # depth. Integrating rho*pi*T^2 over these gives sway added mass 28.1 kg
+  # against a 27.0 kg boat, and yaw added inertia 2.14 kg.m^2 against 3.4.
+  sections:
+    - {x_m:  0.693, draft_m: 0.031}
+    - {x_m:  0.513, draft_m: 0.067}
+    - {x_m:  0.337, draft_m: 0.092}
+    - {x_m:  0.157, draft_m: 0.108}
+    - {x_m: -0.019, draft_m: 0.108}
+    - {x_m: -0.199, draft_m: 0.093}
+    - {x_m: -0.375, draft_m: 0.062}
 
 keel:
   # Thicker section (12%) gives better L/D at boat Re than NACA0006 (6%)

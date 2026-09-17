@@ -138,7 +138,7 @@ class Foil(Model):
         cn_plate = float(self.p.get("cn_plate", 2.0))
 
         ratio = float(alpha_rad) / alpha_sep
-        separated = float(np.exp(-ratio * ratio))
+        separated = 1.0 - float(np.exp(-ratio * ratio))
 
         sin_a, cos_a = np.sin(float(alpha_rad)), np.cos(float(alpha_rad))
         cl_plate = cn_plate * sin_a * cos_a
