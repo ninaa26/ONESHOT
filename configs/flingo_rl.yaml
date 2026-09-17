@@ -1,12 +1,10 @@
 # RL waypoint training config for the Flingo Floaty hull.
-# Copy of rl_waypoint_sb3.yaml with simulator_config repointed.
 #
-# NOT YET RETUNED FOR THIS BOAT. The env/ values below were tuned against
-# basic_sailbot.yaml. max_episode_steps, speed_scale, yaw_rate_scale and
-# no_go_zone_half_angle_deg all need re-deriving from a flingo polar once the
-# hull residuary-drag and foil aspect-ratio gaps are fixed - the current polar
-# peaks upwind VMG at 20 deg TWA and reaches Froude 0.80, so tuning against it
-# now would bake in unphysical behaviour.
+# Observation scales re-derived 2026-09-17 from the measured polar, now that the
+# physics gaps the previous note was waiting on are closed. The boat reaches
+# 2.02 m/s and 1.77 rad/s, so the scales below are those plus ~15% headroom.
+# Policies trained before this will not transfer: the polar, the observation
+# scales and the observation width have all changed.
 env:
   simulator_config: flingo_floty.yaml
   dt: 0.02
@@ -22,8 +20,8 @@ env:
   upwind_half_angle_deg: 25.0
   success_radius_m: 1.5
   fail_radius_m: 80.0
-  speed_scale: 6.0
-  yaw_rate_scale: 2.0
+  speed_scale: 2.5      # top speed measured 2.02 m/s
+  yaw_rate_scale: 2.5   # max yaw rate measured 1.77 rad/s (101 deg/s)
   wind_speed_scale: 15.0
   # The sheet winch lags 3 s; without this the policy sees only its own command.
   include_actuator_state: true
@@ -34,7 +32,7 @@ env:
   stagnation_penalty: 0
   stagnation_u_threshold: 0.35
   no_go_zone_penalty: 0.3
-  no_go_zone_half_angle_deg: 45.0
+  no_go_zone_half_angle_deg: 35.0  # measured no-go is 30-35 deg, best VMG at 40
   jibe_penalty: 0.5
   jibe_threshold_deg: 150.0
   surge_speed_bonus: 0.0

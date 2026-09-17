@@ -103,7 +103,11 @@ def _steady_state(
     state = State(
         x=0.0, y=0.0,
         psi=(math.cos(heading_rad), math.sin(heading_rad)),
-        u=0.3, v=0.0, r=0.0,
+        # Enough way on to have steerage. Starting near rest, a boat with a
+        # correctly modelled keel cannot build speed close-hauled and falls away
+        # downwind -- which is what a real boat does from a standstill head to
+        # wind, so the upwind rows come out as a bear-away rather than a beat.
+        u=1.0, v=0.0, r=0.0,
     )
     integral = 0.0
     speeds: list[float] = []
