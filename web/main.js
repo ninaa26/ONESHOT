@@ -4,7 +4,8 @@ import { createScene, handleResize } from "./scene.js";
 import { createWind } from "./wind.js";
 import { createBoat, updateBoatFromState } from "./boat.js";
 import { createForceArrows } from "./forces.js";
-import { setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
+import { setBoat, setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
+import { createShipyard } from "./shipyard.js";
 
 // --- Scene & environment ------------------------------------------------
 
@@ -69,6 +70,36 @@ function updateFollowCamera() {
  */
 // Legacy updateBoatFromState is now handled by boat.js and wind.js.
 
+// --- Shipyard (pre-sail selection) --------------------------------------
+
+// The server sends a catalog on connect and waits for a `setup` before it
+// starts simulating. The shipyard collects that choice; Esc while sailing
+// drops the connection so the next one can pick again.
+const shipyard = createShipyard({ onLaunch: sendSetup });
+// A training stream (live_vis) sends state with no catalog first; once we
+// see that, the shipyard has nothing to offer and stays out of the way.
+let streamOnly = false;
+
+function sendSetup(build) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    shipyard.showError("Not connected to the sim backend yet.");
+    return;
+  }
+  socket.send(JSON.stringify({ type: "setup", ...build }));
+}
+
+function returnToShipyard() {
+  if (streamOnly || shipyard.isOpen()) return;
+  shipyard.setStatus("Reconnecting…");
+  shipyard.show();
+  setBoat("—");
+  // Each connection sails one build, so a new pick means a new connection.
+  reconnectDelayMs = 200;
+  if (socket) {
+    socket.close();
+  }
+}
+
 // --- WebSocket client --------------------------------------------------
 
 let socket = null;
@@ -95,11 +126,17 @@ function makeWsUrl() {
   socket.onopen = () => {
     reconnectDelayMs = 1000;
     setConnectionStatus("connected");
+    if (shipyard.isOpen()) {
+      shipyard.setStatus("Connected. Waiting for the catalog…");
+    }
   };
 
   socket.onclose = () => {
     setConnectionStatus("disconnected");
     socket = null;
+    if (shipyard.isOpen()) {
+      shipyard.setStatus("Backend disconnected. Retrying…");
+    }
     const delay = reconnectDelayMs;
     reconnectDelayMs = Math.min(reconnectDelayMs * 2, 10000);
     window.setTimeout(connectWebSocket, delay);
@@ -112,7 +149,37 @@ function makeWsUrl() {
   socket.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data);
-      if (msg && msg.type === "state") {
+      if (!msg) return;
+      if (msg.type === "catalog") {
+        streamOnly = false;
+        shipyard.setCatalog(msg);
+        return;
+      }
+      if (msg.type === "ready") {
+        const build = { boat: msg.boat, parts: msg.parts || {}, helm: msg.helm };
+        setBoat(shipyard.describe(build));
+        if (typeof msg.control_mode === "string") {
+          setControlMode(msg.control_mode);
+        }
+        // Fresh boat, fresh helm: don't carry stale commands into it.
+        rudderCmdDeg = 0;
+        sailCmdDeg = 0;
+        lastSentRudderDeg = 0;
+        lastSentSailDeg = 0;
+        shipyard.hide();
+        return;
+      }
+      if (msg.type === "error") {
+        shipyard.showError(String(msg.message || "The backend rejected that build."));
+        if (!shipyard.isOpen()) shipyard.show();
+        return;
+      }
+      if (msg.type === "state") {
+        if (shipyard.isOpen() && !shipyard.hasCatalog()) {
+          // No catalog ever came: this backend just streams (e.g. training).
+          streamOnly = true;
+          shipyard.hide();
+        }
         const stateVis = updateBoatFromState(
           msg,
           boatGroup,
@@ -167,6 +234,9 @@ let sailCmdDeg = 0.0;
 let rudderStateDeg = 0.0;
 let sailStateDeg = 0.0;
 
+let lastSentRudderDeg = rudderCmdDeg;
+let lastSentSailDeg = sailCmdDeg;
+
 const RUDDER_MAX_DEG = 35.0;
 const SAIL_MAX_DEG = 90.0; // total travel ±90° (180° span)
 const RUDDER_RATE_DEG = 80.0; // deg/s
@@ -179,6 +249,7 @@ let keyUp = false;
 let keyDown = false;
 
 window.addEventListener("keydown", (ev) => {
+  if (shipyard.handleKey(ev)) return;
   switch (ev.code) {
     case "ArrowLeft":
     case "KeyA":
@@ -202,7 +273,16 @@ window.addEventListener("keydown", (ev) => {
 });
 
 window.addEventListener("keyup", (ev) => {
+  if (shipyard.isOpen()) {
+    // A key that opened the shipyard must not keep steering behind it.
+    keyLeft = keyRight = keyUp = keyDown = false;
+    return;
+  }
   switch (ev.code) {
+    case "Escape":
+      returnToShipyard();
+      ev.preventDefault();
+      break;
     case "ArrowLeft":
     case "KeyA":
       keyLeft = false;
@@ -247,11 +327,11 @@ if (forcesSection && forcesToggle) {
   });
 }
 
-let lastSentRudderDeg = rudderCmdDeg;
-let lastSentSailDeg = sailCmdDeg;
-
 function maybeSendControls() {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  // Before `ready` the server is waiting on a setup; a control message now
+  // would make it sail the CLI defaults instead of what the shipyard picks.
+  if (shipyard.isOpen() && !streamOnly) return;
 
   const changedRudder =
     Math.abs(rudderCmdDeg - lastSentRudderDeg) > 0.1;

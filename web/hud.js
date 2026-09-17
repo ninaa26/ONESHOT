@@ -14,6 +14,8 @@ const hudSailAngleEl = document.getElementById("hud-sail-angle");
 const hudRudderAngleEl = document.getElementById("hud-rudder-angle");
 /** @type {HTMLSpanElement | null} */
 const hudSailForceEl = document.getElementById("hud-sail-force");
+/** @type {HTMLSpanElement | null} */
+const hudBoatEl = document.getElementById("hud-boat");
 
 export function setSpeed(valueMs) {
   if (!hudSpeedEl) return;
@@ -29,6 +31,11 @@ export function setHeading(deg) {
 export function setConnectionStatus(text) {
   if (!hudConnEl) return;
   hudConnEl.textContent = text;
+}
+
+export function setBoat(text) {
+  if (!hudBoatEl) return;
+  hudBoatEl.textContent = text || "—";
 }
 
 export function setControlMode(mode) {

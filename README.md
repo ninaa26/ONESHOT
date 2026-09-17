@@ -60,6 +60,13 @@ Once you've installed the packages, you can play sailbench with manual control w
 
 3. Open http://localhost:8000 in your browser.
 
+The page opens on the **shipyard**: pick a boat (any boat config under
+`configs/`), then the sail, keel, rudder and hull models and who holds the helm
+(you, or a trained policy found under `runs/`), and set sail. Arrow keys move
+around, Enter launches, Esc while sailing brings you back to re-rig. Models a
+boat's config cannot support are greyed out with the reason. `--config` and
+`--policy-model` only set what is preselected.
+
 ### Watch a trained RL policy in the web simulation
 
 To run a trained RL model in sailbench, perform the following.

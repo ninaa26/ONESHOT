@@ -115,6 +115,21 @@ class ControlInputs:
     reset: bool = False
 
 
+@dataclass(slots=True)
+class SetupInputs:
+    """What the browser's shipyard screen asked to sail.
+
+    ``boat`` is a YAML filename under ``configs/``. ``parts`` maps a component
+    (``sail``, ``keel``, ``rudder``, ``hull``) to the model option chosen for
+    it; a component left out keeps the model its config names. ``helm`` is
+    ``"manual"`` or the id of a trained policy from the catalog.
+    """
+
+    boat: str
+    parts: dict[str, str]
+    helm: str = "manual"
+
+
 def make_state_message(
     state: State,
     t: float,
@@ -263,3 +278,47 @@ def parse_control_message(data: Mapping[str, Any]) -> ControlInputs:
         reset=bool(data.get("reset", False)),
     )
 
+
+
+def parse_setup_message(data: Mapping[str, Any]) -> SetupInputs:
+    """Parse a raw JSON mapping into structured SetupInputs.
+
+    The expected JSON shape is::
+
+        {
+            "type": "setup",
+            "boat": "flingo_floty.yaml",
+            "parts": {"sail": "orc_w_jib", "keel": "finite_span"},  # optional
+            "helm": "manual"                                          # optional
+        }
+
+    Only the shape is checked here; whether the boat, parts and helm exist is
+    for the runner, which holds the catalog.
+    """
+    msg_type = data.get("type")
+    if msg_type != "setup":
+        msg = f"Unsupported setup message type: {msg_type!r}"
+        raise ValueError(msg)
+
+    boat = data.get("boat")
+    if not isinstance(boat, str) or not boat:
+        msg = "setup needs a boat (config filename)"
+        raise TypeError(msg)
+
+    raw_parts = data.get("parts") or {}
+    if not isinstance(raw_parts, Mapping):
+        msg = "parts must be a mapping of component -> model if present"
+        raise TypeError(msg)
+    parts: dict[str, str] = {}
+    for component, model in raw_parts.items():
+        if not isinstance(component, str) or not isinstance(model, str):
+            msg = "parts must map component names to model names"
+            raise TypeError(msg)
+        parts[component] = model
+
+    helm = data.get("helm", "manual")
+    if not isinstance(helm, str) or not helm:
+        msg = "helm must be a non-empty string if present"
+        raise TypeError(msg)
+
+    return SetupInputs(boat=boat, parts=parts, helm=helm)

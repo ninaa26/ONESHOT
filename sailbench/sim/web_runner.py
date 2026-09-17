@@ -23,8 +23,15 @@ import yaml
 from websockets.server import WebSocketServerProtocol, serve
 
 from sailbench.models.model import State
-from sailbench.sim.protocol import ControlInputs, make_state_message, parse_control_message
+from sailbench.sim.protocol import (
+    ControlInputs,
+    SetupInputs,
+    make_state_message,
+    parse_control_message,
+    parse_setup_message,
+)
 from sailbench.sim.sailboat_hub import SailboatHub
+from sailbench.sim.shipyard import Catalog, build_catalog, overrides_for, validate_setup
 from sailbench.solvers.rk4 import rk4_step
 
 
@@ -287,21 +294,20 @@ async def hub_simulation_loop(
             await ctrl_future
 
 
-async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulationConfig) -> None:
-    """Handle a single WebSocket client using a dedicated SailboatHub instance."""
-    del path  # unused
-
-    hub = SailboatHub(config_file=cfg.config_file)
+def build_simulation(cfg: HubSimulationConfig, setup: SetupInputs, catalog: Catalog) -> HubSimulation:
+    """Build a fresh simulation for one client from what its shipyard picked."""
+    hub = SailboatHub(config_file=setup.boat, overrides=overrides_for(setup.parts))
     dt_cfg = float(hub.simulation_cfg.get("dt", 0.02))
     fps = cfg.fps or (1.0 / dt_cfg if dt_cfg > 0 else 60.0)
     dt = 1.0 / fps
 
     policy = None
     rng = np.random.default_rng(7)
-    if cfg.policy_model is not None:
+    chosen = catalog.policy(setup.helm)
+    if chosen is not None:
         policy = PolicyController.from_files(
-            model_path=cfg.policy_model,
-            config_path=cfg.policy_config,
+            model_path=chosen.model_path,
+            config_path=chosen.config_path,
         )
 
     sim = HubSimulation(
@@ -316,8 +322,61 @@ async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulati
         sim.target_sail_rad = math.radians(float(sim.policy.cfg.max_sail_deg))
         wind_dir_deg = float(sim.hub.sail_cfg.get("wind_dir_deg", 90.0))
         sim.policy.reset_waypoint(sim.state, rng, wind_dir_deg)
+    return sim
+
+
+def default_setup(catalog: Catalog) -> SetupInputs:
+    """Build the setup the CLI flags alone would have sailed, for a client that never picks."""
+    return SetupInputs(boat=catalog.default_boat, parts={}, helm=catalog.default_helm)
+
+
+async def handle_client(ws: WebSocketServerProtocol, path: str, cfg: HubSimulationConfig) -> None:
+    """Handle a single WebSocket client using a dedicated SailboatHub instance.
+
+    The client first gets the catalog and is expected to answer with a `setup`
+    saying which boat, models and helm to sail. A client that sends a control
+    message instead (an older page, or a script) sails the CLI defaults.
+    """
+    del path  # unused
+
+    catalog = build_catalog(cfg.config_file, cfg.policy_model, cfg.policy_config)
+    await ws.send(json.dumps(catalog.to_payload()))
+
+    sim: HubSimulation | None = None
+    pending: ControlInputs | None = None
+    while sim is None:
+        data = json.loads(await ws.recv())
+        try:
+            if isinstance(data, dict) and data.get("type") == "setup":
+                setup = validate_setup(parse_setup_message(data), catalog)
+            else:
+                pending = parse_control_message(data)
+                setup = default_setup(catalog)
+            sim = build_simulation(cfg, setup, catalog)
+        except Exception as exc:  # noqa: BLE001 - report to the client, keep the connection
+            pending = None
+            await ws.send(json.dumps({"type": "error", "message": str(exc)}))
+
+    if pending is not None:
+        sim.apply_controls(pending)
+    ready = {
+        "type": "ready",
+        "boat": setup.boat,
+        "parts": {**catalog_defaults(catalog, setup.boat), **setup.parts},
+        "helm": setup.helm,
+        "control_mode": "rl" if sim.policy is not None else "manual",
+    }
+    await ws.send(json.dumps(ready))
 
     await hub_simulation_loop(ws, sim)
+
+
+def catalog_defaults(catalog: Catalog, boat_id: str) -> dict[str, str]:
+    """Return the models a boat's config names, so `ready` can report the full build."""
+    for boat in catalog.boats:
+        if boat["id"] == boat_id:
+            return dict(boat["defaults"])
+    return {}
 
 
 async def run_server(

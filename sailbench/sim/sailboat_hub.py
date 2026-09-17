@@ -1,7 +1,8 @@
 """Compose a simulated sailboat."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -44,10 +45,18 @@ RUDDER_MODELS: dict[str, type] = {
 class SailboatHub:
     """A hub to manage sailboat simulation components."""
 
-    def __init__(self, config_file: str) -> None:
-        """Initialize the SailboatHub with configuration from a YAML file."""
+    def __init__(self, config_file: str, overrides: Mapping[str, Mapping[str, Any]] | None = None) -> None:
+        """Initialize the SailboatHub with configuration from a YAML file.
+
+        `overrides` is layered on top of the file, one mapping per section
+        (`{"sail": {"model_type": "orc_main"}}`), so a caller can swap a
+        component's model or a parameter without editing the YAML. The web
+        shipyard uses this; the YAML stays the boat's record.
+        """
         with Path(CONFIG_PATH + config_file).open() as file:
             cfg = yaml.safe_load(file)
+        for section, values in (overrides or {}).items():
+            cfg.setdefault(section, {}).update(values)
 
         self.simulation_cfg = cfg["simulation"]
         self.boat_cfg = cfg["boat"]
