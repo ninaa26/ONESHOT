@@ -381,8 +381,14 @@ export function createShipyard({ onLaunch }) {
     return `${name} · ${parts.join(" / ")}`;
   }
 
+  function geometryFor(boatId) {
+    const boat = boatById(boatId);
+    return boat ? boat.geometry || null : null;
+  }
+
   return {
     setCatalog,
+    geometryFor,
     setStatus,
     showError,
     show,

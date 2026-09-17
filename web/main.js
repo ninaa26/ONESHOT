@@ -18,7 +18,8 @@ const wind = createWind(scene);
 
 // --- Boat ---------------------------------------------------------------
 
-const { boatGroup, sailGroup, rudderGroup, updateTrace, animateControlSurfaces } = createBoat(scene);
+const { boatGroup, sailGroup, rudderGroup, updateTrace, animateControlSurfaces, setRig, setGeometry } =
+  createBoat(scene);
 const waypointMarker = new THREE.Mesh(
   new THREE.SphereGeometry(0.28, 20, 20),
   new THREE.MeshStandardMaterial({
@@ -177,6 +178,10 @@ function makeWsUrl() {
       if (msg.type === "ready") {
         const build = { boat: msg.boat, parts: msg.parts || {}, helm: msg.helm };
         setBoat(shipyard.describe(build));
+        // Draw this boat at its own size, with the rig its sail model describes,
+        // rather than one fixed hull with one fixed sail.
+        setGeometry(shipyard.geometryFor(build.boat));
+        setRig(build.parts.sail);
         if (typeof msg.control_mode === "string") {
           setControlMode(msg.control_mode);
         }

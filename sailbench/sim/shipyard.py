@@ -10,6 +10,7 @@ greyed out with the hub's own reason rather than blowing up after launch.
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -22,8 +23,6 @@ from sailbench.sim.registry import options, unavailable
 from sailbench.sim.sailboat_hub import CONFIG_PATH
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from sailbench.sim.protocol import SetupInputs
 
 RUNS_PATH = "runs/"
@@ -164,6 +163,62 @@ def _boat_name(cfg: dict[str, Any], stem: str) -> str:
     return str(declared) if declared else _pretty_name(stem)
 
 
+
+# A foil with no span stated anywhere still has to be drawn. This is the aspect
+# ratio assumed for it, chosen to match the one the unmeasured boats state.
+FALLBACK_ASPECT_RATIO = 4.0
+FALLBACK_RIG_ASPECT_RATIO = 3.0
+
+
+def _span_of(section: Mapping[str, Any], fallback_ar: float) -> float | None:
+    """Return a span for drawing this foil, from whatever the config gives.
+
+    A span may sit at the section level, or inside the block of whichever model
+    wants it, or not exist at all -- the shape of the boat does not depend on
+    which model is selected, so all three are searched and an aspect ratio is
+    the last resort.
+    """
+    area = section.get("area")
+    if not isinstance(area, (int, float)) or area <= 0:
+        return None
+
+    candidates = [section, *(v for v in (section.get("models") or {}).values() if isinstance(v, Mapping))]
+    for source in candidates:
+        span = source.get("span")
+        if isinstance(span, (int, float)) and span > 0:
+            return float(span)
+    for source in candidates:
+        ar = source.get("effective_aspect_ratio")
+        if isinstance(ar, (int, float)) and ar > 0:
+            return float((ar * float(area)) ** 0.5)
+    return float((fallback_ar * float(area)) ** 0.5)
+
+
+def _geometry(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the dimensions a renderer needs to draw this boat to scale.
+
+    The catalog's stats are for reading; these are for building. Everything is
+    in metres, in the simulator's own frame: +x forward of the centre of
+    rotation, spans measured downwards for the foils and upwards for the rig.
+    """
+    def number(section: str, key: str) -> float | None:
+        value = cfg.get(section, {}).get(key)
+        return float(value) if isinstance(value, (int, float)) else None
+
+    parts: dict[str, Any] = {
+        "hull": {"L": number("hull", "L"), "B": number("hull", "B"), "T": number("hull", "T")},
+    }
+    for part, fallback in (("keel", FALLBACK_ASPECT_RATIO), ("rudder", FALLBACK_ASPECT_RATIO),
+                           ("sail", FALLBACK_RIG_ASPECT_RATIO)):
+        section = cfg.get(part, {})
+        parts[part] = {
+            "area": number(part, "area"),
+            "span": _span_of(section, fallback),
+            "x_pos": number(part, "x_pos") or 0.0,
+        }
+    return parts
+
+
 def _describe_boat(path: Path) -> dict[str, Any] | None:
     """One boat card, or None if the YAML is not a boat config."""
     with path.open(encoding="utf-8") as file:
@@ -194,6 +249,7 @@ def _describe_boat(path: Path) -> dict[str, Any] | None:
     return {
         "id": path.name,
         "name": _boat_name(cfg, path.stem),
+        "geometry": _geometry(cfg),
         "defaults": defaults,
         "available": available,
         "stats": stats,
