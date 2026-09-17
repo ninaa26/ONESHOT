@@ -82,6 +82,20 @@ JIB_CD0 = np.array([0.05000, 0.03200, 0.03100, 0.03700, 0.25000, 0.35000, 0.7300
 # ORC "kpj".
 KPJ = 0.016
 
+# --- ORC VPP 2023 Figure 5.14, kheff against apparent wind angle ------------
+# The effective rig height is not the masthead. Close-hauled the jib seals
+# against the deck and the two sails act as one taller wing, so the rig sheds
+# less tip vortex than its height suggests; eased onto a reach that seal is
+# lost and the interaction turns unfavourable. ORC gives the curve only as a
+# figure, with the text pinning 1.4513 at 20 degrees and 0.80 from 80. These
+# values are traced from the published plot at 5-degree intervals and held at
+# 0.80 past 80 degrees, where the figure ends flat.
+KHEFF_AWA_DEG = np.arange(0.0, 81.0, 5.0)
+KHEFF = np.array([
+    1.000, 1.195, 1.350, 1.433, 1.4513, 1.365, 1.248, 1.133, 1.028,
+    0.948, 0.899, 0.868, 0.844, 0.825, 0.810, 0.802, 0.800,
+])
+
 
 class ORCSail(Model):
     """Single-sail aerodynamic model using the ORC VPP coefficient envelope.
@@ -91,9 +105,13 @@ class ORCSail(Model):
         jib_area: jib area [m^2], part of ``area``. Absent or zero, the whole
             area is a mainsail; otherwise the envelope is ORC's area-weighted
             blend of the main and jib tables.
-        heff: effective rig height [m], used for induced drag. Prefer the
-            measured masthead height above the waterline. Defaults to
-            ``1.8 * sqrt(area)`` when absent.
+        heff: rig height [m], the highest point of the sail plan above the
+            waterline (ORC's ``b + HBI``). Defaults to ``1.8 * sqrt(area)``.
+        heff_model: ``orc`` scales ``heff`` by ORC's ``kheff`` curve against
+            apparent wind angle (Figure 5.14), so the rig is effectively taller
+            close-hauled and shorter on a reach. Absent, ``heff`` is constant.
+        eff_span_corr: ORC's sail-plan correction to effective span, eq. 5.42,
+            from roach, fractionality and overlap. Default 1.0 (no correction).
         wind_speed, wind_dir_deg: true wind (direction it blows *to*).
         rho_air: [kg/m^3], supplied by the hub's ``environment`` block.
         alpha_opt_deg: sail angle of attack giving peak lift, default 22.
@@ -110,6 +128,12 @@ class ORCSail(Model):
             raise ValueError(msg)
         self.main_area = self.area - self.jib_area
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
+        heff_model = str(self.p.get("heff_model", "constant")).lower()
+        if heff_model not in ("constant", "orc"):
+            msg = f"ORCSail heff_model must be 'constant' or 'orc': got {heff_model!r}"
+            raise ValueError(msg)
+        self.heff_varies = heff_model == "orc"
+        self.eff_span_corr = float(self.p.get("eff_span_corr", 1.0))
         self.alpha_opt = np.radians(float(self.p.get("alpha_opt_deg", 22.0)))
         self.flat_floor = float(self.p.get("flat_stall_floor", 0.55))
         # Righting-moment limit. Both keys are needed or neither: a limit without
@@ -130,6 +154,7 @@ class ORCSail(Model):
         self.last_flat = 0.0
         self.last_cl = 0.0
         self.last_cd = 0.0
+        self.last_heff = self.heff
 
     # --- coefficient envelope ------------------------------------------
     def envelope(self, awa_deg: float) -> tuple[float, float, float]:
@@ -160,6 +185,16 @@ class ORCSail(Model):
             kpp = wm * KPM + wj * KPJ
         return cl, cd0, kpp
 
+    def effective_height(self, awa_deg: float) -> float:
+        """Return the effective rig height for induced drag at an apparent wind angle.
+
+        ORC eqs. 5.43 and 5.45: ``heff = eff_span_corr * kheff(beta) * (b + HBI)``.
+        With ``heff_model`` unset ``kheff`` is 1 and this is the configured
+        height scaled by ``eff_span_corr`` alone.
+        """
+        k = float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, KHEFF)) if self.heff_varies else 1.0
+        return self.eff_span_corr * k * self.heff
+
     def flat_from_trim(self, alpha_rad: float) -> float:
         """ORC ``flat`` depowering factor from the sail's angle of attack.
 
@@ -174,7 +209,14 @@ class ORCSail(Model):
         return float(1.0 - (1.0 - self.flat_floor) * decay)
 
     def flat_for_righting_moment(
-        self, flat: float, beta: float, cl_max: float, cd0: float, q_area: float, kpp: float = KPM,
+        self,
+        flat: float,
+        beta: float,
+        cl_max: float,
+        cd0: float,
+        q_area: float,
+        kpp: float = KPM,
+        heff: float | None = None,
     ) -> float:
         """Largest `flat` up to `flat` whose heeling moment fits the righting moment.
 
@@ -200,7 +242,8 @@ class ORCSail(Model):
             return flat
 
         ch_max = self.max_heeling_moment / (q_area * self.heel_arm)
-        k = kpp + self.area / (np.pi * self.heff**2)
+        h = self.heff if heff is None else heff
+        k = kpp + self.area / (np.pi * h**2)
         a = k * cl_max * cl_max * np.sin(beta)
         b = cl_max * np.cos(beta)
         c = cd0 * np.sin(beta)
@@ -261,14 +304,15 @@ class ORCSail(Model):
         alpha = beta - boom
 
         cl_max, cd0, kpp = self.envelope(np.degrees(beta))
+        heff = self.effective_height(np.degrees(beta))
         flat = self.flat_from_trim(alpha) if alpha > 0.0 else 0.0
 
         q = 0.5 * rho * aw_speed * aw_speed * self.area
-        flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q, kpp)
+        flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q, kpp, heff)
 
         cl = cl_max * flat
-        # ORC eq.: CDi = [KPP + Aref / (pi * heff^2)] * (CLmax * flat)^2
-        cd_induced = (kpp + self.area / (np.pi * self.heff**2)) * cl * cl
+        # ORC eq. 5.46: CDi = [KPP + Aref / (pi * heff^2)] * (CLmax * flat)^2
+        cd_induced = (kpp + self.area / (np.pi * heff**2)) * cl * cl
         cd = cd0 + cd_induced
 
         # ORC drive / heel resolution.
@@ -279,6 +323,7 @@ class ORCSail(Model):
         self.last_flat = float(flat)
         self.last_cl = float(cl)
         self.last_cd = float(cd)
+        self.last_heff = float(heff)
 
         # Wind from +y pushes the boat toward -y.
         return np.array([q * cr, -wind_side * q * ch], dtype=float)

@@ -83,9 +83,22 @@ sail:
   # between foot and deck and does not. Weighted by area (jib 39%, main 61%)
   # that is 1 + 0.39, giving an effective AR of 4.75.
   end_plate_factor: 1.39
-  # Effective rig height for ORC induced drag: measured masthead above the
-  # waterline. Both sails hang from roughly this height.
+  # Rig height for ORC induced drag: measured masthead above the waterline,
+  # ORC's (b + HBI). Both sails hang from roughly this height.
   heff: 2.592   # [m]
+  # ORC 5.4.3 does not use that height as-is. Close-hauled the deck-sweeping
+  # jib seals against the hull and the two sails work as one taller wing, so
+  # the effective height is 1.45x the masthead at 20 deg AWA (Figure 5.14),
+  # falling to 0.80x once the sheets are eased past 80. Induced drag goes as
+  # 1/heff^2, so holding heff at the masthead over-charged the rig about 2x on
+  # a beat. `orc` applies the curve; unset, heff is constant.
+  heff_model: orc
+  # ORC eq. 5.42 sail-plan correction, from the measured rig:
+  #   roach         0.000  main area 1.1955 equals 0.5 * luff * foot exactly
+  #   fractionality 0.937  jib head 2.260 / main head 2.412, both above deck
+  #   overlap       1.0    ASSUMED: LP = 0.686 = foot, J not in the CAD notes
+  #   1.1 + 0.08*(0 - 0.2) + 0.5*(0.68 + 0.31*0.937 + 0.075*1.0 - 1.1)
+  eff_span_corr: 1.057
   # ORC depowering. Both keys together, or neither. UNSET because the righting
   # moment is not measured: the CAD CG sits 0.17 m ABOVE the waterline, which
   # would give GM ~0.09 m, but that rests on the densities the measurement file

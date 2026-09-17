@@ -9,6 +9,8 @@ from sailbench.foils.orc_sail import (
     JIB_AWA_DEG,
     JIB_CD0,
     JIB_CL,
+    KHEFF,
+    KHEFF_AWA_DEG,
     KPJ,
     KPM,
     MAIN_AWA_DEG,
@@ -330,3 +332,60 @@ class TestSloop:
     def test_whole_rig_as_jib_is_allowed(self) -> None:
         """jib_area == area is the degenerate but valid jib-only rig."""
         assert make_sail(jib_area=1.971).main_area == 0.0
+
+
+class TestEffectiveHeight:
+    """ORC 5.4.3: effective rig height varies with apparent wind angle."""
+
+    def test_constant_by_default(self) -> None:
+        """Without heff_model the configured height is used at every angle."""
+        sail = make_sail()
+        for awa in (0.0, 20.0, 45.0, 80.0, 150.0):
+            assert sail.effective_height(awa) == pytest.approx(2.592)
+
+    def test_orc_curve_matches_the_published_anchors(self) -> None:
+        """The text pins kheff at 1.0 (0 deg), 1.4513 (20 deg) and 0.80 (80 deg on)."""
+        sail = make_sail(heff_model="orc")
+        assert sail.effective_height(0.0) == pytest.approx(2.592 * 1.0)
+        assert sail.effective_height(20.0) == pytest.approx(2.592 * 1.4513)
+        assert sail.effective_height(80.0) == pytest.approx(2.592 * 0.80)
+        assert sail.effective_height(150.0) == pytest.approx(2.592 * 0.80)
+
+    def test_orc_curve_matches_the_table_at_its_nodes(self) -> None:
+        """Interpolation reproduces the traced figure exactly."""
+        sail = make_sail(heff_model="orc")
+        for awa, k in zip(KHEFF_AWA_DEG, KHEFF, strict=True):
+            assert sail.effective_height(float(awa)) == pytest.approx(2.592 * float(k))
+
+    def test_taller_on_a_beat_than_on_a_reach(self) -> None:
+        """The whole point: jib-hull sealing makes the rig act taller close-hauled."""
+        sail = make_sail(heff_model="orc")
+        assert sail.effective_height(20.0) > sail.effective_height(0.0)
+        assert sail.effective_height(20.0) > sail.effective_height(60.0) > sail.effective_height(90.0)
+
+    def test_symmetric_in_wind_side(self) -> None:
+        """Height depends on the magnitude of the apparent wind angle."""
+        sail = make_sail(heff_model="orc")
+        assert sail.effective_height(-25.0) == sail.effective_height(25.0)
+
+    def test_span_correction_scales_the_height(self) -> None:
+        """eff_span_corr multiplies the height whatever the model."""
+        assert make_sail(eff_span_corr=1.057).effective_height(45.0) == pytest.approx(2.592 * 1.057)
+        orc = make_sail(heff_model="orc", eff_span_corr=1.057)
+        assert orc.effective_height(20.0) == pytest.approx(2.592 * 1.057 * 1.4513)
+
+    def test_less_induced_drag_on_a_beat(self) -> None:
+        """A taller effective rig sheds less tip vortex for the same lift."""
+        psi = beat(35.0)
+        args = (make_state(psi=psi), tree(math.radians(15.0), psi))
+        const, orc = make_sail(), make_sail(heff_model="orc")
+        const.compute(*args)
+        orc.compute(*args)
+        assert orc.last_cl == pytest.approx(const.last_cl)
+        assert orc.last_cd < const.last_cd
+        assert orc.last_heff > const.last_heff
+
+    def test_unknown_model_raises(self) -> None:
+        """A typo must not silently fall back to a constant height."""
+        with pytest.raises(ValueError, match="heff_model"):
+            make_sail(heff_model="fancy")
