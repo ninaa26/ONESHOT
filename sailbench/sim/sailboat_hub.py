@@ -47,7 +47,7 @@ class SailboatHub:
 
     def boat_factory(self) -> None:
         """Instantiate boat components from configs."""
-        self._inject_fluid_densities()
+        self._apply_environment()
 
         self.sail = BasicSail(self.sail_cfg)
         self.rudder = BasicRudder(self.rudder_cfg)
@@ -96,21 +96,24 @@ class SailboatHub:
             transform=Transform2D(x=self.sail_cfg.get("x_pos", 0.0), y=self.sail_cfg.get("y_pos", 0.0), c=1.0, s=0.0),
         )
 
-    def _inject_fluid_densities(self) -> None:
-        """Push the environment densities into every component's parameters.
+    def _apply_environment(self) -> None:
+        """Offer the shared `environment` values to every component as defaults.
 
-        Each component used to default its own density under its own key name
-        (`rho`, `water_density`, `air_density`), none of which any config set, so
-        every one of them silently fell back and the configured value did nothing.
-        Resolving both numbers here keeps a single source of truth: whatever the
-        `environment` block says is what the components actually use.
+        Components used to default their own fluid density under their own key
+        name (`rho`, `water_density`, `air_density`), none of which any config
+        set, so every one of them silently fell back and the configured value did
+        nothing.
+
+        The hub layers the `environment` block underneath each component's own
+        parameters rather than assigning named keys, so it stays ignorant of
+        which component wants which quantity: a foil asks for `rho_air`, a hull
+        for `rho_water`, and a component that needs neither sees no change. A
+        value set in the component's own section still wins, so a component can
+        override the shared one.
         """
-        rho_water = float(self.environment_cfg.get("rho_water", 1000.0))
-        rho_air = float(self.environment_cfg.get("rho_air", 1.225))
-
-        for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg):
-            cfg["rho_water"] = rho_water
-        self.sail_cfg["rho_air"] = rho_air
+        for cfg in (self.hull_cfg, self.keel_cfg, self.rudder_cfg, self.sail_cfg):
+            for key, value in self.environment_cfg.items():
+                cfg.setdefault(key, value)
 
     def step(
         self,
