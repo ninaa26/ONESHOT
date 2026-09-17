@@ -3,7 +3,7 @@
 import numpy as np
 
 from sailbench.models.model import State
-from sailbench.tf.tf_tree import Transform2D
+from sailbench.tf.tf_tree import TFTree2D, Transform2D
 
 
 def get_global_track(state: State) -> float:
@@ -20,46 +20,6 @@ def get_global_track(state: State) -> float:
     v = state.v
     track_rad = np.arctan2(v, u)
     return float(np.degrees(track_rad))
-
-
-def get_local_track(state: State) -> float:
-    """Get the boat's local track angle in degrees.
-
-    Args:
-        state (State): Current body state of the sailboat -> [x, y, psi, u, v, r]
-
-    Returns:
-        float: Boat local track angle in degrees from -180 to 180.
-
-    """
-    global_deg = get_global_track(state)
-    psi_deg = state.get_heading
-
-    diff = global_deg - psi_deg
-
-    # wrap to [-180, 180]
-    return ((diff + 180.0) % 360.0) - 180.0
-
-def get_local_track_vector(state: State) -> np.ndarray:
-    """Return unit track vector in boat frame."""
-    vec = np.array([state.u, state.v], dtype=np.float64)
-    mag = np.linalg.norm(vec)
-
-    return vec / mag
-
-def get_velocity_magnitude(state: State) -> float:
-    """Get the boat's velocity magnitude.
-
-    Args:
-        state (State): Current body state of the sailboat -> [x, y, psi, u, v, r]
-
-    Returns:
-        float: Boat velocity magnitude in m/s.
-
-    """
-    u = state.u
-    v = state.v
-    return float(np.hypot(u, v))
 
 
 def fluid_transform_from_state(state: State) -> Transform2D:
@@ -99,39 +59,6 @@ def fluid_transform_from_velocity(u: float, v: float) -> Transform2D:
     if speed <= 1e-6:
         return Transform2D(x=0.0, y=0.0, c=1.0, s=0.0)
     return Transform2D(x=0.0, y=0.0, c=-float(u) / speed, s=-float(v) / speed)
-
-
-def fluid_frame_to_body_frame(forces_fluid: np.ndarray, local_track_deg: float) -> np.ndarray:
-    """Convert forces from fluid frame to body frame.
-
-    Args:
-        forces_fluid (np.ndarray): Forces in fluid frame (x: lift, y: drag).
-        local_track (np.ndarray): Local track angle in degrees.
-
-    Returns:
-        np.ndarray: Forces in body frame (+X, +Y).
-
-    """
-    local_track_deg_360 = local_track_deg % 360
-    local_track_rad = np.radians(local_track_deg_360)
-    rotation_matrix = np.array(
-        [[np.cos(local_track_rad), np.sin(local_track_rad)], [-np.sin(local_track_rad), np.cos(local_track_rad)]]
-    )
-    return np.asarray(rotation_matrix @ forces_fluid, dtype=np.float64)
-
-
-def global_to_local(vec_global: np.ndarray, psi: tuple[float, float]) -> np.ndarray:
-    """Rotate vector from global frame to body/local frame."""
-    c, s = psi
-
-    rot_t = np.array(
-        [
-            [c, s],
-            [-s, c],
-        ]
-    )
-
-    return rot_t @ vec_global
 
 
 def apparent_wind_boat(

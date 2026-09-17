@@ -28,8 +28,8 @@ class TFTree2D:
     """Simple 2D transform tree."""
 
     def __init__(self) -> None:
-        self.transforms: Dict[str, Transform2D] = {}
-        self.parents: Dict[str, Optional[str]] = {}
+        self.transforms: dict[str, Transform2D] = {}
+        self.parents: dict[str, str | None] = {}
         self.root: str = "world"
 
     def add_root(self, name: str) -> None:
@@ -39,7 +39,7 @@ class TFTree2D:
     def add_frame(
         self,
         name: str,
-        parent: Optional[str],
+        parent: str | None,
         transform: Transform2D,
     ) -> None:
         """Add or update a frame. Transform is from parent -> child."""
