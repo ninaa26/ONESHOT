@@ -30,19 +30,29 @@ class TestHubOverrides:
         assert isinstance(SailboatHub("basic_sailbot.yaml").sail, BasicSail)
 
     def test_override_swaps_the_model(self) -> None:
-        """A model_type override picks a different sail class."""
-        hub = SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model_type": "orc_main"}})
+        """A `model` override picks a different sail class."""
+        hub = SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model": "orc_main"}})
         assert isinstance(hub.sail, ORCMainSail)
+
+    def test_an_override_in_the_old_spelling_is_refused(self) -> None:
+        """Rather than silently sailing the model the config named.
+
+        Every shipped boat now says `model`. An override writing `model_type`
+        would lose to it, so the screen would show one model and the boat run
+        another; the disagreement is an error instead.
+        """
+        with pytest.raises(ValueError, match="names two different models"):
+            SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model_type": "orc_main"}})
 
     def test_override_reaches_the_component(self) -> None:
         """Any key can be overridden, not just the model selector."""
         hub = SailboatHub("basic_sailbot.yaml", overrides={"hull": {"friction_model": "hughes"}})
         assert hub.hull_cfg["friction_model"] == "hughes"
 
-    def test_override_that_the_model_rejects_raises(self) -> None:
-        """The hub does not paper over a model refusing its config."""
-        with pytest.raises(ValueError, match="jib_area"):
-            SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model_type": "orc_w_jib"}})
+    def test_override_of_a_model_the_boat_does_not_offer_raises(self) -> None:
+        """The hub does not paper over a boat having no block for a model."""
+        with pytest.raises(ValueError, match=r"no `models\.orc_w_jib` block"):
+            SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model": "orc_w_jib"}})
 
 
 class TestCatalog:
@@ -77,17 +87,24 @@ class TestCatalog:
             "hull": "hughes",
         }
 
-    def test_availability_comes_from_actually_building(self, catalog: Catalog) -> None:
-        """An option is greyed out with the model's own reason, not a guess."""
-        basic = boat(catalog, "basic_sailbot.yaml")["available"]
-        assert basic["sail"]["basic"] is None
-        assert basic["sail"]["orc_main"] is None
-        assert "jib_area" in basic["sail"]["orc_w_jib"]
-        assert "span" in basic["keel"]["finite_span"]
+    def test_a_migrated_boat_offers_every_model_it_carries(self, catalog: Catalog) -> None:
+        """What the migration was for: both models of a part, on one boat.
 
+        Flingo measured a span, which used to mean it could never be sailed
+        without one, and carries a jib, which used to rule out the mainsail-only
+        rig. Every option it has a block for is now available.
+        """
         flingo = boat(catalog, "flingo_floty.yaml")["available"]
-        assert flingo["sail"]["orc_w_jib"] is None
-        assert "jib_area" in flingo["sail"]["orc_main"]
+        for part, offered in flingo.items():
+            assert all(reason is None for reason in offered.values()), f"{part}: {offered}"
+
+    def test_a_boat_is_greyed_out_only_where_it_offers_nothing(self, catalog: Catalog) -> None:
+        """The single-sail boats decline the sloop rig, and say why in their terms."""
+        basic = boat(catalog, "basic_sailbot.yaml")["available"]
+        assert basic["keel"]["finite_span"] is None  # from its assumed aspect ratio
+        assert basic["rudder"]["finite_span"] is None  # the clamps moved under `basic`
+        assert basic["sail"]["orc_main"] is None
+        assert "no `models.orc_w_jib` block" in basic["sail"]["orc_w_jib"]
 
     def test_every_default_is_available(self, catalog: Catalog) -> None:
         """A boat's own defaults must never be greyed out."""

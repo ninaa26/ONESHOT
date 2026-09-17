@@ -48,26 +48,31 @@ hull:
 keel:
   # Thicker section (12%) gives better L/D at boat Re than NACA0006 (6%)
   airfoil_name: NACA0010
-  model_type: finite_span
+  model: finite_span
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [2.6e5]  # Re = V*c/nu at 1.5 m/s on the measured 0.175 m mean chord
   area: 0.1225  # [m²]    planform area (STL projected silhouette)
-  # Measured: hull underside to tip. Geometric AR 4.00; with the hull acting as
-  # an end plate the effective AR is 8.0, so this is a deep, efficient fin.
-  span: 0.700   # [m]     submerged span below the hull
-  end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
-  # Post-stall: blend towards a flat plate rather than trusting the section polar
-  # where it has no meaning. alpha_sep 25 deg puts stall onset near 15.
-  alpha_sep_deg: 25.0
   x_pos: 0.184  # [m]    forward of the CG (CG = LCB, fixed by level flotation)
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
+  # Everything above is true of this keel whichever model reads it. Below,
+  # the measured span and its consequences, which only `finite_span` uses.
+  models:
+    basic: {}
+    finite_span:
+      # Measured: hull underside to tip. Geometric AR 4.00; with the hull acting as
+      # an end plate the effective AR is 8.0, so this is a deep, efficient fin.
+      span: 0.700   # [m]     submerged span below the hull
+      end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
+      # Post-stall: blend towards a flat plate rather than trusting the section polar
+      # where it has no meaning. alpha_sep 25 deg puts stall onset near 15.
+      alpha_sep_deg: 25.0
 
 sail:
   # ORC VPP coefficient envelope against apparent wind angle. The alternative,
   # `basic`, looks a symmetric NACA section up at a geometric angle of attack,
   # which is the wrong shape for a cambered membrane.
-  model_type: orc_w_jib
+  model: orc_w_jib
   # Flingo is a sloop, not the single-sail rig the earlier notes assumed:
   # main 1.196 m² (luff 2.326, AR 4.53) + jib 0.775 m² (luff 2.260, AR 6.59).
   # `orc_w_jib` is the main-and-jib model (`orc_main` is mainsail only and will
@@ -75,7 +80,6 @@ sail:
   # combined reference area and `jib_area` tells the model how much of it to
   # look up in the jib table (ORC 5.4.1: coefficients blend by area share).
   area: 1.971  # [m²]    main + jib; sail area / displacement^(2/3) = 21.9
-  jib_area: 0.775  # [m²]  measured; 39% of the rig
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   # Rig span for induced drag: masthead is 2.592 m above the waterline.
@@ -120,7 +124,14 @@ sail:
   # rudder servo. Literature puts a sheet winch near 3 s.
   tau_s: 3.0            # [s]
   max_rate_deg_s: 60.0  # winch slew limit
-
+  # `area` above is the COMBINED main + jib area, which is what orc_w_jib
+  # means by it. Selecting orc_main sails that whole area as one mainsail:
+  # a different rig from the real boat, offered because it is askable.
+  models:
+    basic: {}
+    orc_main: {}
+    orc_w_jib:
+      jib_area: 0.775  # [m²]  measured; 39% of the rig
 
 windage:
   # Above-water drag: mast, rigging, topsides and deck gear. ORC treats this
@@ -144,25 +155,17 @@ windage:
 
 rudder:
   airfoil_name: NACA0012
-  model_type: finite_span
+  model: finite_span
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [1.2e5]  # Re = V*c/nu at 1.5 m/s on the measured 0.082 m mean chord
   area: 0.0462  # [m²]    blade planform, stock excluded
-  # Blade only. The CAD body spans 0.578 m but ~0.10 m of that is stock above
-  # the blade, which is not a lifting surface. Geometric AR 4.95, not 6.94.
-  span: 0.478   # [m]     blade span
-  end_plate_factor: 1.0  # surface-piercing, no image
   x_pos: -0.227  # [m]    aft of the CG; arm 92 mm shorter against the real CG
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   # Retuned 0.2 -> 0.6 alongside the finite-span correction. The old value was a
   # hand-tuned stand-in for exactly that correction; keeping it would double-count
   # and the boat loses steerage (the audit measured the no-go pushed out to 57 deg).
   effectiveness: 0.6  # scale rudder force to avoid over-steer
-  # Blending supersedes the aoa_limit_deg / cl_max / cd_max clamps: those pinned
-  # the coefficients at a constant past stall and left a kink in the derivative
-  # right where a stalled rudder operates.
-  alpha_sep_deg: 25.0
   # Servo dynamics. tau_s is the first-order lag; the simulator solves it exactly
   # for a command held across the step, so it costs no integration accuracy.
   tau_s: 0.1            # [s] rudder servo, literature value for a boat this size
@@ -172,3 +175,17 @@ rudder:
   # ask for, so a learned policy cannot tell what its own action did.
   deadband_deg: 0.0
   center_tau_s: 0.0
+  # As for the keel: the measured span and the post-stall blend belong to
+  # `finite_span`. `basic` needs none of them, and refuses them beside it.
+  models:
+    basic: {}
+    finite_span:
+      # Blade only. The CAD body spans 0.578 m but ~0.10 m of that is stock above
+      # the blade, which is not a lifting surface. Geometric AR 4.95, not 6.94.
+      span: 0.478   # [m]     blade span
+      end_plate_factor: 1.0  # surface-piercing, no image
+      # Blending supersedes the aoa_limit_deg / cl_max / cd_max clamps: those pinned
+      # the coefficients at a constant past stall and left a kink in the derivative
+      # right where a stalled rudder operates.
+      alpha_sep_deg: 25.0
+

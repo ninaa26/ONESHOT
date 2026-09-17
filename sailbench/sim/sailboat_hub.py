@@ -222,7 +222,6 @@ class SailboatHub:
         `sail_angle` is treated as sheet limit (max |sail angle| from centerline),
         not as a rigid commanded sail angle.
         """
-
         self._sync_wind()
 
         # Advance the actuators BEFORE integrating, so a command is in effect
@@ -318,7 +317,7 @@ class SailboatHub:
                 self.windage_cfg[key] = self.sail_cfg[key]
 
     def _set_kinematic_frames(
-        self, state: State, sheet_limit_rad: float, rudder_angle_deg: float | None = None
+        self, state: State, sheet_limit_rad: float, rudder_angle_deg: float | None = None,
     ) -> None:
         """Set the boat, sail and rudder frames.
 
@@ -380,7 +379,6 @@ class SailboatHub:
         The sail free-spins with apparent wind, constrained by sheet limit.
         Luffing/depower remains in the aerodynamic sail model.
         """
-
         # Compute wind vector in world frame
         wind_speed = float(self.sail_cfg.get("wind_speed", 0.0))
         wind_angle_deg = float(self.sail_cfg.get("wind_dir_deg", 0.0))

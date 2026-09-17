@@ -28,9 +28,15 @@ class TestModelName:
         assert model_name({"model_type": "orc_main"}) == "orc_main"
         assert model_name({"model": "orc_main"}) == "orc_main"
 
-    def test_model_wins_over_model_type(self) -> None:
-        """An override writes `model`, and must land whichever key the file used."""
-        assert model_name({"model_type": "basic", "model": "finite_span"}) == "finite_span"
+    def test_agreeing_spellings_are_fine(self) -> None:
+        """Saying the same thing twice is not a disagreement."""
+        assert model_name({"model_type": "orc_main", "model": "orc_main"}) == "orc_main"
+
+    def test_two_different_models_is_refused(self) -> None:
+        """An override that wrote the old key onto a migrated config must not sail
+        a model nobody picked while the screen shows another."""
+        with pytest.raises(ValueError, match="names two different models"):
+            model_name({"model_type": "basic", "model": "finite_span"})
 
     def test_lowercased(self) -> None:
         """Selector values are matched case-insensitively."""
@@ -139,50 +145,56 @@ class TestComposeRejections:
 class TestHubComposes:
     """The hub builds a migrated section's model from that model's own block."""
 
-    @pytest.fixture
-    def migrated(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-        """Flingo with its keel rewritten into the `models` shape, nothing else changed."""
-        cfg = yaml.safe_load(Path("configs/flingo_floty.yaml").read_text(encoding="utf-8"))
-        keel = cfg["keel"]
-        finite = {key: keel.pop(key) for key in ("span", "end_plate_factor", "alpha_sep_deg") if key in keel}
-        keel.pop("model_type", None)
-        keel["model"] = "finite_span"
-        keel["models"] = {"basic": {}, "finite_span": finite}
-
-        (tmp_path / "migrated.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
-        monkeypatch.setattr(sailboat_hub, "CONFIG_PATH", f"{tmp_path}/")
-        return "migrated.yaml"
-
-    def test_selected_model_gets_its_block(self, migrated: str) -> None:
-        """The finite-span keel is built, and its span reaches it."""
-        keel = SailboatHub(migrated).keel
+    def test_selected_model_gets_its_block(self) -> None:
+        """Flingo ships migrated: its measured span reaches the finite-span keel."""
+        keel = SailboatHub("flingo_floty.yaml").keel
         assert isinstance(keel, FiniteSpanKeel)
-        assert keel.p["span"] == 0.700
-        assert keel.p["end_plate_factor"] == 2.0
+        assert keel.p["span"] == pytest.approx(0.700)
+        assert keel.p["end_plate_factor"] == pytest.approx(2.0)
 
-    def test_shared_geometry_still_reaches_it(self, migrated: str) -> None:
+    def test_shared_geometry_still_reaches_it(self) -> None:
         """Area stayed at the section level and is not repeated in either block."""
-        assert SailboatHub(migrated).keel.p["area"] == 0.1225
+        assert SailboatHub("flingo_floty.yaml").keel.p["area"] == pytest.approx(0.1225)
 
-    def test_the_other_model_is_now_reachable(self, migrated: str) -> None:
+    def test_the_other_model_is_now_reachable(self) -> None:
         """The point of the exercise: this boat can run the plain 2-D keel too.
 
         On the flat shape it could not. `span` and `alpha_sep_deg` sat beside
         `model_type`, and BasicKeel refuses them rather than ignore them, so the
         boat that measured a span could never be sailed without one.
         """
-        hub = SailboatHub(migrated, overrides={"keel": {"model": "basic"}})
+        hub = SailboatHub("flingo_floty.yaml", overrides={"keel": {"model": "basic"}})
         assert isinstance(hub.keel, BasicKeel)
         assert not isinstance(hub.keel, FiniteSpanKeel)
         assert "span" not in hub.keel.p
 
-    def test_untouched_sections_are_unaffected(self, migrated: str) -> None:
-        """The rudder and sail are still flat, and still build what they named."""
-        hub = SailboatHub(migrated)
-        assert isinstance(hub.rudder, FiniteSpanRudder)
-        assert hub.rudder.p["span"] == 0.478
-
-    def test_selecting_an_unoffered_model_says_so(self, migrated: str) -> None:
+    def test_selecting_an_unoffered_model_says_so(self) -> None:
         """A boat with no block for a model refuses it with its own account."""
         with pytest.raises(ValueError, match=r"no `models\.orc_main` block"):
-            SailboatHub(migrated, overrides={"keel": {"model": "orc_main"}})
+            SailboatHub("flingo_floty.yaml", overrides={"keel": {"model": "orc_main"}})
+
+
+class TestFlatConfigsStillLoad:
+    """The shape everything was written in before the migration still works."""
+
+    @pytest.fixture
+    def flat(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+        """Flingo's keel flattened back: finite-span keys beside `model_type`."""
+        cfg = yaml.safe_load(Path("configs/flingo_floty.yaml").read_text(encoding="utf-8"))
+        keel = cfg["keel"]
+        keel.update(keel.pop("models")["finite_span"])
+        keel["model_type"] = keel.pop("model")
+
+        (tmp_path / "flat.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+        monkeypatch.setattr(sailboat_hub, "CONFIG_PATH", f"{tmp_path}/")
+        return "flat.yaml"
+
+    def test_it_builds_the_same_model(self, flat: str) -> None:
+        """No `models` key, so the flat block is the model's parameters."""
+        keel = SailboatHub(flat).keel
+        assert isinstance(keel, FiniteSpanKeel)
+        assert keel.p["span"] == pytest.approx(0.700)
+
+    def test_the_legacy_spelling_still_selects(self, flat: str) -> None:
+        """`model_type` is what every unmigrated config and checkpoint carries."""
+        assert SailboatHub(flat).keel.p["model_type"] == "finite_span"

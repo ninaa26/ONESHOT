@@ -1,15 +1,16 @@
-# The keel and rudder below carry an `assumed:` block. Nothing in one was measured
-# for this boat: they are stand-ins that let it be sailed with the models that need
-# keys this config never had (the `finite_span` foils). They sit one level down on
-# purpose. As top-level keys they would be live parameters, and the basic models
-# reject the richer models' keys outright rather than ignore them -- `model_type:
-# basic` with a `span` beside it does not load. Nothing reads `assumed:` today; a
-# consumer that switches a model merges the block in.
+# Each component below names its model and carries a `models:` mapping: the keys
+# every model of that part reads stay at the section level, and each model's own
+# parameters sit in a block belonging to it. Switching a component is changing
+# `model:`; nothing has to be commented in or out, and no model ever sees another
+# model's keys.
 #
-# The sail deliberately has no such block. This boat is a single-sail rig, so
-# `orc_w_jib` is not a model it lacks data for -- it is the wrong model for the
-# boat, and a jib_area here would be inventing rig geometry that does not exist.
-# `orc_main` is the ORC sail for this boat.
+# Values marked ASSUMED were never measured for this boat. They are stand-ins so
+# it can also be sailed with the models that need keys this config never had.
+#
+# The sail deliberately offers no orc_w_jib block. This boat is a single-sail
+# rig, so the sloop model is not one it lacks data for -- it is the wrong model
+# for the boat, and a jib_area here would be inventing rig geometry that does not
+# exist. `orc_main` is the ORC sail for this boat.
 
 simulation:
   dt: 0.02  # [s] solver step
@@ -35,41 +36,48 @@ hull:
 keel:
   # Thicker section (12%) gives better L/D at boat Re than NACA0006 (6%)
   airfoil_name: NACA0012
-  model_type: basic
+  model: basic
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]   # Reynolds number
   area: 0.75    # [m²]    planform area — larger = more lateral lift, less leeway
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
-  # ASSUMED, not measured -- see the note at the top of this file.
-  assumed:
-    # An aspect ratio rather than a `span`: AR 4 on this 0.75 m2 planform implies
-    # a 1.73 m span, longer than the 1.5 m hull it would hang under. These areas
-    # were picked for feel, not struck off a drawing, so stating the AR keeps the
-    # assumption in one honest number instead of inventing an impossible length.
-    effective_aspect_ratio: 4.0  # generic fin keel, no end-plate credit
-    # alpha_sep_deg is not here: the finite-span models default it to 25,
-    # since a separation angle is a property of a section, not of a boat.
+  models:
+    basic: {}
+    # ASSUMED, not measured -- see the note at the top of this file.
+    finite_span:
+      # An aspect ratio rather than a `span`: AR 4 on this 0.75 m2 planform implies
+      # a 1.73 m span, longer than the 1.5 m hull it would hang under. These areas
+      # were picked for feel, not struck off a drawing, so stating the AR keeps the
+      # assumption in one honest number instead of inventing an impossible length.
+      effective_aspect_ratio: 4.0  # generic fin keel, no end-plate credit
+      # alpha_sep_deg is not here: the finite-span models default it to 25,
+      # since a separation angle is a property of a section, not of a boat.
 
 sail:
-  model_type: sail
+  model: basic  # was `model_type: sail`; both still resolve here
   area: 3.0
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   x_pos: 0.0
   y_pos: 0.0
-  luff_deg: 14
-  luff_ramp_deg: 4.0
   #Basic sail model parameters
   airfoil_name: NACA0012
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [1e5]   # Reynolds number
-  
+  # No orc_w_jib block. This boat is a single-sail rig, so the sloop model is
+  # not one it lacks data for: it is the wrong model for the boat.
+  models:
+    basic:
+      luff_deg: 14
+      luff_ramp_deg: 4.0
+    orc_main: {}
+
 rudder:
   airfoil_name: NACA0012
-  model_type: basic
+  model: basic
   alpha_min: -179 # Minimum and maximum angle of attack in degrees
   alpha_max: 179
   res: [5e5]
@@ -77,20 +85,23 @@ rudder:
   x_pos: -0.3  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   effectiveness: 0.2  # scale rudder force to avoid over-steer
-  aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
-  cl_max: 1.0
-  cd_max: 1.2
   deadband_deg: 1.5     # small stick noise -> zero command
   center_tau_s: 0.6     # time constant to return to center when cmd==0
   max_rate_deg_s: 120.0 # servo rate limit for manual controllability
-  # ASSUMED, not measured -- see the note at the top of this file. These alone do
-  # not make `finite_span` reachable on this rudder: that model also refuses the
-  # aoa_limit_deg / cl_max / cd_max clamps above, which are live keys here.
-  assumed:
-    # An aspect ratio rather than a `span`: AR 4 on this 0.3 m2 blade implies a
-    # 1.10 m span under a 1.5 m hull. flingo_floty's measured blade is 0.0462 m2
-    # and 0.478 m -- the area here is a steering-feel number, not a drawing.
-    effective_aspect_ratio: 4.0  # generic blade, surface-piercing
-    # alpha_sep_deg defaults in the model, as for the keel above.
+  # The clamps live under `basic` because they belong to it: they pin the
+  # coefficients past stall. `finite_span` refuses them -- clamping a blended
+  # coefficient puts back the kink the blend exists to remove -- so moving them
+  # down here is what makes that model reachable on this boat at all.
+  models:
+    basic:
+      aoa_limit_deg: 35.0  # clamp effective AoA for stalled rudder behavior
+      cl_max: 1.0
+      cd_max: 1.2
+    # ASSUMED, not measured -- see the note at the top of this file.
+    finite_span:
+      # An aspect ratio rather than a `span`: AR 4 on this 0.3 m2 blade implies a
+      # 1.10 m span under a 1.5 m hull. flingo_floty's measured blade is 0.0462 m2
+      # and 0.478 m -- the area here is a steering-feel number, not a drawing.
+      effective_aspect_ratio: 4.0  # generic blade, surface-piercing
+      # alpha_sep_deg defaults in the model, as for the keel above.
 
-  

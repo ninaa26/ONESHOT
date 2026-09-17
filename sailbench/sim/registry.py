@@ -144,6 +144,24 @@ def lookup(part: str, name: str) -> Any:  # noqa: ANN401 - a part's contract is 
     return entries[key]
 
 
+def canonical(part: str, name: str) -> str:
+    """Return the option id `name` resolves to, following aliases.
+
+    `model_type: sail` and `model: basic` are the same model, so a `models`
+    mapping keyed on the id the catalog offers must still be found by a config
+    that spells it the old way. Unknown names come back unchanged, for the
+    caller to fail on with its own message.
+    """
+    entries = _PARTS.get(part, {})
+    model = entries.get(name.lower())
+    if model is None:
+        return name.lower()
+    for option in _OPTIONS.get(part, ()):
+        if entries.get(option.id) is model:
+            return option.id
+    return name.lower()
+
+
 def registered(part: str) -> dict[str, Any]:
     """Return the models registered for `part`, by name, as a copy."""
     return dict(_PARTS.get(part, {}))

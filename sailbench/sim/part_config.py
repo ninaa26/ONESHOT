@@ -38,7 +38,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sailbench.sim.registry import defaults
+from sailbench.sim.registry import canonical, defaults
 
 # The key that names a component's model. `model_type` came first and stays
 # accepted for good; `model` is preferred because it reads better beside `models`
@@ -52,11 +52,26 @@ RESERVED_KEYS: frozenset[str] = frozenset({"models"})
 
 
 def model_name(section: Mapping[str, Any], default: str = "basic") -> str:
-    """Return the model a component section selects, lowercased."""
+    """Return the model a component section selects, lowercased.
+
+    Both spellings are accepted and `model` is the current one. A section that
+    carries both and disagrees with itself is refused rather than resolved: that
+    only happens when an override wrote the older key onto a config using the
+    newer one, and silently sailing the model the caller did not pick is the
+    worse answer -- the screen would say one thing and the boat do another.
+
+    Raises:
+        ValueError: the section names two different models.
+
+    """
+    named = {key: str(section[key]).lower() for key in SELECTOR_KEYS if section.get(key) is not None}
+    if len(set(named.values())) > 1:
+        pairs = ", ".join(f"{key}={value!r}" for key, value in named.items())
+        msg = f"a section names two different models ({pairs}); `model` is the current spelling"
+        raise ValueError(msg)
     for key in SELECTOR_KEYS:
-        value = section.get(key)
-        if value is not None:
-            return str(value).lower()
+        if key in named:
+            return named[key]
     return default
 
 
@@ -97,16 +112,19 @@ def compose(part: str, section: Mapping[str, Any], default: str = "basic") -> di
         msg = f"{part} `models` must map a model name to its parameters, got {type(models).__name__}"
         raise TypeError(msg)
 
-    if name not in models:
+    # A config may name a model by an alias the registry knows -- `sail` for
+    # `basic` -- while the block is keyed on the id the catalog offers.
+    key = name if name in models else canonical(part, name)
+    if key not in models:
         offered = ", ".join(sorted(models)) or "(none)"
-        msg = f"{part} selects model {name!r}, but this boat carries no `models.{name}` block. It offers: {offered}"
+        msg = f"{part} selects model {name!r}, but this boat carries no `models.{key}` block. It offers: {offered}"
         raise ValueError(msg)
 
     # `basic:` with nothing indented under it is an empty block, not a mistake:
     # a model that needs no parameters of its own still has to be offered.
-    own = models[name] or {}
+    own = models[key] or {}
     if not isinstance(own, Mapping):
-        msg = f"{part} `models.{name}` must map parameter names to values, got {type(own).__name__}"
+        msg = f"{part} `models.{key}` must map parameter names to values, got {type(own).__name__}"
         raise TypeError(msg)
 
     composed = {key: value for key, value in section.items() if key not in RESERVED_KEYS}

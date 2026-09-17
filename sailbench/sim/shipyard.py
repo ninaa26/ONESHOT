@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from sailbench.sim.part_config import SELECTOR_KEYS, compose, model_name
-from sailbench.sim.registry import options, registered, unavailable
+from sailbench.sim.registry import canonical as registry_canonical
+from sailbench.sim.registry import options, unavailable
 from sailbench.sim.sailboat_hub import CONFIG_PATH
 
 if TYPE_CHECKING:
@@ -47,12 +48,6 @@ PARTS: dict[str, tuple[str, str]] = {
 
 # Kept as the key each part's override writes, which is all callers need.
 PART_KEY: dict[str, str] = {row: key for row, (_, key) in PARTS.items()}
-
-# Registry aliases: the catalog names one id per model class, so a config that
-# says `model_type: sail` shows up as `basic`. Read from the registry at call
-# time, not captured here, so a model registered by a module imported later is
-# still canonicalised correctly.
-_ALIASED_PARTS: tuple[str, ...] = ("sail", "keel", "rudder")
 
 # The stats the boat cards show, as (section, key, label, unit).
 BOAT_STATS: list[tuple[str, str, str, str]] = [
@@ -125,17 +120,7 @@ def _canonical(part: str, value: object) -> str | None:
     """Map a config's selector value to the catalog option id for the same model."""
     if value is None:
         return None
-    key = str(value).lower()
-    if part not in _ALIASED_PARTS:
-        return key
-    registry = registered(part)
-    cls = registry.get(key)
-    if cls is None:
-        return key
-    for option in options(part):
-        if registry.get(option.id) is cls:
-            return option.id
-    return key
+    return registry_canonical(part, str(value))
 
 
 def overrides_for(parts: dict[str, str]) -> dict[str, dict[str, Any]]:
@@ -176,9 +161,9 @@ def _describe_boat(path: Path) -> dict[str, Any] | None:
         return None
 
     defaults: dict[str, str] = {}
-    for row in PARTS:
+    for row, (part, _) in PARTS.items():
         fallback = "flat" if row == "hull" else "basic"
-        defaults[row] = _canonical(row, _selected(row, cfg.get(row, {}))) or fallback
+        defaults[row] = _canonical(part, _selected(row, cfg.get(row, {}))) or fallback
 
     # What each model says it needs, against what this boat gives it. No hub is
     # built: the question is asked of the declaration, not of the object, so the
