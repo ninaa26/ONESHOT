@@ -76,6 +76,26 @@
         font-size: 11px;
       }
 
+      /* Plan view, bottom-right, opposite the readouts. */
+      #radar {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        width: 208px;
+        height: 208px;
+        border-radius: 50%;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.65);
+        border: 1px solid rgba(120, 190, 255, 0.3);
+      }
+
+      @media (max-width: 720px) {
+        #radar {
+          width: 132px;
+          height: 132px;
+        }
+      }
+
       .forces-section {
         margin-top: 8px;
         padding-top: 8px;
@@ -441,6 +461,7 @@
 
   <body>
     <div id="app">
+      <canvas id="radar" width="208" height="208"></canvas>
       <div class="hud">
         <h1>sailbench</h1>
         <div class="hud-row">

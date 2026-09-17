@@ -267,7 +267,10 @@ export function createBoat(scene) {
 
   // Wake / trace
   const tracePoints = [];
-  const maxTracePoints = 200;
+  // Sampled by distance rather than per frame, so the wake is long in metres
+  // instead of in seconds and stops growing while the boat sits still.
+  const maxTracePoints = 900;
+  const traceMinStepM = 0.2;
   const traceGeom = new THREE.BufferGeometry();
   const traceMat = new THREE.LineBasicMaterial({
     color: 0x88e5ff,
@@ -279,6 +282,10 @@ export function createBoat(scene) {
   function updateTrace() {
     const p = new THREE.Vector3();
     boatGroup.getWorldPosition(p);
+    const last = tracePoints[tracePoints.length - 1];
+    if (last && last.distanceToSquared(p) < traceMinStepM * traceMinStepM) {
+      return;
+    }
     tracePoints.push(p.clone());
     if (tracePoints.length > maxTracePoints) {
       tracePoints.shift();

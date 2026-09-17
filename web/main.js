@@ -4,6 +4,7 @@ import { createScene, handleResize } from "./scene.js";
 import { createWind } from "./wind.js";
 import { SIM_Y_TO_WORLD_Z, createBoat, updateBoatFromState } from "./boat.js";
 import { createForceArrows } from "./forces.js";
+import { createRadar } from "./radar.js";
 import { setBoat, setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
 import { createShipyard } from "./shipyard.js";
 
@@ -35,6 +36,7 @@ waypointMarker.visible = false;
 scene.add(waypointMarker);
 
 const { update: updateForceArrows } = createForceArrows(boatGroup);
+const radar = createRadar(document.getElementById("radar"));
 let showForces = false;
 let lastForces = null;
 
@@ -200,6 +202,8 @@ function makeWsUrl() {
         if (typeof msg.control_mode === "string") {
           setControlMode(msg.control_mode);
         }
+        // Fresh boat, fresh track.
+        radar.reset();
         // Fresh boat, fresh helm: don't carry stale commands into it.
         rudderCmdDeg = 0;
         sailCmdDeg = 0;
@@ -244,6 +248,16 @@ function makeWsUrl() {
         }
         if (msg.control && typeof msg.control.mode === "string") {
           setControlMode(msg.control.mode);
+        }
+        // The plan view works in sim coordinates directly, so it needs the
+        // message rather than anything the scene derived from it.
+        if (msg.boat && msg.boat.position) {
+          radar.update({
+            x: msg.boat.position.x,
+            y: msg.boat.position.y,
+            headingRad: Math.atan2(msg.boat.heading.sin, msg.boat.heading.cos),
+            waypoint: msg.waypoint || null,
+          });
         }
         if (msg.waypoint) {
           waypointMarker.visible = true;
