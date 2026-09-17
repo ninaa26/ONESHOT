@@ -27,9 +27,33 @@ class BasicHullModel(Model):
         s = float(self.p.get("wetted_surface_m2") or 1.7 * l * (b + t))
         aside = l * t
 
+        # Cross-flow drag coefficient, shared by sway and yaw because they are the
+        # same physical mechanism -- the hull being dragged sideways through the
+        # water -- resolved over different lever arms. 1.0 is what the sway term
+        # has always implied (0.5*rho*A matches 0.5*rho*Cd*A at Cd = 1).
+        cd_cross = float(self.p.get("cross_flow_cd", 1.0))
+
         k_u = 0.5 * rho * s * self._friction_coefficient(u, l)
-        k_v = 0.5 * rho * aside
-        k_r = (1.0 / 8.0) * rho * t * (l**4)
+        k_v = 0.5 * rho * cd_cross * aside
+        # Strip theory. A strip at x sees lateral speed r*x, so its drag is
+        # 0.5*rho*Cd*T*dx*|r x|(r x) and its moment about the centre is x times
+        # that. Integrating x^2|x| over [-L/2, L/2] gives L^4/32, hence
+        #
+        #     k_r = 0.5 * rho * Cd * T * L^4/32 = rho * Cd * T * L^4 / 64
+        #
+        # The previous coefficient was rho*T*L^4/8, which is 8/Cd times this --
+        # a factor of 8 at the Cd the sway term already assumes. The boat was
+        # resisting rotation eight times harder than its own sway model implies.
+        #
+        # `yaw_damping_cd` exists because cross-flow drag is not the only thing
+        # resisting a turn: a yawing hull also sheds circulatory lift, which this
+        # model has no term for. Strip theory says it should equal cross_flow_cd,
+        # and it defaults to it, but a turning-circle measurement is what should
+        # set it. At the derived value this boat turns inside one waterline
+        # length, where a real hull needs two to four, so the omitted term is not
+        # small. Calibrate this rather than cross_flow_cd, which sway also uses.
+        cd_yaw = float(self.p.get("yaw_damping_cd", cd_cross))
+        k_r = rho * cd_yaw * t * (l**4) / 64.0
 
         fx = -k_u * u * abs(u)
         fy = -k_v * v * abs(v)

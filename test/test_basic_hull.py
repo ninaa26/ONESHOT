@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from sailbench.dynamics.basic_hull_model import GRAVITY, BasicHullModel
 from sailbench.models.model import State
@@ -88,3 +89,50 @@ class TestWettedSurface:
         """Without the key nothing changes."""
         approx = 1.7 * BASE["L"] * (BASE["B"] + BASE["T"])
         assert math.isclose(surge({"wetted_surface_m2": approx}, 1.5), surge({}, 1.5), rel_tol=1e-9)
+
+
+class TestYawDamping:
+    """Strip theory over the hull, and the coefficient it exposes."""
+
+    def yaw_moment(self, params: dict, r: float) -> float:
+        """Yaw moment from a hull built with `params` at yaw rate `r`."""
+        return float(BasicHullModel({**BASE, **params}).compute(make_state(r=r), TFTree2D())[2])
+
+    def test_matches_the_strip_theory_integral(self) -> None:
+        """k_r = rho * Cd * T * L^4 / 64, from integrating x^2|x| over the hull."""
+        expected = -1000.0 * 1.0 * BASE["T"] * BASE["L"] ** 4 / 64.0
+        assert self.yaw_moment({}, 1.0) == pytest.approx(expected)
+
+    def test_opposes_rotation_both_ways(self) -> None:
+        """Damping resists whichever way the boat is turning."""
+        assert self.yaw_moment({}, 1.0) < 0.0
+        assert self.yaw_moment({}, -1.0) > 0.0
+
+    def test_is_quadratic_in_yaw_rate(self) -> None:
+        """r|r| means doubling the rate quadruples the moment."""
+        assert self.yaw_moment({}, 2.0) == pytest.approx(4.0 * self.yaw_moment({}, 1.0))
+
+    def test_zero_at_rest(self) -> None:
+        """No rotation, no damping."""
+        assert self.yaw_moment({}, 0.0) == pytest.approx(0.0)
+
+    def test_scales_with_the_fourth_power_of_length(self) -> None:
+        """The lever arm enters twice and the strip speed twice."""
+        short = self.yaw_moment({"L": 1.0}, 1.0)
+        long_ = self.yaw_moment({"L": 2.0}, 1.0)
+        assert long_ == pytest.approx(16.0 * short)
+
+    def test_yaw_coefficient_can_be_calibrated_alone(self) -> None:
+        """Turning can be tuned without disturbing sway, which shares cross_flow_cd."""
+        tuned = {"yaw_damping_cd": 4.0}
+        assert self.yaw_moment(tuned, 1.0) == pytest.approx(4.0 * self.yaw_moment({}, 1.0))
+        # sway untouched
+        base_sway = float(BasicHullModel(BASE).compute(make_state(v=1.0), TFTree2D())[1])
+        tuned_sway = float(BasicHullModel({**BASE, **tuned}).compute(make_state(v=1.0), TFTree2D())[1])
+        assert tuned_sway == pytest.approx(base_sway)
+
+    def test_defaults_to_the_cross_flow_coefficient(self) -> None:
+        """Unset, strip theory's own answer: the two coefficients are equal."""
+        assert self.yaw_moment({"cross_flow_cd": 2.0}, 1.0) == pytest.approx(
+            self.yaw_moment({"cross_flow_cd": 2.0, "yaw_damping_cd": 2.0}, 1.0)
+        )

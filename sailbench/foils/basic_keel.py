@@ -35,8 +35,18 @@ class BasicKeel(Foil):
             np.ndarray: Returns X and Y forces in newtons (within keel frame)
 
         """
-        # (u, v) are body-frame velocity (surge, sway)
-        local_track = np.degrees(np.arctan2(state.v, state.u))
+        # Local inflow at the keel, including the yaw-rate contribution. Body
+        # velocity at a point (x, y) is [u - r*y, v + r*x]; the rudder has always
+        # done this, the keel did not. Sitting forward of the centre of rotation
+        # it sees real sideslip whenever the boat turns, and ignoring that meant
+        # the keel provided no yaw damping at all -- which the hull's damping
+        # coefficient had been silently making up for.
+        x_pos = float(self.p.get("x_pos", 0.0))
+        y_pos = float(self.p.get("y_pos", 0.0))
+        u_local = float(state.u - state.r * y_pos)
+        v_local = float(state.v + state.r * x_pos)
+
+        local_track = np.degrees(np.arctan2(v_local, u_local))
         # Coefficients are looked up at the track angle rather than the angle of
         # attack; the fluid frame's 180-degree flip below supplies the negation.
         aoa = local_track
@@ -46,7 +56,7 @@ class BasicKeel(Foil):
         cl, cd = self.apply_finite_span(cl, cd)
         # compute dynamic pressure
         rho = float(self.p.get("rho_water", 1000.0))  # kg/m^3
-        v = utils.get_velocity_magnitude(state)
+        v = float(np.hypot(u_local, v_local))
         q = 0.5 * rho * v**2
         # compute forces
         s = self.p.get("area", 1.0)  # m^2
@@ -57,5 +67,5 @@ class BasicKeel(Foil):
         # transform tree: a fluid frame that someone else forgot to update silently
         # turns this drag into thrust.
         f_fluid = np.array([drag, lift])
-        r_fluid_to_boat = utils.fluid_transform_from_state(state).rotation_matrix()
+        r_fluid_to_boat = utils.fluid_transform_from_velocity(u_local, v_local).rotation_matrix()
         return np.asarray(r_fluid_to_boat @ f_fluid, dtype=float)

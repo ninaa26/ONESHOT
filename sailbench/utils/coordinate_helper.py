@@ -77,10 +77,28 @@ def fluid_transform_from_state(state: State) -> Transform2D:
         Transform2D: Rotation-only transform from the boat frame to the fluid frame.
 
     """
-    speed = get_velocity_magnitude(state)
+    return fluid_transform_from_velocity(state.u, state.v)
+
+
+def fluid_transform_from_velocity(u: float, v: float) -> Transform2D:
+    """Build the boat->fluid transform for a local flow velocity.
+
+    Same convention as :func:`fluid_transform_from_state`, but taking the
+    velocity directly so a component sitting away from the centre of rotation can
+    pass the flow it actually sees, including its yaw-rate contribution.
+
+    Args:
+        u (float): Local surge velocity [m/s].
+        v (float): Local sway velocity [m/s].
+
+    Returns:
+        Transform2D: Rotation-only transform from the boat frame to the fluid frame.
+
+    """
+    speed = float(np.hypot(u, v))
     if speed <= 1e-6:
         return Transform2D(x=0.0, y=0.0, c=1.0, s=0.0)
-    return Transform2D(x=0.0, y=0.0, c=-state.u / speed, s=-state.v / speed)
+    return Transform2D(x=0.0, y=0.0, c=-float(u) / speed, s=-float(v) / speed)
 
 
 def fluid_frame_to_body_frame(forces_fluid: np.ndarray, local_track_deg: float) -> np.ndarray:
