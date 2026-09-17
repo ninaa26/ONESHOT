@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SailBench — Physics Lab</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive teardown of the SailBench boat physics: sheeting, luffing, hull drag, rudder authority and the VPP polars they produce."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./physics/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 L26 24 H16 Z' fill='%235ee0ff'/%3E%3Cpath d='M14 8 L5 24 H14 Z' fill='%23ffffff' opacity='.55'/%3E%3C/svg%3E"
+    />
+  </head>
+
+  <body>
+    <div id="shell">
+      <!-- ---------------- rail ---------------- -->
+      <nav id="rail">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="17" height="17" viewBox="0 0 32 32" aria-hidden="true">
+              <path d="M16 3 L26 24 H16 Z" fill="#5ee0ff" />
+              <path d="M14 8 L5 24 H14 Z" fill="#ffffff" opacity=".5" />
+              <path d="M3 27 h26 l-3 3 H6 Z" fill="#5ee0ff" opacity=".45" />
+            </svg>
+            SailBench
+          </div>
+          <div class="brand-sub">PHYSICS LAB · <span id="meta-commit">—</span></div>
+        </div>
+
+        <div class="rail-ctl">
+          <div class="select-wrap">
+            <select class="boat-select" id="boat-select" aria-label="Boat configuration"></select>
+          </div>
+          <div id="rail-wind"></div>
+        </div>
+
+        <div id="toc">
+          <div class="rail-group">Overview</div>
+          <a href="#overview"><span class="idx">00</span>The model stack</a>
+          <a href="#board"><span class="idx">01</span>Force board · sail it</a>
+          <div class="rail-group">What changed</div>
+          <a href="#sheeting"><span class="idx">02</span>Geometric sheeting</a>
+          <a href="#luffing"><span class="idx">03</span>Luff ramp</a>
+          <a href="#hull"><span class="idx">04</span>Hull drag</a>
+          <a href="#rudder"><span class="idx">05</span>Rudder authority</a>
+          <a href="#servo"><span class="idx">06</span>Rudder servo</a>
+          <div class="rail-group">Foundations</div>
+          <a href="#keel"><span class="idx">07</span>Keel &amp; leeway</a>
+          <a href="#foils"><span class="idx">08</span>NeuralFoil polars</a>
+          <div class="rail-group">Boats</div>
+          <a href="#flingo"><span class="idx">09</span>Flingo Floty</a>
+          <a href="#polar"><span class="idx">10</span>VPP polars</a>
+          <div class="rail-group">Trust</div>
+          <a href="#validate"><span class="idx">11</span>Mirror check</a>
+          <a href="#live"><span class="idx">12</span>Live telemetry</a>
+        </div>
+
+        <div class="rail-foot">
+          data · <span id="meta-generated">—</span><br />
+          <a href="./sail.html">← Test bench</a><br />
+          <a href="./index.html">← 3D simulator</a>
+        </div>
+      </nav>
+
+      <!-- ---------------- main ---------------- -->
+      <main>
+        <header id="hero">
+          <div class="eyebrow">Cornell Autonomous Sailboat Team</div>
+          <h1><span class="grad">The physics, pulled apart</span></h1>
+          <p class="lede">
+            Four models were rewritten this cycle: the sail now <strong>weather-vanes against a
+            geometric sheet stop</strong>, lift <strong>ramps out smoothly through the luff</strong>,
+            hull drag is <strong>derived from hull geometry</strong> instead of hand-tuned
+            coefficients, and the rudder sees the <strong>true local inflow</strong> behind a
+            rate-limited servo. Every figure below runs those models live in your browser —
+            same equations, same NeuralFoil polars as the simulator.
+          </p>
+          <div class="stat-strip" id="hero-stats"></div>
+        </header>
+
+        <!-- 00 -->
+        <section id="overview">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>00</span> · Architecture</div>
+            <h2>One state vector, four force producers</h2>
+            <p>
+              A step is always the same shape: the transform tree places every component, each model
+              returns a force in its own frame, the hub rotates them into the boat frame, sums
+              moments about the CG, and RK4 integrates. Changing a model means changing one box.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>Force pipeline</span><span class="badge commit" id="pipe-config">—</span></h3>
+              <div id="pipeline-fig" class="fig"></div>
+              <div class="fig-cap">
+                Live values come from the force board below — scrub it and this updates.
+              </div>
+            </div>
+            <div class="card">
+              <h3>Transform tree</h3>
+              <div id="tftree-fig" class="fig"></div>
+              <div class="fig-cap">
+                <code>TFTree2D</code> rotations only; translations enter as moment arms
+                (<code>mz = x·Fy − y·Fx</code>).
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 01 -->
+        <section id="board">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>01</span> · <span class="badge live">playable</span>
+            </div>
+            <h2>Force board — sail it yourself</h2>
+            <p>
+              Hit <b>sail it</b> and steer with the arrow keys: <span class="kbd">←</span>
+              <span class="kbd">→</span> for rudder, <span class="kbd">↑</span>
+              <span class="kbd">↓</span> for the sheet — the same bindings as the 3D simulator.
+              The boat is integrated right here in the page by the ported models, so the tells
+              below light up the moment each updated model engages, and every other figure on this
+              page tracks you as you sail. Stop, and the sliders pin any state you like.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>
+                <span>Plan view · bow up</span>
+                <span class="legend" id="board-legend"></span>
+              </h3>
+              <div id="board-fig" class="fig"></div>
+              <div id="board-tells" style="margin-top: 12px"></div>
+              <div id="board-controls" style="margin-top: 14px"></div>
+            </div>
+            <div class="card">
+              <h3><span>Solver readout</span><span class="badge live">live</span></h3>
+              <div id="board-readout"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 02 -->
+        <section id="sheeting">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>02</span> · <span class="badge new">updated</span>
+              <span class="badge commit">b522bcd · better sheeting and luffing</span>
+            </div>
+            <h2>The sheet is a stop, not a command</h2>
+            <p>
+              The controller used to dictate a rigid sail angle, which let the sail sit at physically
+              impossible angles to the flow. Now the boom free-spins to the apparent wind angle and
+              the sheet only limits how far out it can swing — exactly like a real mainsheet.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>Boom angle vs apparent wind angle</h3>
+              <div id="sheet-fig" class="fig"></div>
+              <div id="sheet-controls" style="margin-top: 12px"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--c-sail)"></i>resolved boom angle</span>
+                <span><i style="background: var(--text-faint)"></i>free (weather-vaning) sail</span>
+                <span><i style="background: var(--warn)"></i>sheet limit</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>The rule</h3>
+              <pre class="code" id="sheet-code"></pre>
+              <div class="src-ref">
+                <b>sailbench/sim/sailboat_hub.py</b> · <code>_resolve_sail_angle_from_sheet</code>
+              </div>
+              <ul class="tight">
+                <li><strong>Below the stop</strong> the sail is a weather vane: boom angle tracks |AWA| and the sail makes almost no lift.</li>
+                <li><strong>At the stop</strong> the sheet loads up and the sail starts working as a wing.</li>
+                <li><strong>Side</strong> follows the sign of the apparent wind in the boat frame, so tacks and gybes flip the boom on their own.</li>
+                <li><strong>Hysteresis</strong>: dead-centre apparent wind reuses the previous sail side instead of flickering.</li>
+              </ul>
+              <div class="note info">
+                <b>Why it matters for RL:</b> the action is now a sheet limit in
+                <code>[0, 90°]</code>, a monotone "power" knob. The agent can no longer request a
+                sail angle the wind would never allow.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 03 -->
+        <section id="luffing">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>03</span> · <span class="badge new">updated</span>
+              <span class="badge commit">b522bcd</span>
+            </div>
+            <h2>Luffing, ramped instead of switched</h2>
+            <p>
+              A sail near the centreline of the flow flaps and carries no useful lift. The previous
+              hybrid model cut lift to zero at a hard 5° threshold; the basic sail now fades lift
+              linearly across <code>luff_ramp_deg</code>, so the force never jumps.
+            </p>
+          </div>
+          <div class="grid g-side-l">
+            <div class="card">
+              <h3>Lift authority</h3>
+              <div id="luff-ramp-fig" class="fig"></div>
+              <div id="luff-controls" style="margin-top: 12px"></div>
+              <pre class="code" id="luff-code" style="margin-top: 4px"></pre>
+              <div class="src-ref"><b>sailbench/foils/basic_sail.py</b> · <code>compute</code></div>
+            </div>
+            <div class="card">
+              <h3>
+                <span>CL(α) — raw NeuralFoil vs luff-scaled</span>
+                <span class="badge commit" id="luff-re">—</span>
+              </h3>
+              <div id="luff-cl-fig" class="fig"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--text-faint)"></i>CL raw (NACA0012)</span>
+                <span><i style="background: var(--c-sail)"></i>CL after luff scaling</span>
+                <span><i style="background: var(--bad)"></i>old hard cut-off at 5°</span>
+              </div>
+              <div class="fig-cap" id="luff-caption"></div>
+            </div>
+          </div>
+          <div class="note">
+            <b>Drag is deliberately untouched.</b> Only <code>cl</code> is scaled — a flogging sail
+            still has parasitic drag, which is what stalls the boat in irons instead of letting it
+            coast through the no-go zone.
+          </div>
+        </section>
+
+        <!-- 04 -->
+        <section id="hull">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>04</span> · <span class="badge new">updated</span>
+              <span class="badge commit">2741bc5 · better hull finished</span>
+            </div>
+            <h2>Hull drag from hull geometry</h2>
+            <p>
+              <code>BasicHullModel</code> replaced six hand-tuned damping constants with three
+              coefficients built from length, beam and draft. Change the boat's dimensions and the
+              drag changes with it — no re-tuning pass.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>Resistance curves</h3>
+              <div id="hull-fig" class="fig"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--c-hull)"></i>surge Fx(u)</span>
+                <span><i style="background: var(--c-keel)"></i>sway Fy(v)</span>
+                <span><i style="background: var(--c-rudder)"></i>yaw Mz(r)</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Geometry → coefficients</h3>
+              <div id="hull-controls"></div>
+              <div id="hull-readout" style="margin-top: 6px"></div>
+              <pre class="code" id="hull-code" style="margin-top: 12px"></pre>
+              <div class="src-ref"><b>sailbench/dynamics/basic_hull_model.py</b></div>
+            </div>
+          </div>
+          <div class="note">
+            <b>Two dead parameter blocks.</b> The configs still carry
+            <code>xu1/yv1/nr1/xu2/yv2/nr2</code>, but <code>BasicHullModel</code> never reads them —
+            they belong to <code>QuadraticHydroModel</code>, which the hub no longer instantiates.
+            The model also reads <code>p["rho"]</code> while the configs define
+            <code>rho_water</code>, so density silently falls back to its 1000 kg/m³ default.
+            Harmless today (they match), a trap the first time someone simulates in fresh vs salt water.
+          </div>
+        </section>
+
+        <!-- 05 -->
+        <section id="rudder">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>05</span> · <span class="badge new">updated</span>
+              <span class="badge commit">370e1aa · real foils + control</span>
+            </div>
+            <h2>The rudder sees its own inflow</h2>
+            <p>
+              A rudder 0.3 m behind the CG does not feel the boat's velocity — it feels the velocity
+              <em>at the blade</em>, which includes the yaw rate. That single term is what makes the
+              boat settle out of a turn instead of spinning up.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>Side force vs helm, at three yaw rates</h3>
+              <div id="rudder-fig" class="fig"></div>
+              <div id="rudder-controls" style="margin-top: 12px"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--c-rudder)"></i>r = 0 rad/s</span>
+                <span><i style="background: var(--c-sail)"></i>r = +0.6</span>
+                <span><i style="background: var(--warn)"></i>r = −0.6</span>
+                <span><i class="dot" style="background: var(--bad)"></i>AoA clamp active</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Authority limits</h3>
+              <pre class="code" id="rudder-code"></pre>
+              <div class="src-ref"><b>sailbench/foils/basic_rudder.py</b></div>
+              <div id="rudder-readout" style="margin-top: 12px"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 06 -->
+        <section id="servo">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>06</span> · <span class="badge new">updated</span>
+              <span class="badge commit">sailboat_hub · _update_dynamic_frames</span>
+            </div>
+            <h2>Helm feel: deadband, rate limit, self-centring</h2>
+            <p>
+              Commands do not snap to the blade. Small inputs are swallowed by a deadband, motion is
+              rate-limited like a real servo, and letting go returns the rudder to centre on an
+              exponential — which is why manual sailing stopped feeling twitchy.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>Step response</span><span class="badge live" id="servo-status">idle</span></h3>
+              <div id="servo-fig" class="fig"></div>
+              <div class="fig-cap">
+                Hold <span class="kbd">←</span> <span class="kbd">→</span> over this figure to drive
+                the helm yourself, or press play to run the scripted command profile.
+              </div>
+              <div class="btn-row" style="margin-top: 10px" id="servo-buttons"></div>
+            </div>
+            <div class="card">
+              <h3>Servo parameters</h3>
+              <div id="servo-controls"></div>
+              <pre class="code" id="servo-code" style="margin-top: 10px"></pre>
+              <div class="src-ref">
+                <b>sailbench/sim/sailboat_hub.py</b> · rudder servo block
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 07 -->
+        <section id="keel">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>07</span> · Foundations</div>
+            <h2>Keel: leeway is the angle of attack</h2>
+            <p>
+              The keel is fixed on the centreline, so its angle of attack is just the boat's leeway
+              angle <code>atan2(v, u)</code>. Side-slip a fraction of a degree and it produces
+              hundreds of newtons — that is what lets a sailboat point upwind at all.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>Keel force vs leeway angle</h3>
+              <div id="keel-fig" class="fig"></div>
+              <div id="keel-controls" style="margin-top: 12px"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--c-keel)"></i>side force Fy</span>
+                <span><i style="background: var(--c-hull)"></i>induced drag Fx</span>
+                <span><i style="background: var(--warn)"></i>lift/drag ratio</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Numbers at the cursor</h3>
+              <div id="keel-readout"></div>
+              <div class="note info" style="margin-top: 14px">
+                <b>Watch the stall.</b> Past roughly 10° of leeway the section stalls, side force
+                collapses and drag explodes. The sim reaches that in a badly executed tack — the
+                boat stops, slides sideways, and has no keel left to bite with.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 08 -->
+        <section id="foils">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>08</span> · Foundations</div>
+            <h2>Every foil is a real NACA 0012</h2>
+            <p>
+              Sail, keel and rudder all call <code>Foil.cl_cd</code>, which asks
+              <a href="https://github.com/peterdsharpe/NeuralFoil">NeuralFoil</a> for the section's
+              coefficients at the component's Reynolds number. These are the exact curves the
+              simulator evaluates, sampled straight out of the Python model.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>NACA0012 polars</span><span id="foil-badges"></span></h3>
+              <div id="foil-fig" class="fig"></div>
+              <div id="foil-controls" style="margin-top: 12px"></div>
+            </div>
+            <div class="card">
+              <h3>At the cursor</h3>
+              <div id="foil-readout"></div>
+              <div class="note" style="margin-top: 14px">
+                <b>Far past stall the model is an extrapolation.</b> The configs allow
+                <code>alpha_min/max = ±179°</code>, so downwind the sail is evaluated at angles no
+                section database covers. It behaves plausibly — big drag, little lift — but treat
+                deep-downwind numbers as qualitative.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 09 -->
+        <section id="flingo">
+          <div class="sec-head">
+            <div class="sec-kicker">
+              <span>09</span> · <span class="badge new">new boat</span>
+              <span class="badge commit">9c6442c · flingo_floty</span>
+            </div>
+            <h2>Flingo Floty</h2>
+            <p id="flingo-blurb"></p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>To scale vs basic_sailbot</span><span class="badge commit">plan view</span></h3>
+              <div id="flingo-fig" class="fig"></div>
+              <div class="legend" style="margin-top: 10px">
+                <span><i style="background: var(--c-sail)"></i>flingo_floty</span>
+                <span><i style="background: var(--text-faint)"></i>basic_sailbot</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Spec sheet</h3>
+              <div class="spec-grid" id="flingo-specs"></div>
+              <div id="flingo-notes"></div>
+            </div>
+          </div>
+          <div class="grid g-2" style="margin-top: 14px">
+            <div class="card">
+              <h3>Every parameter, side by side</h3>
+              <div class="table-scroll"><table class="data" id="flingo-table"></table></div>
+            </div>
+            <div class="card">
+              <h3>What the numbers imply</h3>
+              <div id="flingo-implications"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10 -->
+        <section id="polar">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>10</span> · Ground truth</div>
+            <h2>What it all adds up to</h2>
+            <p>
+              These polars are not drawn by the browser. Each point is a full 3-DOF run of the real
+              simulator — heading held by a PD autopilot, sheet limit swept in 5° steps, speed
+              averaged over the last 8 s of a 20 s run — regenerated by
+              <code>scripts/gen_physics_ui_data.py</code>.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>Polar diagram</span><span id="polar-config-badge" class="badge commit">—</span></h3>
+              <div id="polar-fig" class="fig"></div>
+              <div id="polar-controls" style="margin-top: 10px"></div>
+            </div>
+            <div class="card">
+              <h3>Targets</h3>
+              <div class="spec-grid" id="polar-targets"></div>
+              <div id="polar-vmg-fig" class="fig" style="margin-top: 16px"></div>
+              <div class="legend" style="margin-top: 8px">
+                <span><i style="background: var(--c-sail)"></i>boat speed</span>
+                <span><i style="background: var(--new)"></i>VMG</span>
+                <span><i style="background: var(--warn)"></i>best sheet limit</span>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 14px">
+            <h3>Polar table</h3>
+            <div class="table-scroll"><table class="data" id="polar-table"></table></div>
+          </div>
+        </section>
+
+        <!-- 11 -->
+        <section id="validate">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>11</span> · Trust</div>
+            <h2>Is this page actually the simulator?</h2>
+            <p>
+              The figures above run a JavaScript port of the Python models. To prove the port is
+              faithful, the generator recorded per-component forces for
+              <span id="valid-count">—</span> randomised states straight out of
+              <code>SailboatHub._forces</code>. The browser recomputes all of them on load and
+              reports the residual.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3><span>Residuals</span><span id="valid-verdict" class="badge commit">running…</span></h3>
+              <div id="valid-fig" class="fig"></div>
+              <div class="fig-cap">
+                Python force magnitude (x) against the browser's, per component. Perfect agreement
+                is the diagonal.
+              </div>
+            </div>
+            <div class="card">
+              <h3>Per component</h3>
+              <table class="data" id="valid-table"></table>
+              <div class="fig-cap" style="margin-top: 10px">
+                The browser interpolates the sampled CL/CD table where the Python core calls
+                NeuralFoil directly, so a residual of a few thousandths of a percent is the grid.
+              </div>
+            </div>
+          </div>
+          <div id="valid-notes" style="margin-top: 14px"></div>
+        </section>
+
+        <!-- 12 -->
+        <section id="live">
+          <div class="sec-head">
+            <div class="sec-kicker"><span>12</span> · Optional</div>
+            <h2>Live telemetry</h2>
+            <p>
+              If <code>web_runner</code> is up, this page attaches to the same WebSocket the 3D view
+              uses and mirrors the running boat. Start it with
+              <code>uv run python -m sailbench.sim.web_runner --config basic_sailbot.yaml</code>.
+            </p>
+          </div>
+          <div class="grid g-side">
+            <div class="card">
+              <h3>
+                <span>Connection</span>
+                <span style="display: flex; align-items: center; gap: 7px">
+                  <span class="pulse" id="live-pulse"></span>
+                  <span class="badge commit" id="live-status">disconnected</span>
+                </span>
+              </h3>
+              <div id="live-fig" class="fig"></div>
+              <div class="btn-row" style="margin-top: 10px" id="live-buttons"></div>
+            </div>
+            <div class="card">
+              <h3>Backend state</h3>
+              <div id="live-readout"></div>
+            </div>
+          </div>
+        </section>
+
+        <footer>
+          <div><b>SailBench</b> · Cornell Autonomous Sailboat Team · physics lab build <span id="meta-commit-2">—</span></div>
+          <div>
+            Regenerate the dataset:
+            <code>uv run python scripts/gen_physics_ui_data.py</code>
+          </div>
+          <div>
+            Serve locally: <code>cd web &amp;&amp; python -m http.server 8000</code> →
+            <a href="http://localhost:8000/physics.html">localhost:8000/physics.html</a>
+          </div>
+        </footer>
+      </main>
+    </div>
+
+    <script type="module" src="./physics/app.js"></script>
+  </body>
+</html>

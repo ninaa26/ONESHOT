@@ -71,6 +71,23 @@
         font-size: 11px;
       }
 
+      .hud-link {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(120, 190, 255, 0.35);
+        background: rgba(120, 190, 255, 0.08);
+        color: #9cd5ff;
+        text-decoration: none;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      .hud-link:hover {
+        background: rgba(120, 190, 255, 0.16);
+      }
+
       .forces-section {
         margin-top: 8px;
         padding-top: 8px;
@@ -177,6 +194,8 @@
         <div class="hud-help">
           Rudder: ←/→ or A/D · Sail: ↑/↓ or W/S · F: Forces · C: Cam
         </div>
+        <a class="hud-link" href="./sail.html">Test bench →</a>
+        <a class="hud-link" href="./physics.html">Physics Lab →</a>
         <div class="forces-section" id="forces-section">
           <h2 id="forces-toggle">Forces (Fx, Fy) ▼</h2>
           <div class="forces-chart" id="hud-forces-chart">
