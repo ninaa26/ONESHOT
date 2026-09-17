@@ -38,30 +38,44 @@ const { update: updateForceArrows } = createForceArrows(boatGroup);
 let showForces = false;
 let lastForces = null;
 
-// Follow camera: stays directly behind the boat, boat faces forward in view
-const FOLLOW_DISTANCE = 15;
-const FOLLOW_HEIGHT = 12;
+// Chase camera: looks straight down on the boat, so what is ahead of it is on
+// screen rather than hidden behind its own sail. The view is north-up, not
+// heading-up: the boat turns within a world that stays put, which is what makes
+// a course readable. `C` drops out of it into free orbit.
+const EYE_HEIGHT_MIN = 8;
+const EYE_HEIGHT_MAX = 220;
+const EYE_HEIGHT_DEFAULT = 22;
+const EYE_ZOOM_STEP = 1.12;
 
 const boatPos = new THREE.Vector3();
-const forward = new THREE.Vector3();
 
 let cameraFollowMode = true;
+let eyeHeight = EYE_HEIGHT_DEFAULT;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
 function updateFollowCamera() {
   boatGroup.getWorldPosition(boatPos);
-  // Boat bow is along local +X; getWorldDirection returns Z. Use quaternion to get X axis.
-  forward.set(1, 0, 0);
-  forward.applyQuaternion(boatGroup.quaternion);
-  forward.y = 0;
-  forward.normalize();
-
-  camera.position.copy(boatPos).addScaledVector(forward, -FOLLOW_DISTANCE);
-  camera.position.y = FOLLOW_HEIGHT;
-
+  camera.position.set(boatPos.x, eyeHeight, boatPos.z);
+  // Looking straight down, the default up vector is the direction of view and
+  // lookAt has nothing to orient against, so screen-up is given as a world
+  // direction. Sim +y is north and maps to world +z, so this is north-up.
+  camera.up.set(0, 0, 1);
   camera.lookAt(boatPos.x, 0, boatPos.z);
 }
+
+// OrbitControls' own zoom cannot help while the camera is being placed every
+// frame, so the wheel changes how high the eye sits instead.
+renderer.domElement.addEventListener(
+  "wheel",
+  (event) => {
+    if (!cameraFollowMode) return;
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? EYE_ZOOM_STEP : 1 / EYE_ZOOM_STEP;
+    eyeHeight = Math.min(EYE_HEIGHT_MAX, Math.max(EYE_HEIGHT_MIN, eyeHeight * factor));
+  },
+  { passive: false },
+);
 
 // --- simulation state mapping -----------------------------------------
 
@@ -332,6 +346,11 @@ window.addEventListener("keyup", (ev) => {
       break;
     case "KeyC":
       cameraFollowMode = !cameraFollowMode;
+      if (!cameraFollowMode) {
+        // Hand a usable orientation back to OrbitControls on the way out.
+        camera.up.set(0, 1, 0);
+        controls.target.copy(boatPos);
+      }
       ev.preventDefault();
       break;
     default:
