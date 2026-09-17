@@ -7,7 +7,12 @@ from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
 
 
-@register("hull", "quadratic")
+@register(
+    "hull",
+    "quadratic",
+    name="Quadratic",
+    blurb="Quadratic viscous damping from xu2, yv2 and nr2",
+)
 class QuadraticHydroModel(Model):
     """Quadratic viscous drag hydrodynamic hull model."""
 

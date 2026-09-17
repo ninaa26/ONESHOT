@@ -10,7 +10,13 @@ from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
 
-@register("sail", "basic", "sail")
+@register(
+    "sail",
+    "basic",
+    "sail",
+    name="Basic",
+    blurb="Symmetric NACA section polar at a geometric angle of attack",
+)
 class BasicSail(Foil):
     """Basic sail foil model."""
 

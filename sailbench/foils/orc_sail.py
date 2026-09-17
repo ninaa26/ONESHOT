@@ -119,7 +119,12 @@ KHEFF = np.array([
 ])
 
 
-@register("sail", "orc_main")
+@register(
+    "sail",
+    "orc_main",
+    name="ORC main",
+    blurb="ORC VPP coefficient envelope, single mainsail",
+)
 class ORCMainSail(Model):
     """Mainsail-only aerodynamic model using the ORC VPP coefficient envelope.
 
@@ -141,6 +146,8 @@ class ORCMainSail(Model):
         alpha_opt_deg: sail angle of attack giving peak lift, default 22.
         flat_stall_floor: residual lift fraction when badly over-sheeted.
     """
+
+    REFUSES: tuple[str, ...] = ("jib_area",)
 
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the ORC sail model."""
@@ -357,7 +364,12 @@ class ORCMainSail(Model):
         return np.array([q * cr, -wind_side * q * ch], dtype=float)
 
 
-@register("sail", "orc_w_jib")
+@register(
+    "sail",
+    "orc_w_jib",
+    name="ORC main + jib",
+    blurb="ORC envelope for a sloop, blended by area share",
+)
 class ORCWithJibSail(ORCMainSail):
     """Main-and-jib aerodynamic model: ORC's collective rig, section 5.4.1.
 
@@ -366,6 +378,9 @@ class ORCWithJibSail(ORCMainSail):
             the area-weighted blend of the main and jib tables; ``area`` stays
             the reference area the coefficients are normalised by.
     """
+
+    REFUSES: tuple[str, ...] = ()
+    REQUIRES: tuple[tuple[str, ...], ...] = (("jib_area",),)
 
     def _rig(self) -> list[tuple[SailTable, float]]:
         """Return the main and jib, split by ``jib_area``."""

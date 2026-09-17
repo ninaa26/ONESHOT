@@ -8,7 +8,12 @@ from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
 
 
-@register("hull", "linear")
+@register(
+    "hull",
+    "linear",
+    name="Linear",
+    blurb="Linear viscous damping from xu1, yv1 and nr1",
+)
 class LinearHydroModel(Model):
     """Linear viscous drag hydrodynamic hull model."""
 

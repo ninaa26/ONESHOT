@@ -10,9 +10,16 @@ from sailbench.tf.tf_tree import TFTree2D
 GRAVITY = 9.81  # [m/s^2]
 
 
-@register("hull", "basic")
+@register(
+    "hull",
+    "basic",
+    name="Geometry",
+    blurb="Quadratic drag from hull geometry, with friction and wave-making",
+)
 class BasicHullModel(Model):
     """Quadratic hull drag from simple geometry-based coefficients."""
+
+    REQUIRES: tuple[tuple[str, ...], ...] = (("L",), ("B",), ("T",))
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute forces on hull model."""

@@ -9,15 +9,16 @@ import numpy as np
 import pytest
 import yaml
 
-import sailbench.dynamics  # noqa: F401  importing is what registers the models
+import sailbench.dynamics
 import sailbench.foils  # noqa: F401
 from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
-from sailbench.foils.basic_keel import BasicKeel
+from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
 from sailbench.models.model import State
 from sailbench.sim import sailboat_hub
-from sailbench.sim.registry import lookup, parts, register, registered
+from sailbench.sim.part_config import compose
+from sailbench.sim.registry import defaults, lookup, options, parts, register, registered, unavailable
 from sailbench.sim.sailboat_hub import SailboatHub
 
 
@@ -157,7 +158,7 @@ class TestHullIsSelectable:
         [("basic", BasicHullModel), ("linear", LinearHydroModel), ("quadratic", QuadraticHydroModel)],
     )
     def test_each_model_can_be_named(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str, expected: type
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str, expected: type,
     ) -> None:
         """All three alternatives for the slot are reachable from a config."""
         name = self.boat(tmp_path, monkeypatch, {"model": model})
@@ -182,3 +183,68 @@ class TestHullIsSelectable:
         name = self.boat(tmp_path, monkeypatch, {"model": "sinks"})
         with pytest.raises(ValueError, match="unknown hull model 'sinks'"):
             SailboatHub(name)
+
+
+class TestDeclaredMetadata:
+    """What a model says about itself, for a screen and for a config."""
+
+    def test_options_are_named_and_described(self) -> None:
+        """A model arrives in the catalog already described."""
+        by_id = {o.id: o for o in options("keel")}
+        assert by_id["finite_span"].name == "Finite span"
+        assert "induced drag" in by_id["finite_span"].blurb
+
+    def test_requirements_are_phrased_for_a_reader(self) -> None:
+        """The `(needs ...)` hint is generated, not typed into a second table."""
+        by_id = {o.id: o for o in options("keel")}
+        assert by_id["finite_span"].requires == ("span or effective_aspect_ratio",)
+        assert by_id["finite_span"].described().endswith("(needs span or effective_aspect_ratio)")
+        assert by_id["basic"].described() == by_id["basic"].blurb
+
+    def test_aliases_do_not_become_separate_options(self) -> None:
+        """`sail` and `basic` are one model, and the catalog offers it once."""
+        assert [o.id for o in options("sail")] == ["basic", "orc_main", "orc_w_jib"]
+
+
+class TestDefaults:
+    """Physics constants belong to the model; boat geometry to the config."""
+
+    def test_the_model_supplies_its_separation_angle(self) -> None:
+        """A config no longer has to repeat 25 degrees on every finite-span foil."""
+        assert defaults("keel", "finite_span") == {"alpha_sep_deg": 25.0}
+        assert defaults("keel", "basic") == {}
+
+    def test_compose_layers_them_under_the_config(self) -> None:
+        """Present without being written down, and overridable."""
+        section = {"area": 0.12, "model": "finite_span", "span": 0.7}
+        assert compose("keel", section)["alpha_sep_deg"] == pytest.approx(25.0)
+        assert compose("keel", {**section, "alpha_sep_deg": 30.0})["alpha_sep_deg"] == pytest.approx(30.0)
+
+    def test_a_defaulted_constant_reaches_the_model(self) -> None:
+        """The keel blends past stall without the config saying so."""
+        keel = FiniteSpanKeel(compose("keel", {"area": 0.12, "model": "finite_span", "span": 0.7}))
+        assert keel.stall_blending
+
+
+class TestUnavailable:
+    """Whether a boat can use a model, answered without building it."""
+
+    def test_available_when_nothing_is_missing(self) -> None:
+        """A section giving an aspect ratio can run the finite-span keel."""
+        assert unavailable("keel", "finite_span", {"span": 0.7, "area": 0.12}) is None
+
+    def test_names_the_missing_requirement(self) -> None:
+        """Either key satisfies it, and the reason says both."""
+        reason = unavailable("keel", "finite_span", {"area": 0.12})
+        assert reason is not None
+        assert "needs span or effective_aspect_ratio" in reason
+
+    def test_names_the_refused_key(self) -> None:
+        """The 2-D keel does not use a span, and says which key it found."""
+        reason = unavailable("keel", "basic", {"area": 0.12, "span": 0.7})
+        assert reason is not None
+        assert "does not use span" in reason
+
+    def test_a_friction_law_needs_nothing(self) -> None:
+        """Both laws work on any hull, which is why the row is never greyed."""
+        assert unavailable("friction", "hughes", {}) is None

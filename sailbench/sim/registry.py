@@ -32,22 +32,62 @@ model the registry has never heard of.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
 T = TypeVar("T")
 
 # part -> {name: model}. Written only by `register`, at import time.
 _PARTS: dict[str, dict[str, Any]] = {}
 
+# part -> the options it offers, in the order they registered.
+_OPTIONS: dict[str, list[Option]] = {}
 
-def register(part: str, *names: str) -> Callable[[T], T]:
+
+@dataclass(frozen=True, slots=True)
+class Option:
+    """One of the models a part offers, as a screen needs to name it.
+
+    `blurb` is what the model is; `requires` is what a boat must supply to use
+    it, phrased for a reader ("span or effective_aspect_ratio"). Both come from
+    the model itself, so a new model arrives in the catalog already described.
+    """
+
+    id: str
+    name: str
+    blurb: str
+    requires: tuple[str, ...] = ()
+
+    def described(self) -> str:
+        """Return the blurb with what the model needs appended, if anything."""
+        if not self.requires:
+            return self.blurb
+        return f"{self.blurb} (needs {'; '.join(self.requires)})"
+
+
+def _titled(option_id: str) -> str:
+    """Return a display name derived from an option id."""
+    return option_id.replace("_", " ").capitalize()
+
+
+def _phrase(group: tuple[str, ...]) -> str:
+    """Return one requirement group as a reader would say it."""
+    return " or ".join(group)
+
+
+def register(part: str, *names: str, name: str | None = None, blurb: str = "") -> Callable[[T], T]:
     """Register the decorated model under one or more names for `part`.
 
     Several names are for aliases a config may already carry: `model_type: sail`
-    predates `basic` and still has to resolve to the same class.
+    predates `basic` and still has to resolve to the same class. The first name
+    is the id the catalog offers; the rest resolve to the same model silently.
+
+    `name` and `blurb` are what a screen calls this model. They live here rather
+    than in a table beside the shipyard so that a model arrives already
+    described, and cannot be renamed in one place and not the other.
 
     Raises:
         ValueError: no name was given, or a name is taken by another model.
@@ -59,8 +99,8 @@ def register(part: str, *names: str) -> Callable[[T], T]:
 
     def decorate(model: T) -> T:
         entries = _PARTS.setdefault(part, {})
-        for name in names:
-            key = name.lower()
+        for alias in names:
+            key = alias.lower()
             taken = entries.get(key)
             # Re-registering the same object is a module imported twice, which is
             # fine. Two different models under one name is a collision that would
@@ -72,6 +112,17 @@ def register(part: str, *names: str) -> Callable[[T], T]:
                 )
                 raise ValueError(msg)
             entries[key] = model
+        option_id = names[0].lower()
+        offered = _OPTIONS.setdefault(part, [])
+        if not any(o.id == option_id for o in offered):
+            offered.append(
+                Option(
+                    id=option_id,
+                    name=name or _titled(option_id),
+                    blurb=blurb,
+                    requires=tuple(_phrase(group) for group in getattr(model, "REQUIRES", ())),
+                ),
+            )
         return model
 
     return decorate
@@ -101,3 +152,35 @@ def registered(part: str) -> dict[str, Any]:
 def parts() -> tuple[str, ...]:
     """Return every part something has registered under."""
     return tuple(sorted(_PARTS))
+
+
+def options(part: str) -> tuple[Option, ...]:
+    """Return what `part` offers, in registration order."""
+    return tuple(_OPTIONS.get(part, ()))
+
+
+def defaults(part: str, name: str) -> dict[str, Any]:
+    """Return the parameters this model supplies when a config does not.
+
+    Physics constants belong to the model, boat geometry belongs to the config.
+    A separation angle is the same 25 degrees for every foil section until
+    someone measures otherwise; a span is not.
+    """
+    return dict(getattr(lookup(part, name), "DEFAULTS", {}))
+
+
+def unavailable(part: str, name: str, params: Mapping[str, Any]) -> str | None:
+    """Return why this model cannot be built from `params`, or None if it can.
+
+    Answered from what the model declares, so the question can be asked about
+    every model of every boat without building any of them. It is key presence
+    only: whether the numbers are sane is the model's own business at launch.
+    """
+    model = lookup(part, name)
+    for group in getattr(model, "REQUIRES", ()):
+        if not any(key in params for key in group):
+            return f"{part} model {name!r} needs {_phrase(group)}, which this boat does not give"
+    stray = [key for key in getattr(model, "REFUSES", ()) if key in params]
+    if stray:
+        return f"{part} model {name!r} does not use {', '.join(stray)}, which this boat sets"
+    return None

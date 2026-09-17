@@ -51,7 +51,8 @@ keel:
     # were picked for feel, not struck off a drawing, so stating the AR keeps the
     # assumption in one honest number instead of inventing an impossible length.
     effective_aspect_ratio: 4.0  # generic fin keel, no end-plate credit
-    alpha_sep_deg: 25.0          # stall onset ~15 deg, as in flingo_floty
+    # alpha_sep_deg is not here: the finite-span models default it to 25,
+    # since a separation angle is a property of a section, not of a boat.
 
 sail:
   model_type: sail
@@ -92,6 +93,6 @@ rudder:
     # 1.10 m span under a 1.5 m hull. flingo_floty's measured blade is 0.0462 m2
     # and 0.478 m -- the area here is a steering-feel number, not a drawing.
     effective_aspect_ratio: 4.0  # generic blade, surface-piercing
-    alpha_sep_deg: 25.0          # stall onset ~15 deg, as in flingo_floty
+    # alpha_sep_deg defaults in the model, as for the keel above.
 
   

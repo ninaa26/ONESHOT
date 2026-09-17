@@ -18,7 +18,7 @@ Each refuses the other's keys rather than half-applying them: a config says
 which rudder it means and gets exactly that one.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -33,9 +33,16 @@ FINITE_SPAN_KEYS = ("span", "effective_aspect_ratio", "alpha_sep_deg")
 CLAMP_KEYS = ("aoa_limit_deg", "cl_max", "cd_max")
 
 
-@register("rudder", "basic")
+@register(
+    "rudder",
+    "basic",
+    name="Basic",
+    blurb="2-D section polar, coefficients clamped past stall",
+)
 class BasicRudder(Foil):
     """Rudder on the raw 2-D section polar, clamped past stall (``model_type: basic``)."""
+
+    REFUSES: tuple[str, ...] = FINITE_SPAN_KEYS
 
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the rudder model.
@@ -123,14 +130,24 @@ class BasicRudder(Foil):
         return tf_tree.vector_to_frame(f_rudder, "rudder", "boat")
 
 
-@register("rudder", "finite_span")
+@register(
+    "rudder",
+    "finite_span",
+    name="Finite span",
+    blurb="Induced drag and post-stall blend instead of clamps",
+)
 class FiniteSpanRudder(BasicRudder):
     """Rudder with lifting-line induced drag and post-stall blending (``model_type: finite_span``).
 
-    Requires ``span`` (with ``area``) or ``effective_aspect_ratio``, and
-    ``alpha_sep_deg``. The clamps of the basic model are refused: clamping a
-    blended coefficient would put back the kink the blend exists to remove.
+    Requires ``span`` (with ``area``) or ``effective_aspect_ratio``.
+    ``alpha_sep_deg`` defaults here rather than in every config. The clamps of
+    the basic model are refused: clamping a blended coefficient would put back
+    the kink the blend exists to remove.
     """
+
+    REFUSES: tuple[str, ...] = CLAMP_KEYS
+    REQUIRES: tuple[tuple[str, ...], ...] = (("span", "effective_aspect_ratio"),)
+    DEFAULTS: ClassVar[dict[str, float]] = {"alpha_sep_deg": 25.0}
 
     def _check_keys(self) -> None:
         """Require the finite-span keys and reject the clamps."""

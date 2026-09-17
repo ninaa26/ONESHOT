@@ -18,8 +18,8 @@ from sailbench.tf.tf_tree import TFTree2D, Transform2D
 # decides which names a config may select. The hub no longer keeps a table of its
 # own: a model is offered because it exists and said so, not because this file
 # was remembered to be edited.
-import sailbench.dynamics  # noqa: E402, F401  isort:skip
-import sailbench.foils  # noqa: E402, F401  isort:skip
+import sailbench.dynamics  # isort:skip
+import sailbench.foils  # noqa: F401  imported for the registrations  isort:skip
 
 CONFIG_PATH = "configs/"
 

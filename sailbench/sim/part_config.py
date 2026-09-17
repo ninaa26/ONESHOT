@@ -38,6 +38,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from sailbench.sim.registry import defaults
+
 # The key that names a component's model. `model_type` came first and stays
 # accepted for good; `model` is preferred because it reads better beside `models`
 # and says what the section is choosing. `model` wins when both are present, so a
@@ -77,6 +79,10 @@ def compose(part: str, section: Mapping[str, Any], default: str = "basic") -> di
     them, and `models` itself dropped, so no model can see another's parameters.
     A section with no `models` key is copied through as it stands.
 
+    Under all of it go the model's own `DEFAULTS`, so a physics constant is
+    written once in the model that owns it rather than in every boat that uses
+    it. Anything the config says wins over them.
+
     Raises:
         TypeError: `models`, or the selected model's block, is not a mapping.
         ValueError: the section names a model it carries no block for.
@@ -85,7 +91,7 @@ def compose(part: str, section: Mapping[str, Any], default: str = "basic") -> di
     name = model_name(section, default)
     models = section.get("models")
     if models is None:
-        return dict(section)
+        return {**defaults(part, name), **section}
 
     if not isinstance(models, Mapping):
         msg = f"{part} `models` must map a model name to its parameters, got {type(models).__name__}"
@@ -105,4 +111,4 @@ def compose(part: str, section: Mapping[str, Any], default: str = "basic") -> di
 
     composed = {key: value for key, value in section.items() if key not in RESERVED_KEYS}
     composed.update(own)
-    return composed
+    return {**defaults(part, name), **composed}

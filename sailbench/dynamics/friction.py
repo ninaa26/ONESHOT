@@ -30,7 +30,7 @@ LAMINAR_RE = 1.0e4
 RE_LENGTH_FRACTION = 0.85
 
 
-@register(PART, "flat")
+@register(PART, "flat", name="Flat plate", blurb="Constant skin-friction coefficient 0.004")
 def flat_plate(u: float, length: float, params: Mapping[str, Any]) -> float:
     """Return a constant coefficient, independent of speed.
 
@@ -42,7 +42,7 @@ def flat_plate(u: float, length: float, params: Mapping[str, Any]) -> float:
     return 0.004
 
 
-@register(PART, "hughes")
+@register(PART, "hughes", name="Hughes", blurb="ITTC-style Reynolds-dependent friction with form factor")
 def hughes(u: float, length: float, params: Mapping[str, Any]) -> float:
     """Return an ITTC-style Reynolds-dependent coefficient, times a form factor.
 

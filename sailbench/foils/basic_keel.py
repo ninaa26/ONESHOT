@@ -16,7 +16,7 @@ Each refuses the other's keys rather than half-applying them: a config says
 which keel it means and gets exactly that one.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -31,9 +31,18 @@ from sailbench.tf.tf_tree import TFTree2D
 FINITE_SPAN_KEYS = ("span", "effective_aspect_ratio", "alpha_sep_deg")
 
 
-@register("keel", "basic")
+@register(
+    "keel",
+    "basic",
+    name="Basic",
+    blurb="2-D section polar; side force comes almost for free",
+)
 class BasicKeel(Foil):
     """Keel on the raw 2-D section polar (``model_type: basic``)."""
+
+    # Keys that belong to the other keel, declared so the catalog can say
+    # this boat cannot use this model without building it to find out.
+    REFUSES: tuple[str, ...] = FINITE_SPAN_KEYS
 
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the keel model.
@@ -107,13 +116,23 @@ class BasicKeel(Foil):
         return np.asarray(r_fluid_to_boat @ f_fluid, dtype=float)
 
 
-@register("keel", "finite_span")
+@register(
+    "keel",
+    "finite_span",
+    name="Finite span",
+    blurb="Lifting-line induced drag and post-stall blend",
+)
 class FiniteSpanKeel(BasicKeel):
     """Keel with lifting-line induced drag and post-stall blending (``model_type: finite_span``).
 
-    Requires ``span`` (with ``area``) or ``effective_aspect_ratio``, and
-    ``alpha_sep_deg``.
+    Requires ``span`` (with ``area``) or ``effective_aspect_ratio``.
+    ``alpha_sep_deg`` defaults here rather than in every config: a separation
+    angle is a property of a section, not of a boat.
     """
+
+    REFUSES: tuple[str, ...] = ()
+    REQUIRES: tuple[tuple[str, ...], ...] = (("span", "effective_aspect_ratio"),)
+    DEFAULTS: ClassVar[dict[str, float]] = {"alpha_sep_deg": 25.0}
 
     def _check_keys(self) -> None:
         """Require the finite-span keys."""

@@ -8,7 +8,7 @@ from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail
 from sailbench.sim.protocol import SetupInputs, parse_setup_message
 from sailbench.sim.sailboat_hub import SailboatHub
-from sailbench.sim.shipyard import Catalog, build_catalog, overrides_for, validate_setup
+from sailbench.sim.shipyard import PART_KEY, Catalog, build_catalog, overrides_for, validate_setup
 
 
 @pytest.fixture(scope="module")
@@ -185,3 +185,47 @@ class TestParseSetupMessage:
             parse_setup_message({"type": "setup", "boat": "fun_boat.yaml", "parts": ["sail"]})
         with pytest.raises(TypeError, match="parts"):
             parse_setup_message({"type": "setup", "boat": "fun_boat.yaml", "parts": {"sail": 3}})
+
+
+BOATS_TIMES_OPTIONS = 36  # 4 shipped boats x 9 options across the four rows
+
+
+class TestDeclaredAvailabilityMatchesReality:
+    """The catalog stopped building every option to find out whether it works.
+
+    What a model declares it needs and what it actually refuses at construction
+    are written in two places, so they can drift. This walks every boat against
+    every option and holds the declaration to what building it really does.
+    """
+
+    def test_every_boat_and_option_agrees_with_construction(self, catalog: Catalog) -> None:
+        """Declared reason and real outcome agree, option by option."""
+        checked = 0
+        for entry in catalog.boats:
+            for row, offered in entry["available"].items():
+                for option_id, declared in offered.items():
+                    try:
+                        SailboatHub(entry["id"], overrides={row: {PART_KEY[row]: option_id}})
+                    except Exception as exc:  # noqa: BLE001 - any failure means "not on this boat"
+                        built: str | None = str(exc)
+                    else:
+                        built = None
+                    assert (declared is None) == (built is None), (
+                        f"{entry['id']} {row}.{option_id}: catalog says {declared!r}, building says {built!r}"
+                    )
+                    checked += 1
+        assert checked == BOATS_TIMES_OPTIONS, f"expected {BOATS_TIMES_OPTIONS} pairs, walked {checked}"
+
+
+class TestOptionsComeFromTheModels:
+    """The catalog's names and blurbs are the models' own."""
+
+    def test_requirement_hints_are_generated(self, catalog: Catalog) -> None:
+        """`(needs ...)` used to be typed into a table beside the catalog."""
+        by_id = {o["id"]: o for o in catalog.parts["keel"]}
+        assert by_id["finite_span"]["blurb"].endswith("(needs span or effective_aspect_ratio)")
+        assert "needs" not in by_id["basic"]["blurb"]
+
+    def test_names_are_the_models(self, catalog: Catalog) -> None:
+        """A model is named where it is defined, not in a second table."""
+        assert {o["name"] for o in catalog.parts["sail"]} == {"Basic", "ORC main", "ORC main + jib"}
