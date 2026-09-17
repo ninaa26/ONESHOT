@@ -107,6 +107,38 @@ class Foil(Model):
         """Whether a separation angle is configured."""
         return float(self.p.get("alpha_sep_deg", 0.0)) > 0.0
 
+    def plate_normal_force(self) -> float:
+        """Normal-force coefficient of the fully separated foil, i.e. CN at 90 degrees.
+
+        `cn_plate` if the config states one. Otherwise it is derived from the
+        aspect ratio, because a flat plate's normal force is not a constant:
+        2.0 is the two-dimensional value, approached only as the span grows
+        without limit, and a real plate lets flow escape round its tips.
+        Hoerner (*Fluid-Dynamic Drag*, ch. 3) measures 1.18 at AR 1, 1.20 at
+        AR 5, 1.29 at AR 10 and 1.50 at AR 20; the standard fit to that data,
+
+            CN_max = 1.11 + 0.018 * AR
+
+        is the one Viterna and Janetzke (1982) use for post-stall extrapolation
+        and is what this returns. On Flingo it gives 1.25 for the keel (AR 8)
+        and 1.20 for the rudder (AR 4.9), against the 2.0 both were charged
+        before -- an over-prediction of 60% in every stalled force.
+
+        Note this uses the *effective* aspect ratio, so a foil sealed against
+        the hull gets the mirrored value: the image plane works on separated
+        flow as much as on attached flow.
+
+        Falls back to the 2-D value when no aspect ratio is configured, which
+        is the only defensible default for a foil that has not stated its span.
+        """
+        stated = self.p.get("cn_plate")
+        if stated is not None:
+            return float(stated)
+        ar = self.effective_aspect_ratio()
+        if ar <= 0.0:
+            return 2.0
+        return float(min(1.11 + 0.018 * ar, 2.0))
+
     def blend_stall(self, alpha_rad: float, cl: float, cd: float) -> tuple[float, float]:
         """Blend attached-flow coefficients towards a flat plate past stall.
 
@@ -129,13 +161,17 @@ class Foil(Model):
             CL_plate = cn_plate sin(alpha) cos(alpha)
             CD_plate = cn_plate sin^2(alpha)
 
+        The separated branch is charged at :meth:`plate_normal_force`, which is
+        an aspect-ratio-dependent quantity -- a stalled foil sheds flow round its
+        tips exactly as an attached one does.
+
         Returns the inputs untouched when no separation angle is configured.
         """
         if not self.stall_blending:
             return cl, cd
 
         alpha_sep = np.radians(float(self.p.get("alpha_sep_deg", 25.0)))
-        cn_plate = float(self.p.get("cn_plate", 2.0))
+        cn_plate = self.plate_normal_force()
 
         ratio = float(alpha_rad) / alpha_sep
         separated = 1.0 - float(np.exp(-ratio * ratio))

@@ -41,8 +41,10 @@ hull:
   # 15-40, it turned inside 1.5 LWL against a real 2-4, and a tack cost 96% of
   # boat speed against a real 40-70%. Swept 2026-09-17 over 1-14; 7.0 is the
   # only region where all four measurements land in band at once:
-  #   max yaw 36 deg/s (15-40) | turning circle 3.69 LWL (2-4)
-  #   speed held in turn 71%   | speed held through a tack 35% (30-60)
+  #   max yaw 40 deg/s (15-40) | turning circle 3.95 LWL (2-4)
+  #   speed held in turn 75%   | speed held through a tack 37% (30-60)
+  # (Re-measured after cn_plate became aspect-ratio dependent, which took some
+  # damping out of the stalled foils and moved these to the top of their bands.)
   # Below 6 the tack collapses again; above 10 the turning circle opens past
   # 4 LWL. Straight-line speed is untouched across the whole sweep. A
   # measured turning circle should replace this.
@@ -79,7 +81,9 @@ keel:
   span: 0.700   # [m]     submerged span below the hull
   end_plate_factor: 2.0  # root sealed against the hull -> mirrored flow
   # Post-stall: blend towards a flat plate rather than trusting the section polar
-  # where it has no meaning. alpha_sep 25 deg puts stall onset near 15.
+  # where it has no meaning. The NACA0010 table at this Re stalls near 10-11 deg
+  # and alpha_sep 25 sets how fast the blend then takes over; the plate it blends
+  # into carries CN 1.25 here, from the aspect ratio, not the 2-D 2.0.
   alpha_sep_deg: 25.0
   x_pos: 0.184  # [m]    forward of the CG (CG = LCB, fixed by level flotation)
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
