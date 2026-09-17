@@ -243,4 +243,4 @@ class TestOptionsComeFromTheModels:
 
     def test_names_are_the_models(self, catalog: Catalog) -> None:
         """A model is named where it is defined, not in a second table."""
-        assert {o["name"] for o in catalog.parts["sail"]} == {"Basic", "ORC main", "ORC main + jib"}
+        assert {o["name"] for o in catalog.parts["sail"]} == {"Basic", "Hybrid", "ORC main", "ORC main + jib"}

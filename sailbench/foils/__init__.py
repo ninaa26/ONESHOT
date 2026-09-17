@@ -8,6 +8,7 @@ the shipyard cannot offer and a config cannot name.
 from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
 from sailbench.foils.basic_rudder import BasicRudder, FiniteSpanRudder
 from sailbench.foils.basic_sail import BasicSail
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.foils.orc_sail import ORCMainSail, ORCWithJibSail
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "BasicSail",
     "FiniteSpanKeel",
     "FiniteSpanRudder",
+    "HybridSail",
     "ORCMainSail",
     "ORCWithJibSail",
 ]

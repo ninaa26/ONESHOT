@@ -15,6 +15,7 @@ from sailbench.dynamics.basic_hull_model import BasicHullModel
 from sailbench.dynamics.linear_hydro import LinearHydroModel
 from sailbench.dynamics.quadratic_drag_hydro import QuadraticHydroModel
 from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
+from sailbench.foils.hybrid_sail import HybridSail
 from sailbench.models.model import State
 from sailbench.sim import sailboat_hub
 from sailbench.sim.part_config import compose
@@ -203,7 +204,7 @@ class TestDeclaredMetadata:
 
     def test_aliases_do_not_become_separate_options(self) -> None:
         """`sail` and `basic` are one model, and the catalog offers it once."""
-        assert [o.id for o in options("sail")] == ["basic", "orc_main", "orc_w_jib"]
+        assert [o.id for o in options("sail")] == ["basic", "hybrid", "orc_main", "orc_w_jib"]
 
 
 class TestDefaults:
@@ -248,3 +249,34 @@ class TestUnavailable:
     def test_a_friction_law_needs_nothing(self) -> None:
         """Both laws work on any hull, which is why the row is never greyed."""
         assert unavailable("friction", "hughes", {}) is None
+
+
+class TestHybridSailIsSelectable:
+    """The third model that existed but nothing could name."""
+
+    def test_it_is_registered(self) -> None:
+        """It sat in sailbench/foils unreachable, like the two hydro models did."""
+        assert lookup("sail", "hybrid") is HybridSail
+
+    def test_its_coefficients_default_in_the_model(self) -> None:
+        """A boat states them only to override the soft-sail values."""
+        assert defaults("sail", "hybrid") == {"CL_max": 1.2, "CD0": 0.1, "CD1": 1.0}
+
+    def test_a_boat_gets_the_defaults_without_writing_them(self) -> None:
+        """basic_sailbot offers `hybrid: {}` and still sails on real coefficients."""
+        hub = SailboatHub("basic_sailbot.yaml", overrides={"sail": {"model": "hybrid"}})
+        assert isinstance(hub.sail, HybridSail)
+        assert hub.sail.p["CL_max"] == pytest.approx(1.2)
+
+    def test_a_wing_overrides_them(self) -> None:
+        """WPI's rigid wing is a different aerofoil from a soft sail."""
+        hub = SailboatHub("wpi_wild_goats.yaml", overrides={"sail": {"model": "hybrid"}})
+        assert hub.sail.p["CL_max"] == pytest.approx(1.15)
+        assert hub.sail.p["CD0"] == pytest.approx(0.04)
+
+    def test_it_makes_force(self) -> None:
+        """Registered and wired, not merely importable."""
+        hub = SailboatHub("wpi_wild_goats.yaml", overrides={"sail": {"model": "hybrid"}})
+        fx, fy, _ = hub._forces(State(x=0.0, y=0.0, psi=0.0, u=0.5, v=0.0, r=0.0))  # noqa: SLF001
+        assert np.isfinite([fx, fy]).all()
+        assert abs(fy) > 0.0

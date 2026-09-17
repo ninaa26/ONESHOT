@@ -113,16 +113,15 @@ sail:
   res: [2e5]   # [E] Re from 0.55 m chord at ~5 m/s apparent
   model: basic
   models:
-    # Only the section model is offered. The ORC rigs are soft-sail envelopes
-    # and this is a rigid wing; orc_w_jib would additionally need a jib the
-    # boat does not have.
+    # No ORC blocks on purpose: those are soft-sail envelopes and this is a
+    # rigid wing; orc_w_jib would additionally need a jib the boat lacks.
     basic: {}
-  # Coefficients the team's own hybrid wing model would want, kept here as a
-  # record rather than as live keys: HybridSail exists in sailbench/foils but
-  # is not registered, so nothing can select it yet.
-  #   CL_max 1.15  [E] rigid wing, AR ~5, Re 2e5 — higher than a soft sail
-  #   CD0    0.04  [E] clean rigid wing profile drag, not a soft-sail 0.1
-  #   CD1    0.55  [E] gives CD ~1.14 broadside for an 18%-thick wing
+    hybrid:
+      # The analytic model suits a rigid wing better than a section polar does,
+      # and these are the wing's own numbers rather than the soft-sail defaults.
+      CL_max: 1.15   # [E] rigid wing, AR ~5, Re 2e5 — higher than a soft sail
+      CD0: 0.04      # [E] clean rigid wing profile drag, not a soft-sail 0.1
+      CD1: 0.55      # [E] gives CD ~1.14 broadside for an 18%-thick wing
 
 rudder:
   # Dual rudders canted 20 deg so the pair peaks in authority at 20 deg heel;

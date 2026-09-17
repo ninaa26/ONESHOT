@@ -74,6 +74,10 @@ sail:
       luff_deg: 14
       luff_ramp_deg: 4.0
     orc_main: {}
+    # The analytic model is not specific to any rig, so it is offered here as an
+    # alternative to the section polar. Empty: its coefficients default to the
+    # soft-sail values the model itself carries.
+    hybrid: {}
 
 rudder:
   airfoil_name: NACA0012

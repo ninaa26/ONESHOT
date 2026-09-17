@@ -130,6 +130,10 @@ sail:
   models:
     basic: {}
     orc_main: {}
+    hybrid:
+      # `area` here is the combined main + jib, and this model sails it as one
+      # surface: jib_area means nothing to it, the same caveat as orc_main.
+      # Coefficients default to the model's soft-sail values.
     orc_w_jib:
       jib_area: 0.775  # [m²]  measured; 39% of the rig
 

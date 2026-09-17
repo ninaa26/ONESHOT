@@ -1,17 +1,24 @@
 """Hybrid aerodynamic sail model using rotation matrix for force conversion."""
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
 from sailbench.models.model import Model
 from sailbench.models.model import State
+from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
 # Luffing threshold: sails stop generating lift when they flap
 LUFF_DEG = 5.0
 
 
+@register(
+    "sail",
+    "hybrid",
+    name="Hybrid",
+    blurb="Analytic CL/CD: a wing at small angles, a parachute at large ones",
+)
 class HybridSail(Model):
     """Hybrid aerodynamic sail model.
 
@@ -22,7 +29,13 @@ class HybridSail(Model):
 
     Converts forces from fluid frame to boat frame via rotation matrix
     (fluid → sail) then tf_tree (sail → boat).
+
+    The three coefficients are the model's own, not a boat's, so they default
+    here and a config states them only to override. The defaults describe a soft
+    sail; a rigid wing wants a higher CL_max and a much lower CD0.
     """
+
+    DEFAULTS: ClassVar[dict[str, float]] = {"CL_max": 1.2, "CD0": 0.1, "CD1": 1.0}
 
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the HybridSail model.
