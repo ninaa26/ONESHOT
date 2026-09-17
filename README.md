@@ -97,6 +97,14 @@ Use the default waypoint RL config (`configs/rl_waypoint_sb3.yaml`):
 uv run python scripts/train_waypoint_sb3.py --config configs/rl_waypoint_sb3.yaml
 ```
 
+Each RL config names the boat it trains under `env.simulator_config`. The
+default above trains `basic_sailbot.yaml` (0.75 m² keel, 3.0 m² sail). To train
+the measured Flingo Floaty hull, pass the config that points at it:
+
+```bash
+uv run python scripts/train_waypoint_sb3.py --config configs/flingo_rl.yaml
+```
+
 To watch training live in the web visualizer, enable the training websocket stream:
 
 ```bash
