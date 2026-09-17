@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail
+from sailbench.sim import shipyard
 from sailbench.sim.protocol import SetupInputs, parse_setup_message
 from sailbench.sim.sailboat_hub import SailboatHub
-from sailbench.sim.shipyard import Catalog, build_catalog, overrides_for, validate_setup
+from sailbench.sim.shipyard import Catalog, Policy, build_catalog, overrides_for, validate_setup
 
 
 @pytest.fixture(scope="module")
@@ -102,12 +105,67 @@ class TestCatalog:
         assert stats["Sail area"] == pytest.approx(1.971)
 
     def test_payload_is_json_shaped(self, catalog: Catalog) -> None:
-        """The browser gets ids and names for policies, not filesystem details."""
+        """The browser gets what it renders a helm chip from, not filesystem details."""
         payload = catalog.to_payload()
         assert payload["type"] == "catalog"
         assert set(payload["parts"]) == {"sail", "keel", "rudder", "hull"}
+        assert "policy_note" in payload
         for policy in payload["policies"]:
-            assert set(policy) == {"id", "name"}
+            assert set(policy) == {"id", "name", "trained_on", "disabled", "reason"}
+
+
+class TestPolicies:
+    """Trained checkpoints reach the helm row whether or not they can be loaded."""
+
+    def test_finds_the_checkpoints_on_disk(self, catalog: Catalog) -> None:
+        """Every run's best and final model is offered as a helm."""
+        names = {p.name for p in catalog.policies}
+        assert any(name.endswith("(best)") for name in names), names
+        assert all(p.model_path.endswith(".zip") for p in catalog.policies)
+
+    def test_reports_the_boat_a_run_learned(self, catalog: Catalog) -> None:
+        """A run that kept its config says which boat it trained against."""
+        trained = {p.trained_on for p in catalog.policies if p.config_path}
+        assert trained, "no run kept a config to read"
+        assert all(name is None or name.endswith(".yaml") for name in trained)
+
+    def test_missing_extras_greys_out_rather_than_hides(
+        self,
+        catalog: Catalog,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Without stable-baselines3 the checkpoints are still listed, with the reason.
+
+        Finding a checkpoint is a directory listing; only sailing one needs the
+        RL extras. Dropping them from the catalog told the shipyard there were
+        no trained models at all.
+        """
+        monkeypatch.setattr(shipyard, "_backend_reason", lambda: "needs stable-baselines3")
+        without = build_catalog("basic_sailbot.yaml")
+
+        assert without.policies, "checkpoints vanished when the extras did"
+        assert [p.id for p in without.policies] == [p.id for p in catalog.policies]
+        assert all(p.reason == "needs stable-baselines3" for p in without.policies)
+        assert without.default_helm == "manual"
+        assert without.policy_note is not None
+        assert "stable-baselines3" in without.policy_note
+        assert all(p["disabled"] for p in without.to_payload()["policies"])
+
+    def test_backend_reason_names_the_missing_package(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The reason a checkpoint cannot sail names what to install."""
+        monkeypatch.setattr(shipyard.importlib.util, "find_spec", lambda name: None)
+        reason = shipyard._backend_reason()
+        assert reason is not None
+        assert "stable-baselines3" in reason
+        assert "uv sync --group rl" in reason
+
+    def test_no_runs_directory_says_so(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """An empty runs/ is explained, not left as a bare Manual chip."""
+        monkeypatch.setattr(shipyard, "RUNS_PATH", str(tmp_path / "runs"))
+        empty = build_catalog("basic_sailbot.yaml")
+        assert empty.policies == []
+        assert empty.policy_note is not None
+        assert "train" in empty.policy_note
 
 
 class TestOverridesFor:
@@ -149,6 +207,24 @@ class TestValidateSetup:
         """Only manual or a listed policy can take the helm."""
         with pytest.raises(ValueError, match="unknown helm"):
             validate_setup(SetupInputs(boat="fun_boat.yaml", parts={}, helm="runs/x.zip"), catalog)
+
+    def test_rejects_a_listed_but_unsailable_helm(self, catalog: Catalog) -> None:
+        """A greyed-out policy is refused with the reason it cannot sail."""
+        stuck = Policy(
+            id="runs/stuck.zip",
+            name="stuck (best)",
+            model_path="runs/stuck.zip",
+            config_path=None,
+            reason="needs stable-baselines3",
+        )
+        grounded = Catalog(
+            boats=catalog.boats,
+            parts=catalog.parts,
+            policies=[stuck],
+            default_boat=catalog.default_boat,
+        )
+        with pytest.raises(ValueError, match="cannot take the helm: needs stable-baselines3"):
+            validate_setup(SetupInputs(boat="fun_boat.yaml", parts={}, helm=stuck.id), grounded)
 
 
 class TestParseSetupMessage:
