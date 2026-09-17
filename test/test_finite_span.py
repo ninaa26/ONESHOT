@@ -6,12 +6,15 @@ import numpy as np
 import pytest
 
 from sailbench.models.foil import Foil
+from sailbench.models.model import State
+from sailbench.tf.tf_tree import TFTree2D
 
 
 class _Foil(Foil):
     """Concrete Foil; the correction under test is independent of compute()."""
 
-    def compute(self, state, tf_tree):  # noqa: ANN001, ANN201, D102
+    def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
+        """Not exercised: the correction under test is independent of compute()."""
         raise NotImplementedError
 
 
