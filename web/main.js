@@ -270,6 +270,9 @@ function makeWsUrl() {
             y: msg.boat.position.y,
             headingRad: Math.atan2(msg.boat.heading.sin, msg.boat.heading.cos),
             waypoint: msg.waypoint || null,
+            wind: msg.wind
+              ? { speed: msg.wind.speed, dirDeg: msg.wind.dir_deg }
+              : null,
           });
         }
         if (msg.waypoint) {
