@@ -67,6 +67,12 @@ class Policy:
     name: str
     model_path: str
     config_path: str | None
+    #: The boat the run trained against, when its config kept one. A policy can
+    #: still be sailed on another boat; the shipyard just says which it learned.
+    trained_on: str | None = None
+    #: Why this checkpoint cannot be sailed, or None when it can. A checkpoint
+    #: that exists is always listed: greyed out with the reason beats vanishing.
+    reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -78,6 +84,9 @@ class Catalog:
     policies: list[Policy]
     default_boat: str
     default_helm: str = "manual"
+    #: One line for the helm row when there is something to explain: no trained
+    #: runs on disk, or runs that are there but cannot be loaded.
+    policy_note: str | None = None
     boat_ids: set[str] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -90,9 +99,19 @@ class Catalog:
             "type": "catalog",
             "boats": self.boats,
             "parts": self.parts,
-            "policies": [{"id": p.id, "name": p.name} for p in self.policies],
+            "policies": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "trained_on": p.trained_on,
+                    "disabled": p.reason is not None,
+                    "reason": p.reason,
+                }
+                for p in self.policies
+            ],
             "default_boat": self.default_boat,
             "default_helm": self.default_helm,
+            "policy_note": self.policy_note,
         }
 
     def policy(self, helm: str) -> Policy | None:
@@ -256,11 +275,35 @@ def _describe_boat(path: Path) -> dict[str, Any] | None:
     }
 
 
-def _find_policies(default_model: str | None, default_config: str | None) -> list[Policy]:
-    """Trained checkpoints under runs/, plus whatever the CLI was started with."""
-    if importlib.util.find_spec("stable_baselines3") is None:
-        return []
+def _backend_reason() -> str | None:
+    """Why a checkpoint on disk could not be sailed, or None when it can be.
 
+    Only *loading* a policy needs the RL extras; finding one is a directory
+    listing. Keeping the two apart is what lets the shipyard show the boat's
+    trained models greyed out with this reason, rather than claiming the runs
+    directory is empty.
+    """
+    for module, extra in (("stable_baselines3", "stable-baselines3"), ("gymnasium", "gymnasium")):
+        if importlib.util.find_spec(module) is None:
+            return f"needs {extra}: install the RL extras with `uv sync --group rl`"
+    return None
+
+
+def _trained_on(config_path: Path | None) -> str | None:
+    """Return the boat config a run trained against, or None when it kept none."""
+    if config_path is None or not config_path.is_file():
+        return None
+    try:
+        with config_path.open(encoding="utf-8") as file:
+            cfg = yaml.safe_load(file) or {}
+    except Exception:  # noqa: BLE001 - an unreadable run config just means "unknown boat"
+        return None
+    boat = (cfg.get("env") or {}).get("simulator_config")
+    return str(boat) if boat else None
+
+
+def _find_policies(default_model: str | None, default_config: str | None, reason: str | None) -> list[Policy]:
+    """Trained checkpoints under runs/, plus whatever the CLI was started with."""
     policies: list[Policy] = []
     seen: set[str] = set()
 
@@ -275,7 +318,9 @@ def _find_policies(default_model: str | None, default_config: str | None) -> lis
                 name=name,
                 model_path=key,
                 config_path=str(config_path) if config_path is not None else None,
-            ),
+                trained_on=_trained_on(config_path),
+                reason=reason,
+            )
         )
 
     if default_model is not None and Path(default_model).is_file():
@@ -323,11 +368,30 @@ def build_catalog(
         row: [{"id": o.id, "name": o.name, "blurb": o.described()} for o in options(part)]
         for row, (part, _) in PARTS.items()
     }
-    policies = _find_policies(policy_model, policy_config)
-    default_helm = policies[0].id if policy_model is not None and policies else "manual"
+    reason = _backend_reason()
+    policies = _find_policies(policy_model, policy_config, reason)
+    sailable = [p for p in policies if p.reason is None]
+
+    if not policies:
+        note = f"no trained runs under {RUNS_PATH} yet — train one with scripts/train_waypoint_sb3.py"
+    elif not sailable:
+        found = f"{len(policies)} trained model{'s' if len(policies) != 1 else ''}"
+        note = f"{found} on disk, none loadable: {reason}"
+    else:
+        note = None
+
+    # Only hand the CLI's `--policy-model` the helm when it is one we can load.
+    default_helm = sailable[0].id if policy_model is not None and sailable else "manual"
     if default_boat not in {b["id"] for b in boats}:
         default_boat = boats[0]["id"]
-    return Catalog(boats=boats, parts=parts, policies=policies, default_boat=default_boat, default_helm=default_helm)
+    return Catalog(
+        boats=boats,
+        parts=parts,
+        policies=policies,
+        default_boat=default_boat,
+        default_helm=default_helm,
+        policy_note=note,
+    )
 
 
 def validate_setup(setup: SetupInputs, catalog: Catalog) -> SetupInputs:
@@ -344,7 +408,12 @@ def validate_setup(setup: SetupInputs, catalog: Catalog) -> SetupInputs:
         if option not in offered:
             msg = f"unknown {part} model {option!r}; expected one of: {', '.join(sorted(offered))}"
             raise ValueError(msg)
-    if setup.helm != "manual" and catalog.policy(setup.helm) is None:
-        msg = f"unknown helm {setup.helm!r}; expected 'manual' or a listed policy"
-        raise ValueError(msg)
+    if setup.helm != "manual":
+        chosen = catalog.policy(setup.helm)
+        if chosen is None:
+            msg = f"unknown helm {setup.helm!r}; expected 'manual' or a listed policy"
+            raise ValueError(msg)
+        if chosen.reason is not None:
+            msg = f"{chosen.name} cannot take the helm: {chosen.reason}"
+            raise ValueError(msg)
     return setup

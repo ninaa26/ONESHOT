@@ -61,8 +61,11 @@ export function createShipyard({ onLaunch }) {
         ...catalog.policies.map((p) => ({
           id: p.id,
           name: p.name,
-          blurb: "Trained PPO policy sails to waypoints",
-          disabled: false,
+          blurb: p.trained_on
+            ? `Trained PPO policy — learned to sail ${p.trained_on}`
+            : "Trained PPO policy sails to waypoints",
+          disabled: Boolean(p.disabled),
+          reason: p.reason,
         })),
       ];
     }
@@ -150,7 +153,11 @@ export function createShipyard({ onLaunch }) {
       parts: prior && prior.parts ? { ...prior.parts } : {},
       helm: "manual",
     };
-    const helmIds = rowOptions("helm").map((o) => o.id);
+    // A helm remembered from last time may be greyed out now (the RL extras
+    // went missing, the run was deleted); fall back to steering it yourself.
+    const helmIds = rowOptions("helm")
+      .filter((o) => !o.disabled)
+      .map((o) => o.id);
     const wantHelm = prior && prior.helm ? prior.helm : catalog.default_helm;
     selection.helm = helmIds.includes(wantHelm) ? wantHelm : "manual";
     reconcileParts();
@@ -257,7 +264,13 @@ export function createShipyard({ onLaunch }) {
       const blurb = document.createElement("div");
       blurb.className = "part-blurb";
       const chosen = options.find((o) => o.id === value);
-      blurb.textContent = chosen && chosen.blurb ? chosen.blurb : "";
+      let text = chosen && chosen.blurb ? chosen.blurb : "";
+      // A greyed-out chip only explains itself on hover, so the helm row says
+      // out loud why the trained models are not on offer.
+      if (name === "helm" && catalog.policy_note) {
+        text = text ? `${text} · ${catalog.policy_note}` : catalog.policy_note;
+      }
+      blurb.textContent = text;
       line.appendChild(blurb);
 
       partsEl.appendChild(line);
@@ -397,6 +410,9 @@ export function createShipyard({ onLaunch }) {
     describe,
     isOpen: () => open,
     hasCatalog: () => catalog !== null,
+    // This app does present a boat picker, so the sim should greet the
+    // server and let it hold the catalog open until a build is chosen.
+    wantsCatalog: () => true,
   };
 }
 
