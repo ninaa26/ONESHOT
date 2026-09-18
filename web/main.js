@@ -5,7 +5,7 @@ import { createWind } from "./wind.js";
 import { SIM_Y_TO_WORLD_Z, createBoat, updateBoatFromState } from "./boat.js";
 import { createForceArrows } from "./forces.js";
 import { createRadar } from "./radar.js";
-import { setBoat, setConnectionStatus, setControlMode, updateForcesChart } from "./hud.js";
+import { setBoat, setConnectionStatus, setControlMode, setWind, updateForcesChart } from "./hud.js";
 import { createShipyard } from "./shipyard.js";
 
 // --- Scene & environment ------------------------------------------------
@@ -202,8 +202,12 @@ function makeWsUrl() {
         if (typeof msg.control_mode === "string") {
           setControlMode(msg.control_mode);
         }
-        // Fresh boat, fresh track.
+        // Fresh boat, fresh track, and its own config's wind again.
         radar.reset();
+        windCmdMs = null;
+        lastSentWindMs = null;
+        windDirCmdDeg = null;
+        lastSentWindDirDeg = null;
         // Fresh boat, fresh helm: don't carry stale commands into it.
         rudderCmdDeg = 0;
         sailCmdDeg = 0;
@@ -240,6 +244,15 @@ function makeWsUrl() {
         }
         if (stateVis && stateVis.wind) {
           wind.setFromPayload(stateVis.wind);
+          // Adopt whatever the boat is actually sailing in as the starting
+          // point, so the first keypress nudges from there instead of jumping.
+          if (windCmdMs === null && typeof stateVis.wind.speed === "number") {
+            windCmdMs = stateVis.wind.speed;
+          }
+          if (windDirCmdDeg === null && typeof stateVis.wind.dir_deg === "number") {
+            windDirCmdDeg = stateVis.wind.dir_deg;
+          }
+          setWind(stateVis.wind.speed, stateVis.wind.dir_deg, windCmdMs, windDirCmdDeg);
         }
         if (msg.forces) {
           lastForces = msg.forces;
@@ -290,6 +303,29 @@ let sailStateDeg = 0.0;
 let lastSentRudderDeg = rudderCmdDeg;
 let lastSentSailDeg = sailCmdDeg;
 
+// Wind the helm can change. It starts as null so the boat sails whatever its
+// config asked for; the first state message adopts that as the starting point,
+// and only a keypress after that makes this a command the server is sent.
+const WIND_STEP_MS = 0.5;
+const WIND_MIN_MS = 0.0;
+const WIND_MAX_MS = 25.0;
+const WIND_DIR_STEP_DEG = 5.0;
+let windCmdMs = null;
+let lastSentWindMs = null;
+let windDirCmdDeg = null;
+let lastSentWindDirDeg = null;
+
+function nudgeWind(deltaMs) {
+  if (windCmdMs === null) return;
+  windCmdMs = Math.min(WIND_MAX_MS, Math.max(WIND_MIN_MS, windCmdMs + deltaMs));
+}
+
+function nudgeWindDir(deltaDeg) {
+  if (windDirCmdDeg === null) return;
+  // Direction wraps rather than clamping: there is no end of the compass.
+  windDirCmdDeg = ((windDirCmdDeg + deltaDeg) % 360 + 360) % 360;
+}
+
 const RUDDER_MAX_DEG = 35.0;
 const SAIL_MAX_DEG = 90.0; // total travel ±90° (180° span)
 const RUDDER_RATE_DEG = 80.0; // deg/s
@@ -319,6 +355,22 @@ window.addEventListener("keydown", (ev) => {
     case "ArrowDown":
     case "KeyS":
       keyDown = true;
+      break;
+    // Wind strength. Stepped rather than held: it is a condition being set,
+    // not a control being flown, so it should stay where it is put.
+    case "BracketLeft":
+      nudgeWind(-WIND_STEP_MS);
+      break;
+    case "BracketRight":
+      nudgeWind(WIND_STEP_MS);
+      break;
+    // Wind direction, counter-clockwise and clockwise. Same reasoning: a
+    // condition to set, not a control to hold.
+    case "Comma":
+      nudgeWindDir(WIND_DIR_STEP_DEG);
+      break;
+    case "Period":
+      nudgeWindDir(-WIND_DIR_STEP_DEG);
       break;
     default:
       break;
@@ -394,18 +446,40 @@ function maybeSendControls() {
   const changedRudder =
     Math.abs(rudderCmdDeg - lastSentRudderDeg) > 0.1;
   const changedSail = Math.abs(sailCmdDeg - lastSentSailDeg) > 0.1;
+  const changedWind =
+    windCmdMs !== null &&
+    (lastSentWindMs === null || Math.abs(windCmdMs - lastSentWindMs) > 0.01);
+  const changedWindDir =
+    windDirCmdDeg !== null &&
+    (lastSentWindDirDeg === null ||
+      Math.abs(windDirCmdDeg - lastSentWindDirDeg) > 0.01);
 
-  if (!changedRudder && !changedSail) return;
+  if (!changedRudder && !changedSail && !changedWind && !changedWindDir) return;
 
   const payload = {
     type: "control",
     rudder_deg: rudderCmdDeg,
     sail_deg: sailCmdDeg,
   };
+  // Omitted unless the helm has actually moved it: the server reads a missing
+  // field as "no change", so sending it always would pin the wind to whatever
+  // the page last saw and stop the config from ever setting it.
+  if (changedWind) {
+    payload.wind_speed = windCmdMs;
+  }
+  if (changedWindDir) {
+    payload.wind_dir_deg = windDirCmdDeg;
+  }
 
   socket.send(JSON.stringify(payload));
   lastSentRudderDeg = rudderCmdDeg;
   lastSentSailDeg = sailCmdDeg;
+  if (changedWind) {
+    lastSentWindMs = windCmdMs;
+  }
+  if (changedWindDir) {
+    lastSentWindDirDeg = windDirCmdDeg;
+  }
 }
 
 // --- animation loop ----------------------------------------------------

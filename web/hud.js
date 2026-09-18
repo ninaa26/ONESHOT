@@ -16,6 +16,8 @@ const hudRudderAngleEl = document.getElementById("hud-rudder-angle");
 const hudSailForceEl = document.getElementById("hud-sail-force");
 /** @type {HTMLSpanElement | null} */
 const hudBoatEl = document.getElementById("hud-boat");
+/** @type {HTMLSpanElement | null} */
+const hudWindEl = document.getElementById("hud-wind");
 
 export function setSpeed(valueMs) {
   if (!hudSpeedEl) return;
@@ -26,6 +28,16 @@ export function setHeading(deg) {
   if (!hudHeadingEl) return;
   const hdg = ((deg % 360) + 360) % 360;
   hudHeadingEl.textContent = `${hdg.toFixed(1)}°`;
+}
+
+export function setWind(speedMs, dirDeg, commandedMs, commandedDeg) {
+  if (!hudWindEl) return;
+  // While a change is in flight the commanded value is shown, so the readout
+  // answers the key you just pressed rather than lagging a frame behind it.
+  const shownMs = typeof commandedMs === "number" ? commandedMs : speedMs;
+  const shownDeg = typeof commandedDeg === "number" ? commandedDeg : dirDeg;
+  const dir = ((shownDeg % 360) + 360) % 360;
+  hudWindEl.textContent = `${shownMs.toFixed(1)} m/s @ ${dir.toFixed(0)}°`;
 }
 
 export function setConnectionStatus(text) {
