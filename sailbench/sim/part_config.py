@@ -42,9 +42,11 @@ from sailbench.sim.registry import canonical, defaults
 
 # The key that names a component's model. `model_type` came first and stays
 # accepted for good; `model` is preferred because it reads better beside `models`
-# and says what the section is choosing. `model` wins when both are present, so a
+# and says what the section is choosing. Order matters only for which spelling is
+# read first: a section carrying both must agree with itself, and `model_name`
+# refuses it otherwise rather than silently sailing the model nobody picked. A
 # caller layering an override onto a config -- the shipyard does exactly this --
-# need not know which spelling that config happens to use.
+# should therefore overwrite the key the config already uses, not add the other.
 SELECTOR_KEYS: tuple[str, ...] = ("model", "model_type")
 
 # Keys of a section that are not parameters of the selected model.

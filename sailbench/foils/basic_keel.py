@@ -56,7 +56,7 @@ class BasicKeel(Foil):
 
     def _check_keys(self) -> None:
         """Reject keys that belong to the finite-span model."""
-        stray = [k for k in FINITE_SPAN_KEYS if k in self.p]
+        stray = [k for k in self.REFUSES if k in self.p]
         if stray:
             msg = (
                 f"keel model_type: basic is a 2-D section and got {', '.join(stray)}; "

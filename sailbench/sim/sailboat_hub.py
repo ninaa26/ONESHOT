@@ -109,7 +109,6 @@ class SailboatHub:
         self.keel = self._model_for("keel", self.keel_cfg)(self.keel_cfg)
         self.components = [self.hull, self.keel, self.sail, self.rudder]
 
-
         # Above-water drag is its own component, not part of the sail: the sail
         # is a trimmable lifting surface, the mast and topsides are bluff bodies.
         # Gated on a drag area rather than on the section existing, because
@@ -416,10 +415,6 @@ class SailboatHub:
         fy_total = 0.0
         mz_total = 0.0
         self.last_forces = {}
-
-        # Helpful for debugging runaway forces.
-        u, v, r = float(state.u), float(state.v), float(state.r)
-        speed = float(np.hypot(u, v))
 
         for component in self.components:
             result = np.atleast_1d(component.compute(state, self.tf))

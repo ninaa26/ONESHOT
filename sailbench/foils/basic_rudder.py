@@ -56,7 +56,7 @@ class BasicRudder(Foil):
 
     def _check_keys(self) -> None:
         """Reject keys that belong to the finite-span model."""
-        stray = [k for k in FINITE_SPAN_KEYS if k in self.p]
+        stray = [k for k in self.REFUSES if k in self.p]
         if stray:
             msg = (
                 f"rudder model_type: basic is a 2-D section and got {', '.join(stray)}; "
@@ -160,7 +160,7 @@ class FiniteSpanRudder(BasicRudder):
         if not self.stall_blending:
             msg = "rudder model_type: finite_span needs alpha_sep_deg > 0"
             raise ValueError(msg)
-        stray = [k for k in CLAMP_KEYS if k in self.p]
+        stray = [k for k in self.REFUSES if k in self.p]
         if stray:
             msg = f"rudder model_type: finite_span blends past stall and got clamp keys {', '.join(stray)}"
             raise ValueError(msg)
