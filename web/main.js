@@ -370,10 +370,25 @@ let keyUp = false;
 let keyDown = false;
 
 window.addEventListener("keydown", (ev) => {
-  // A focused slider owns its own arrow keys; steering the boat from them at
-  // the same time would fight whoever is dragging it.
+  // A focused slider owns the keys it actually uses -- the arrows and the ends
+  // of its range -- because steering the boat from those at the same time would
+  // fight whoever is dragging it. It does not own the rest: swallowing every
+  // key meant that clicking a wind slider silently stopped `[`, `]`, `,` and
+  // `.` from working, so the wind stopped changing and everything downstream of
+  // it looked frozen.
   const tag = ev.target && ev.target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const isField = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  const OWNED_BY_FIELD = new Set([
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+  ]);
+  if (isField && OWNED_BY_FIELD.has(ev.code)) return;
   if (shipyard.handleKey(ev)) return;
   switch (ev.code) {
     case "ArrowLeft":
