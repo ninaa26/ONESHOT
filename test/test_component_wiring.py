@@ -193,9 +193,7 @@ class TestEnvironmentReachesComponents:
             hub.environment_cfg["rho_air"] = rho
             hub.boat_factory()
             heading = math.radians(90.0) - math.pi + math.radians(45.0)
-            state = State.from_array(
-                np.array([0.0, 0.0, math.cos(heading), math.sin(heading), 1.5, 0.0, 0.0])
-            )
+            state = State.from_array(np.array([0.0, 0.0, math.cos(heading), math.sin(heading), 1.5, 0.0, 0.0]))
             hub._set_kinematic_frames(state, math.radians(20.0))
             forces.append(float(np.asarray(hub.sail.compute(state, hub.tf), dtype=float)[0]))
         assert forces[1] == pytest.approx(2.0 * forces[0], rel=1e-6)

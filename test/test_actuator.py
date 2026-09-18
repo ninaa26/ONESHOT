@@ -11,7 +11,7 @@ class TestFirstOrderLag:
     """The lag itself."""
 
     def test_instant_when_no_time_constant(self) -> None:
-        """tau 0 means the surface tracks its command exactly."""
+        """Tau 0 means the surface tracks its command exactly."""
         assert Actuator(tau_s=0.0).advance(20.0, 0.02) == pytest.approx(20.0)
 
     def test_reaches_one_time_constant_in_one_tau(self) -> None:
@@ -138,8 +138,7 @@ class TestObservationExposure:
         """Opting in appends rudder and sheet position."""
         from sailbench.rl.envs.waypoint_env import WaypointEnv, WaypointEnvConfig
 
-        env = WaypointEnv(WaypointEnvConfig(
-            simulator_config="flingo_floty.yaml", include_actuator_state=True))
+        env = WaypointEnv(WaypointEnvConfig(simulator_config="flingo_floty.yaml", include_actuator_state=True))
         obs, _ = env.reset(seed=0)
         assert obs.shape == (15,)
         assert env.observation_space.contains(obs)
@@ -154,8 +153,7 @@ class TestObservationExposure:
 
         from sailbench.rl.envs.waypoint_env import WaypointEnv, WaypointEnvConfig
 
-        env = WaypointEnv(WaypointEnvConfig(
-            simulator_config="flingo_floty.yaml", include_actuator_state=True))
+        env = WaypointEnv(WaypointEnvConfig(simulator_config="flingo_floty.yaml", include_actuator_state=True))
         env.reset(seed=0)
         obs, *_ = env.step(np_.array([0.0, 1.0]))  # sheet hard out
         commanded, actual = float(obs[12]), float(obs[14])

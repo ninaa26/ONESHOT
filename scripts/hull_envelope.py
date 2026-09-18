@@ -20,9 +20,8 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-from numpy.typing import NDArray
-
 from hull_analysis import autoscale, load_stl, normals_and_areas, split_components, volume_and_centroid
+from numpy.typing import NDArray
 
 Array = NDArray[np.float64]
 
@@ -31,6 +30,7 @@ class Envelope:
     """First-entry / last-exit surfaces of one body, sampled on a waterplane grid."""
 
     def __init__(self, tris: Array, up: int, fwd: int, lat: int, pitch: float) -> None:
+        """Rasterise the triangles onto a waterplane grid of the given pitch."""
         self.up, self.fwd, self.lat, self.pitch = up, fwd, lat, pitch
         pts = tris.reshape(-1, 3)
         self.lo = pts.min(axis=0)
@@ -44,15 +44,15 @@ class Envelope:
         self._rasterise(tris)
 
     def _rasterise(self, tris: Array) -> None:
-        f, l, u, pitch = self.fwd, self.lat, self.up, self.pitch
+        f, lat_i, u, pitch = self.fwd, self.lat, self.up, self.pitch
         # Cell centres, so a ray never lands exactly on a shared edge.
         f0 = self.lo[f] + 0.5 * pitch
-        l0 = self.lo[l] + 0.5 * pitch
+        l0 = self.lo[lat_i] + 0.5 * pitch
 
         for tri in tris:
-            af, al, au = tri[0, f], tri[0, l], tri[0, u]
-            bf, bl, bu = tri[1, f], tri[1, l], tri[1, u]
-            cf, cl, cu = tri[2, f], tri[2, l], tri[2, u]
+            af, al, au = tri[0, f], tri[0, lat_i], tri[0, u]
+            bf, bl, bu = tri[1, f], tri[1, lat_i], tri[1, u]
+            cf, cl, cu = tri[2, f], tri[2, lat_i], tri[2, u]
 
             det = (bl - cl) * (af - cf) + (cf - bf) * (al - cl)
             if abs(det) < 1e-14:  # edge-on to the ray: contributes no interval
@@ -126,11 +126,13 @@ class Envelope:
         return area, length, beam
 
     def station_positions(self) -> Array:
+        """Return the forward position of each station's cell centre [m]."""
         return self.lo[self.fwd] + (np.arange(self.nf) + 0.5) * self.pitch
 
     def section(self, i: int, height: float) -> tuple[float, float, float]:
         """Submerged area, beam at the waterline, and draft at one station."""
-        col_min, col_max = self.ymin[i], self.ymax[i]
+        # Only the bottom surface matters below the waterline; ymax is the deck.
+        col_min = self.ymin[i]
         ok = np.isfinite(col_min) & (col_min < height)
         if not ok.any():
             return 0.0, 0.0, 0.0

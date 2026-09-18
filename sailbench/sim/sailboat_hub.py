@@ -114,9 +114,7 @@ class SailboatHub:
         # Gated on a drag area rather than on the section existing, because
         # _apply_environment populates every section it is handed -- an empty
         # `windage` dict comes back non-empty and would build a do-nothing model.
-        has_windage = any(
-            float(self.windage_cfg.get(key, 0.0)) > 0.0 for key in ("frontal_area_m2", "drag_area_m2")
-        )
+        has_windage = any(float(self.windage_cfg.get(key, 0.0)) > 0.0 for key in ("frontal_area_m2", "drag_area_m2"))
         self.windage = Windage(self.windage_cfg) if has_windage else None
         if self.windage is not None:
             self.components.append(self.windage)
@@ -315,7 +313,10 @@ class SailboatHub:
                 self.windage_cfg[key] = self.sail_cfg[key]
 
     def _set_kinematic_frames(
-        self, state: State, sheet_limit_rad: float, rudder_angle_deg: float | None = None,
+        self,
+        state: State,
+        sheet_limit_rad: float,
+        rudder_angle_deg: float | None = None,
     ) -> None:
         """Set the boat, sail and rudder frames.
 

@@ -27,7 +27,6 @@ from sailbench.models.model import State
 from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
-
 # Keys that only make sense for one of the two models.
 FINITE_SPAN_KEYS = ("span", "effective_aspect_ratio", "alpha_sep_deg")
 CLAMP_KEYS = ("aoa_limit_deg", "cl_max", "cd_max")

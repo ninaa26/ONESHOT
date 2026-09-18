@@ -123,18 +123,18 @@ class TestFrictionLaws:
     def test_flat_is_the_default(self) -> None:
         """A hull that names no law gets the constant it always got."""
         hull = BasicHullModel({"L": 1.5, "B": 0.6, "T": 0.05})
-        assert hull._friction_coefficient(1.0, 1.5) == pytest.approx(0.004)  # noqa: SLF001
+        assert hull._friction_coefficient(1.0, 1.5) == pytest.approx(0.004)
 
     def test_hughes_varies_with_speed(self) -> None:
         """The point of the law: the coefficient falls as Reynolds number rises."""
         hull = BasicHullModel({"L": 1.5, "B": 0.6, "T": 0.05, "friction_model": "hughes", "nu_water": 1.0e-6})
-        assert hull._friction_coefficient(3.0, 1.5) < hull._friction_coefficient(1.0, 1.5)  # noqa: SLF001
+        assert hull._friction_coefficient(3.0, 1.5) < hull._friction_coefficient(1.0, 1.5)
 
     def test_a_typo_no_longer_means_flat(self) -> None:
         """It used to: anything that was not `hughes` silently ran the constant."""
         hull = BasicHullModel({"L": 1.5, "B": 0.6, "T": 0.05, "friction_model": "hugues"})
         with pytest.raises(ValueError, match="unknown friction model 'hugues'"):
-            hull._friction_coefficient(1.0, 1.5)  # noqa: SLF001
+            hull._friction_coefficient(1.0, 1.5)
 
 
 class TestHullIsSelectable:
@@ -159,7 +159,11 @@ class TestHullIsSelectable:
         [("basic", BasicHullModel), ("linear", LinearHydroModel), ("quadratic", QuadraticHydroModel)],
     )
     def test_each_model_can_be_named(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str, expected: type,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        model: str,
+        expected: type,
     ) -> None:
         """All three alternatives for the slot are reachable from a config."""
         name = self.boat(tmp_path, monkeypatch, {"model": model})
@@ -177,7 +181,7 @@ class TestHullIsSelectable:
         name = self.boat(tmp_path, monkeypatch, {"model": "quadratic", "xu2": 20.0})
         hub = SailboatHub(name)
         assert not hasattr(hub.hull, "added_mass")
-        assert np.isfinite(hub._forces(State(x=0.0, y=0.0, psi=0.0, u=1.0, v=0.0, r=0.0))).all()  # noqa: SLF001
+        assert np.isfinite(hub._forces(State(x=0.0, y=0.0, psi=0.0, u=1.0, v=0.0, r=0.0))).all()
 
     def test_an_unknown_hull_model_is_refused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """With the names it could have meant."""
@@ -277,6 +281,6 @@ class TestHybridSailIsSelectable:
     def test_it_makes_force(self) -> None:
         """Registered and wired, not merely importable."""
         hub = SailboatHub("wpi_wild_goats.yaml", overrides={"sail": {"model": "hybrid"}})
-        fx, fy, _ = hub._forces(State(x=0.0, y=0.0, psi=0.0, u=0.5, v=0.0, r=0.0))  # noqa: SLF001
+        fx, fy, _ = hub._forces(State(x=0.0, y=0.0, psi=0.0, u=0.5, v=0.0, r=0.0))
         assert np.isfinite([fx, fy]).all()
         assert abs(fy) > 0.0

@@ -126,9 +126,9 @@ def test_vector_to_frame_90_deg_rotation() -> None:
     # A rotated 90° relative to world
     tree.add_frame("A", "world", Transform2D(0.0, 0.0, 0.0, 1.0))
 
-    vec_A = np.array([1.0, 0.0])  # x-axis of A
+    vec_a = np.array([1.0, 0.0])  # x-axis of A
 
-    result = tree.vector_to_frame(vec_A, "A", "world")
+    result = tree.vector_to_frame(vec_a, "A", "world")
 
     # Should align with +y in world
     expected = np.array([0.0, 1.0])
@@ -145,9 +145,9 @@ def test_vector_between_two_rotated_frames() -> None:
     # B: -90°
     tree.add_frame("B", "world", Transform2D(0.0, 0.0, 0.0, -1.0))
 
-    vec_A = np.array([1.0, 0.0])
+    vec_a = np.array([1.0, 0.0])
 
-    result = tree.vector_to_frame(vec_A, "A", "B")
+    result = tree.vector_to_frame(vec_a, "A", "B")
 
     # 90° to world gives (0,1)
     # world to B (transpose of -90°) gives (1,0)

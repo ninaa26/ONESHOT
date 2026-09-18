@@ -16,10 +16,15 @@ MEASURED = {"frontal_area_m2": 0.1818, "lateral_area_m2": 0.3678, "drag_coeffici
 
 def make_windage(**overrides: float) -> Windage:
     """Build a windage model with a fixed wind."""
-    return Windage({
-        "wind_speed": 5.0, "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225,
-        **MEASURED, **overrides,
-    })
+    return Windage(
+        {
+            "wind_speed": 5.0,
+            "wind_dir_deg": WIND_TO_DEG,
+            "rho_air": 1.225,
+            **MEASURED,
+            **overrides,
+        }
+    )
 
 
 def make_state(u: float = 0.0, psi: float = 0.0) -> State:
@@ -30,8 +35,7 @@ def make_state(u: float = 0.0, psi: float = 0.0) -> State:
 def tree(psi: float = 0.0) -> TFTree2D:
     """Transform tree with the boat on a heading."""
     tf = TFTree2D()
-    tf.add_frame(name="boat", parent="world",
-                 transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
+    tf.add_frame(name="boat", parent="world", transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
     return tf
 
 

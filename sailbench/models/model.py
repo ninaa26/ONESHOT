@@ -68,7 +68,11 @@ class State:
 
     def __str__(self) -> str:
         """Return string representation of State."""
-        return f"State(x={self.x:.2f}, y={self.y:.2f}, psi=({self.psi[0]:.2f}, {self.psi[1]:.2f}), u={self.u:.2f}, v={self.v:.2f}, r={self.r:.2f})"
+        return (
+            f"State(x={self.x:.2f}, y={self.y:.2f}, "
+            f"psi=({self.psi[0]:.2f}, {self.psi[1]:.2f}), "
+            f"u={self.u:.2f}, v={self.v:.2f}, r={self.r:.2f})"
+        )
 
 
 class Model(ABC):

@@ -29,18 +29,31 @@ WIND_TO_DEG = 90.0
 
 def make_sail(**overrides: float) -> ORCMainSail:
     """Build an ORC sail with Flingo's measured rig."""
-    return ORCMainSail({
-        "area": 1.971, "heff": 2.592, "wind_speed": 5.0,
-        "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
-    })
+    return ORCMainSail(
+        {
+            "area": 1.971,
+            "heff": 2.592,
+            "wind_speed": 5.0,
+            "wind_dir_deg": WIND_TO_DEG,
+            "rho_air": 1.225,
+            **overrides,
+        }
+    )
 
 
 def make_sloop(**overrides: float) -> ORCWithJibSail:
     """Build an ORC sloop with Flingo's measured rig and jib."""
-    return ORCWithJibSail({
-        "area": 1.971, "jib_area": 0.775, "heff": 2.592, "wind_speed": 5.0,
-        "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225, **overrides,
-    })
+    return ORCWithJibSail(
+        {
+            "area": 1.971,
+            "jib_area": 0.775,
+            "heff": 2.592,
+            "wind_speed": 5.0,
+            "wind_dir_deg": WIND_TO_DEG,
+            "rho_air": 1.225,
+            **overrides,
+        }
+    )
 
 
 def make_state(u: float = 1.7, psi: float = 0.0) -> State:
@@ -51,10 +64,10 @@ def make_state(u: float = 1.7, psi: float = 0.0) -> State:
 def tree(boom_rad: float, psi: float = 0.0) -> TFTree2D:
     """Transform tree with the boat on a heading and the boom trimmed."""
     tf = TFTree2D()
-    tf.add_frame(name="boat", parent="world",
-                 transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
-    tf.add_frame(name="sail", parent="boat",
-                 transform=Transform2D(x=0.0, y=0.0, c=math.cos(boom_rad), s=math.sin(boom_rad)))
+    tf.add_frame(name="boat", parent="world", transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
+    tf.add_frame(
+        name="sail", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=math.cos(boom_rad), s=math.sin(boom_rad))
+    )
     return tf
 
 
@@ -106,7 +119,7 @@ class TestTrim:
         assert make_sail().flat_from_trim(0.0) == 0.0
 
     def test_full_power_at_optimum(self) -> None:
-        """flat reaches 1 at alpha_opt."""
+        """Flat reaches 1 at alpha_opt."""
         assert make_sail().flat_from_trim(math.radians(22.0)) == pytest.approx(1.0)
 
     def test_rises_monotonically_up_to_the_optimum(self) -> None:
@@ -135,8 +148,7 @@ class TestForces:
         """Correctly trimmed, the sail pushes the boat forwards."""
         sail = make_sail()
         psi = beat(twa_deg)
-        best = max(sail.compute(make_state(psi=psi), tree(math.radians(t), psi))[0]
-                   for t in range(5, 90, 5))
+        best = max(sail.compute(make_state(psi=psi), tree(math.radians(t), psi))[0] for t in range(5, 90, 5))
         assert best > 0.0
 
     def test_heel_force_opposes_the_wind_side(self) -> None:
@@ -174,7 +186,8 @@ class TestForces:
 
 class TestRightingMomentDepower:
     """ORC chooses `flat` against a righting-moment limit; without it the rig
-    sails at permanent full power, which a 3-DOF hull never pays for."""
+    sails at permanent full power, which a 3-DOF hull never pays for.
+    """
 
     ARM = 1.47  # CE above the centre of lateral resistance
 
@@ -213,8 +226,10 @@ class TestRightingMomentDepower:
         """The constraint only ever removes power, never adds it."""
         psi = beat(35.0)
         args = (make_state(psi=psi), tree(math.radians(20.0), psi))
-        loose = make_sail(); loose.compute(*args)
-        tight = self.limited(15.0); tight.compute(*args)
+        loose = make_sail()
+        loose.compute(*args)
+        tight = self.limited(15.0)
+        tight.compute(*args)
         assert 0.0 <= tight.last_flat <= loose.last_flat
 
     def test_impossible_limit_fully_depowers(self) -> None:
@@ -252,7 +267,8 @@ class TestRightingMomentDepower:
         assert abs(short_arm.compute(*args)[1]) > abs(long_arm.compute(*args)[1])
 
     @pytest.mark.parametrize(
-        ("limit", "arm"), [(25.0, None), (None, 1.47)],
+        ("limit", "arm"),
+        [(25.0, None), (None, 1.47)],
     )
     def test_both_keys_required(self, limit: float | None, arm: float | None) -> None:
         """Half a constraint is a configuration error, not a silent no-op."""
@@ -325,11 +341,17 @@ class TestSectionKeysRefused:
 
     def test_orc_keys_still_accepted(self) -> None:
         """The refusal is narrow: every key the ORC model actually reads still works."""
-        sail = ORCWithJibSail({
-            "area": 1.971, "jib_area": 0.775, "heff": 2.592,
-            "heff_model": "orc-2022", "eff_span_corr": 1.057,
-            "alpha_opt_deg": 22.0, "flat_stall_floor": 0.55,
-        })
+        sail = ORCWithJibSail(
+            {
+                "area": 1.971,
+                "jib_area": 0.775,
+                "heff": 2.592,
+                "heff_model": "orc-2022",
+                "eff_span_corr": 1.057,
+                "alpha_opt_deg": 22.0,
+                "flat_stall_floor": 0.55,
+            }
+        )
         assert sail.eff_span_corr == pytest.approx(1.057)
 
     def test_basic_sail_refuses_orc_keys(self) -> None:

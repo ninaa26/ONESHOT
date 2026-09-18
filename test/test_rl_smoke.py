@@ -29,4 +29,3 @@ def test_ppo_smoke_train_short_run() -> None:
         seed=0,
     )
     model.learn(total_timesteps=64)
-

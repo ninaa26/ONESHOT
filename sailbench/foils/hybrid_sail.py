@@ -4,8 +4,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from sailbench.models.model import Model
-from sailbench.models.model import State
+from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
@@ -49,6 +48,7 @@ class HybridSail(Model):
                 - CD0: zero-AoA drag (default 0.1)
                 - CD1: drag shape factor (default 1.0)
                 - air_density: kg/m³ (default 1.225)
+
         """
         super().__init__(params)
 
@@ -64,6 +64,7 @@ class HybridSail(Model):
 
         Returns:
             np.ndarray: [Fx, Fy] forces in newtons (boat frame).
+
         """
         wind_speed = float(self.p.get("wind_speed", 0.0))
         wind_angle_deg = float(self.p.get("wind_dir_deg", 0.0))
@@ -79,20 +80,16 @@ class HybridSail(Model):
         wind_world = wind_speed * np.array([np.cos(wind_rad), np.sin(wind_rad)])
 
         # Boat velocity in world frame
-        v_boat_world = tf_tree.vector_to_frame(
-            np.array([state.u, state.v]), "boat", "world"
-        )
+        v_boat_world = tf_tree.vector_to_frame(np.array([state.u, state.v]), "boat", "world")
 
         # Apparent wind: V_aw = V_wind - V_boat
         apparent_wind_world = wind_world - v_boat_world
 
         # Apparent wind in sail frame (sail chord along sail -x, mast at +x)
-        apparent_wind_sail = tf_tree.vector_to_frame(
-            apparent_wind_world, "world", "sail"
-        )
+        apparent_wind_sail = tf_tree.vector_to_frame(apparent_wind_world, "world", "sail")
 
-        V = float(np.linalg.norm(apparent_wind_sail))
-        if V < 1e-6:
+        v_app = float(np.linalg.norm(apparent_wind_sail))
+        if v_app < 1e-6:
             return np.array([0.0, 0.0])
 
         # 2. Angle of attack from apparent wind in sail frame.
@@ -104,15 +101,13 @@ class HybridSail(Model):
         alpha = float(np.arctan2(-apparent_wind_sail[1], -apparent_wind_sail[0]))
 
         # 3. Lift and drag coefficients (hybrid model)
-        if np.degrees(np.abs(alpha)) < LUFF_DEG:
-            cl = 0.0  # Sails stop generating lift when they luff
-        else:
-            cl = cl_max * np.sin(2 * alpha)
+        # Sails stop generating lift when they luff.
+        cl = 0.0 if np.degrees(np.abs(alpha)) < LUFF_DEG else cl_max * np.sin(2 * alpha)
 
         cd = cd0 + cd1 * (1.0 - np.cos(2 * alpha))
 
         # 4. Aerodynamic forces
-        q = 0.5 * rho * V**2
+        q = 0.5 * rho * v_app**2
         lift = q * area * cl
         drag = q * area * cd
 
@@ -122,7 +117,7 @@ class HybridSail(Model):
 
         # Rotation fluid → sail: fluid +x is the flow direction
         c, s = np.cos(flow), np.sin(flow)
-        R_fluid_to_sail = np.array([[c, -s], [s, c]])
-        f_sail = R_fluid_to_sail @ f_fluid
+        r_fluid_to_sail = np.array([[c, -s], [s, c]])
+        f_sail = r_fluid_to_sail @ f_fluid
 
         return tf_tree.vector_to_frame(f_sail, "sail", "boat")

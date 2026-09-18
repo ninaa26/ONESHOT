@@ -138,7 +138,9 @@ def clip_below(tris: Array, axis: int, height: float) -> tuple[Array, Array]:
     if len(fully):
         kept.append(fully)
 
-    for tri, ins in zip(tris[(n_inside == 1) | (n_inside == 2)], inside[(n_inside == 1) | (n_inside == 2)], strict=True):
+    for tri, ins in zip(
+        tris[(n_inside == 1) | (n_inside == 2)], inside[(n_inside == 1) | (n_inside == 2)], strict=True
+    ):
         poly, is_exit, is_entry = _clip_polygon(tri, ins, axis, height)
         if len(poly) < 3:
             continue
@@ -297,6 +299,7 @@ def solve_waterline(tris: Array, up: int, mass: float, rho: float) -> tuple[floa
 
 
 def displaced_volume(tris: Array, up: int, height: float) -> float:
+    """Return the volume of hull below `height`, by the divergence theorem [m^3]."""
     below, _ = clip_below(tris, up, height)
     if not len(below):
         return 0.0
@@ -440,8 +443,19 @@ def main() -> None:
             )
 
     if args.yaml:
-        _write_yaml(args, height, displaced, lwl, bwl, hull_draft, float(wetted_areas.sum()), wp_area, block,
-                    sections, appendages)
+        _write_yaml(
+            args,
+            height,
+            displaced,
+            lwl,
+            bwl,
+            hull_draft,
+            float(wetted_areas.sum()),
+            wp_area,
+            block,
+            sections,
+            appendages,
+        )
         print(f"\nwrote {args.yaml}")
 
 
@@ -451,7 +465,7 @@ def _apex(up: int, height: float) -> Array:
     return apex
 
 
-def _write_yaml(  # noqa: PLR0913
+def _write_yaml(
     args: argparse.Namespace,
     height: float,
     displaced: float,
@@ -464,7 +478,7 @@ def _write_yaml(  # noqa: PLR0913
     sections: list[dict[str, float]],
     appendages: list[dict[str, float | str]],
 ) -> None:
-    import yaml  # noqa: PLC0415
+    import yaml
 
     payload = {
         "source": {"stl": str(args.stl), "mass_kg": args.mass, "rho": args.rho},

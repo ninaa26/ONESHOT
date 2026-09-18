@@ -30,7 +30,7 @@ import math
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,10 +41,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from sailbench.models.foil import Foil  # noqa: E402
-from sailbench.models.model import State  # noqa: E402
-from sailbench.sim.sailboat_hub import SailboatHub  # noqa: E402
-from sailbench.solvers.rk4 import rk4_step  # noqa: E402
+from sailbench.models.foil import Foil
+from sailbench.models.model import State
+from sailbench.sim.sailboat_hub import SailboatHub
+from sailbench.solvers.rk4 import rk4_step
 
 # --- foil table ---------------------------------------------------------
 
@@ -58,7 +58,7 @@ def _table_for(re: float, airfoil_name: str = "NACA0012") -> tuple[np.ndarray, n
     """Return (CL, CD) sampled on ALPHA_GRID, memoised per Reynolds number."""
     from aerosandbox import Airfoil
 
-    key = int(round(float(re)))
+    key = round(float(re))
     if key not in _TABLES:
         aero = Airfoil(name=airfoil_name).get_aero_from_neuralfoil(
             alpha=ALPHA_GRID,
@@ -225,30 +225,29 @@ def make_validation_cases(config_file: str, count: int, seed: int = 7) -> list[d
         state = State(x=0.0, y=0.0, psi=(math.cos(heading), math.sin(heading)), u=u, v=v, r=r)
 
         # Place the dynamic frames exactly as a sim step would, then read forces.
-        hub._rudder_angle_deg = rudder_deg  # noqa: SLF001 - deliberate: freeze the servo
-        hub._update_dynamic_frames(  # noqa: SLF001
+        hub._rudder_angle_deg = rudder_deg
+        hub._update_dynamic_frames(
             state=state,
             sheet_limit_rad=math.radians(sheet_deg),
             rudder_angle_deg=rudder_deg,
             dt=_DT,
         )
-        fx, fy, mz = hub._forces(state)  # noqa: SLF001
+        fx, fy, mz = hub._forces(state)
 
-        cases.append({
-            "heading_deg": round(math.degrees(heading), 6),
-            "u": round(u, 6),
-            "v": round(v, 6),
-            "r": round(r, 6),
-            "sheet_deg": round(sheet_deg, 6),
-            "rudder_deg": round(rudder_deg, 6),
-            "wind_speed": round(wind_speed, 6),
-            "sail_angle_deg": round(math.degrees(hub.last_sail_angle_rad), 6),
-            "forces": {
-                name: [round(value[0], 6), round(value[1], 6)]
-                for name, value in hub.last_forces.items()
-            },
-            "total": [round(fx, 6), round(fy, 6), round(mz, 6)],
-        })
+        cases.append(
+            {
+                "heading_deg": round(math.degrees(heading), 6),
+                "u": round(u, 6),
+                "v": round(v, 6),
+                "r": round(r, 6),
+                "sheet_deg": round(sheet_deg, 6),
+                "rudder_deg": round(rudder_deg, 6),
+                "wind_speed": round(wind_speed, 6),
+                "sail_angle_deg": round(math.degrees(hub.last_sail_angle_rad), 6),
+                "forces": {name: [round(value[0], 6), round(value[1], 6)] for name, value in hub.last_forces.items()},
+                "total": [round(fx, 6), round(fy, 6), round(mz, 6)],
+            }
+        )
 
     return cases
 
@@ -327,13 +326,12 @@ def main() -> None:
         ]
         for config_file, winds in plan:
             polars[config_file] = [
-                compute_polar(config_file, wind, args.twa_step, args.sail_step, args.workers)
-                for wind in winds
+                compute_polar(config_file, wind, args.twa_step, args.sail_step, args.workers) for wind in winds
             ]
 
     payload = {
         "meta": {
-            "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "commit": git_commit(),
             "alpha_step_deg": ALPHA_STEP_DEG,
             "sweep": {

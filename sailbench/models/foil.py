@@ -53,7 +53,6 @@ class Foil(Model):
             return float(res[0]) if isinstance(res, (list, tuple)) else float(res)
         return 1e5
 
-
     # ------------------------
     # Finite-span correction
     # ------------------------
@@ -97,7 +96,6 @@ class Foil(Model):
         e = float(self.p.get("oswald_efficiency", 0.9))
         cl_3d = cl * ar / (ar + 2.0)
         return cl_3d, cd + (cl_3d * cl_3d) / (np.pi * ar * e)
-
 
     # ------------------------
     # Post-stall blending

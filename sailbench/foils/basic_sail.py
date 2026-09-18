@@ -66,10 +66,13 @@ class BasicSail(Foil):
 
         # Wind vector in world frame
         wind_rad = float(np.radians(wind_angle_deg))
-        wind_global = np.array([
-            wind_speed * np.cos(wind_rad),
-            wind_speed * np.sin(wind_rad),
-        ], dtype=float)
+        wind_global = np.array(
+            [
+                wind_speed * np.cos(wind_rad),
+                wind_speed * np.sin(wind_rad),
+            ],
+            dtype=float,
+        )
         # Boat velocity: state.u, state.v are body-frame; convert to world
         v_world = tf_tree.vector_to_frame(np.array([state.u, state.v], dtype=float), "boat", "world")
 

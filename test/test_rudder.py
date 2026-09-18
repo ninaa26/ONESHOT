@@ -30,7 +30,7 @@ class TestRudder:
         """Rudder should produce zero force with zero velocity."""
         state = make_state()
 
-        fx, fy = rudder.compute(state,tf_tree)
+        fx, fy = rudder.compute(state, tf_tree)
 
         assert abs(fx) < 1e-6
         assert abs(fy) < 1e-6
@@ -49,9 +49,7 @@ class TestRudder:
         assert fx * u + fy * v < 0
 
     @pytest.mark.parametrize("delta_deg", [5.0, 10.0, -10.0])
-    def test_deflection_steers_without_braking(
-        self, rudder: BasicRudder, tf_tree: TFTree2D, delta_deg: float
-    ) -> None:
+    def test_deflection_steers_without_braking(self, rudder: BasicRudder, tf_tree: TFTree2D, delta_deg: float) -> None:
         """Deflecting the rudder in straight flow should steer, not brake.
 
         With the boat moving straight ahead the flow is exactly along boat -x, so
@@ -99,14 +97,14 @@ class TestRudder:
         u_local, v_local = u - r * y_pos, v + r * x_pos
         assert fx * u_local + fy * v_local <= 1e-9
 
-    def test_angle90_print_test(self, rudder:BasicRudder, tf_tree: TFTree2D) -> None:
+    def test_angle90_print_test(self, rudder: BasicRudder, tf_tree: TFTree2D) -> None:
         """Rudder set at 90 degrees."""
-        state = make_state(u = 5.0)
-        fx, fy = rudder.compute(state, tf_tree)
-        #print ("fx: " + str(fx) + ", fy: " + str(fy))
+        state = make_state(u=5.0)
+        _fx, _fy = rudder.compute(state, tf_tree)
+        # print ("fx: " + str(fx) + ", fy: " + str(fy))
 
-        fx90, fy90 = rudder.compute(state, tf_tree)
-        #print ("fx90: " + str(fx90) + ", fy90: " + str(fy90))
+        _fx90, _fy90 = rudder.compute(state, tf_tree)
+        # print ("fx90: " + str(fx90) + ", fy90: " + str(fy90))
 
     @pytest.mark.parametrize(
         ("u", "v"),

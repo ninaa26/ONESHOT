@@ -9,7 +9,6 @@ import pytest
 import yaml
 
 from sailbench.foils.basic_keel import BasicKeel, FiniteSpanKeel
-from sailbench.foils.basic_rudder import FiniteSpanRudder
 from sailbench.sim import sailboat_hub
 from sailbench.sim.part_config import compose, model_name, offered_models
 from sailbench.sim.sailboat_hub import SailboatHub
@@ -34,7 +33,8 @@ class TestModelName:
 
     def test_two_different_models_is_refused(self) -> None:
         """An override that wrote the old key onto a migrated config must not sail
-        a model nobody picked while the screen shows another."""
+        a model nobody picked while the screen shows another.
+        """
         with pytest.raises(ValueError, match="names two different models"):
             model_name({"model_type": "basic", "model": "finite_span"})
 

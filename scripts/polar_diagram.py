@@ -1,5 +1,4 @@
-"""
-Generate a polar diagram for a boat configuration.
+"""Generate a polar diagram for a boat configuration.
 
 For each commanded True Wind Angle (TWA), sweeps sail trim to find maximum
 steady-state boat speed. Prints a polar table and saves a plot to disk.
@@ -33,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -42,15 +42,15 @@ from sailbench.solvers.rk4 import rk4_step
 
 _CONFIG = "basic_sailbot.yaml"
 _DT = 0.02
-_WARMUP_STEPS = 600   # 12 s: let sail/rudder servos settle and speed converge
+_WARMUP_STEPS = 600  # 12 s: let sail/rudder servos settle and speed converge
 _MEASURE_STEPS = 400  # 8 s: average speed over this window
-_KP = 40.0            # heading-hold P-gain (deg/rad); negated because positive rudder = starboard turn
-_KI = 12.0            # heading-hold I-gain; nulls the sail's standing yaw moment
-_KD = 3.0             # yaw-rate damping term
-_INTEGRAL_CLAMP = 1.5    # rad*s: anti-windup bound on the integral term
+_KP = 40.0  # heading-hold P-gain (deg/rad); negated because positive rudder = starboard turn
+_KI = 12.0  # heading-hold I-gain; nulls the sail's standing yaw moment
+_KD = 3.0  # yaw-rate damping term
+_INTEGRAL_CLAMP = 1.5  # rad*s: anti-windup bound on the integral term
 _MAX_RUDDER_DEG = 35.0
-_SPEED_FRACTION = 0.08   # of true wind speed: below this, the boat is drifting, not sailing
-_SPEED_FLOOR = 0.10      # m/s: absolute floor for the same test
+_SPEED_FRACTION = 0.08  # of true wind speed: below this, the boat is drifting, not sailing
+_SPEED_FLOOR = 0.10  # m/s: absolute floor for the same test
 _MAX_HEADING_ERR_DEG = 10.0  # above this the boat never settled on the commanded heading
 
 
@@ -65,21 +65,21 @@ def _heading_error_rad(psi: tuple[float, float], target_rad: float) -> float:
 class SteadyState(NamedTuple):
     """What one fixed-heading, fixed-trim run settled to."""
 
-    speed: float          # [m/s] mean speed over the measure window
-    achieved_twa: float   # [deg] mean true wind angle the boat actually sailed
-    heading_err: float    # [deg] mean |heading error|; large means it never settled
-    leeway: float         # [deg] mean angle between heading and track
+    speed: float  # [m/s] mean speed over the measure window
+    achieved_twa: float  # [deg] mean true wind angle the boat actually sailed
+    heading_err: float  # [deg] mean |heading error|; large means it never settled
+    leeway: float  # [deg] mean angle between heading and track
 
 
 class PolarResult(NamedTuple):
     """One sweep's worth of polar data, one entry per commanded TWA."""
 
-    twa_cmd: np.ndarray       # [deg] angle asked for
+    twa_cmd: np.ndarray  # [deg] angle asked for
     twa_achieved: np.ndarray  # [deg] angle actually sailed -- plot against this
-    speed: np.ndarray         # [m/s]
-    best_sail: np.ndarray     # [deg] sheet limit that produced `speed`
-    leeway: np.ndarray        # [deg]
-    sailing: np.ndarray       # bool: held heading and made way; False = no-go
+    speed: np.ndarray  # [m/s]
+    best_sail: np.ndarray  # [deg] sheet limit that produced `speed`
+    leeway: np.ndarray  # [deg]
+    sailing: np.ndarray  # bool: held heading and made way; False = no-go
 
 
 def _steady_state(
@@ -89,8 +89,7 @@ def _steady_state(
     warmup: int = _WARMUP_STEPS,
     measure: int = _MEASURE_STEPS,
 ) -> SteadyState:
-    """
-    Simulate at fixed heading and sail trim; return what it settled to.
+    """Simulate at fixed heading and sail trim; return what it settled to.
 
     A fresh SailboatHub is created so servo state doesn't bleed between runs.
 
@@ -101,13 +100,16 @@ def _steady_state(
     """
     hub = SailboatHub(config_file=_CONFIG)
     state = State(
-        x=0.0, y=0.0,
+        x=0.0,
+        y=0.0,
         psi=(math.cos(heading_rad), math.sin(heading_rad)),
         # Enough way on to have steerage. Starting near rest, a boat with a
         # correctly modelled keel cannot build speed close-hauled and falls away
         # downwind -- which is what a real boat does from a standstill head to
         # wind, so the upwind rows come out as a bear-away rather than a beat.
-        u=1.0, v=0.0, r=0.0,
+        u=1.0,
+        v=0.0,
+        r=0.0,
     )
     integral = 0.0
     speeds: list[float] = []
@@ -121,8 +123,7 @@ def _steady_state(
         # Negated KP/KI: positive error (need to turn left) → negative rudder (turn left)
         drive = -_KP * err - _KI * integral + _KD * state.r
         rudder = float(np.clip(drive, -_MAX_RUDDER_DEG, _MAX_RUDDER_DEG))
-        state = hub.step(state=state, dt=_DT, solver=rk4_step,
-                         sail_angle=sail_limit_rad, rudder_angle=rudder)
+        state = hub.step(state=state, dt=_DT, solver=rk4_step, sail_angle=sail_limit_rad, rudder_angle=rudder)
         if i >= warmup:
             speeds.append(math.hypot(state.u, state.v))
             errs.append(abs(math.degrees(err)))
@@ -141,8 +142,7 @@ def compute_polar(
     twa_deg: np.ndarray,
     sail_deg: np.ndarray,
 ) -> PolarResult:
-    """
-    Sweep sail trim at each commanded TWA and keep the best run.
+    """Sweep sail trim at each commanded TWA and keep the best run.
 
     For each TWA, sweeps all sail trim angles and keeps the maximum speed.
     Wind direction is read directly from the simulator config.
@@ -183,8 +183,7 @@ def compute_polar(
                 best is None
                 or (res.heading_err <= _MAX_HEADING_ERR_DEG < best.heading_err)
                 or (
-                    (res.heading_err <= _MAX_HEADING_ERR_DEG)
-                    == (best.heading_err <= _MAX_HEADING_ERR_DEG)
+                    (res.heading_err <= _MAX_HEADING_ERR_DEG) == (best.heading_err <= _MAX_HEADING_ERR_DEG)
                     and res.speed > best.speed
                 )
             )
@@ -197,7 +196,8 @@ def compute_polar(
                 f"\r  [{pct:5.1f}%]  TWA={twa:5.1f}°  sail={s:5.1f}°  "
                 f"spd={res.speed:.3f} m/s  err={res.heading_err:5.1f}°  "
                 f"best={best_so_far:.3f} m/s",
-                end="", flush=True,
+                end="",
+                flush=True,
             )
 
         if best is None:  # sail_deg is never empty, but keep the type honest
@@ -226,8 +226,7 @@ def _sailing_threshold(wind_speed: float) -> float:
 
 
 def find_no_go_deg(result: PolarResult, wind_speed: float) -> float:
-    """
-    Return the closest wind angle the boat can actually hold and sail.
+    """Return the closest wind angle the boat can actually hold and sail.
 
     Two things must both be true. The heading controller has to settle -- a boat
     that falls off to a beam reach is not sailing the angle it was asked to
@@ -244,24 +243,25 @@ def print_table(result: PolarResult) -> None:
     """Print speed and VMG against the wind angle the boat actually achieved."""
     twa_deg, achieved_twa = result.twa_cmd, result.twa_achieved
     speeds, best_sail, leeway, held = (
-        result.speed, result.best_sail, result.leeway, result.sailing,
+        result.speed,
+        result.best_sail,
+        result.leeway,
+        result.sailing,
     )
     vmg = speeds * np.cos(np.radians(achieved_twa))
     masked = np.where(held, vmg, -np.inf)
     best_idx = int(np.argmax(masked)) if held.any() else int(np.argmax(vmg))
 
     print(
-        f"\n  {'CmdTWA':>7}  {'AchTWA':>7}  {'Speed':>7}  {'VMG':>7}  "
-        f"{'BestSail':>9}  {'Leeway':>7}  {'Sailing':>7}",
+        f"\n  {'CmdTWA':>7}  {'AchTWA':>7}  {'Speed':>7}  {'VMG':>7}  {'BestSail':>9}  {'Leeway':>7}  {'Sailing':>7}",
     )
     print("  " + "-" * 66)
-    rows = zip(twa_deg, achieved_twa, speeds, best_sail, leeway)
+    rows = zip(twa_deg, achieved_twa, speeds, best_sail, leeway, strict=False)
     for i, (twa, ach, spd, sail, lee) in enumerate(rows):
         tag = "  <-- best VMG" if i == best_idx else ""
         flag = "yes" if held[i] else "NO"
         print(
-            f"  {twa:7.1f}  {ach:7.1f}  {spd:7.3f}  {vmg[i]:7.3f}  "
-            f"{sail:9.1f}  {lee:7.2f}  {flag:>7}{tag}",
+            f"  {twa:7.1f}  {ach:7.1f}  {spd:7.3f}  {vmg[i]:7.3f}  {sail:9.1f}  {lee:7.2f}  {flag:>7}{tag}",
         )
     if not held.all():
         print("\n  'Sailing' = NO: the boat either never settled on the commanded")
@@ -298,8 +298,8 @@ def plot_polar(result: PolarResult, no_go_deg: float, output: Path) -> None:
 
     # ── Polar (circular) subplot ──────────────────────────────────────────────
     ax1 = fig.add_subplot(1, 2, 1, polar=True)
-    ax1.set_theta_zero_location("N")   # 0° (upwind) at top
-    ax1.set_theta_direction(-1)        # clockwise, matching nautical convention
+    ax1.set_theta_zero_location("N")  # 0° (upwind) at top
+    ax1.set_theta_direction(-1)  # clockwise, matching nautical convention
 
     ax1.plot(np.radians(twa_full), spd_full, "b-", lw=2, label="Boat speed")
 
@@ -307,7 +307,9 @@ def plot_polar(result: PolarResult, no_go_deg: float, output: Path) -> None:
     ax1.plot(
         [0, math.radians(best_vmg_twa)],
         [0, best_vmg_spd],
-        "g--", lw=1.5, alpha=0.8,
+        "g--",
+        lw=1.5,
+        alpha=0.8,
         label=f"VMG tangent (TWA={best_vmg_twa:.0f}°)",
     )
     ax1.plot([0, -math.radians(best_vmg_twa)], [0, best_vmg_spd], "g--", lw=1.5, alpha=0.8)
@@ -315,8 +317,7 @@ def plot_polar(result: PolarResult, no_go_deg: float, output: Path) -> None:
     # No-go zone shading
     r_ceil = float(np.max(spd_full)) * 1.15
     theta_ng = np.linspace(-math.radians(no_go_deg), math.radians(no_go_deg), 80)
-    ax1.fill_between(theta_ng, 0, r_ceil, alpha=0.2, color="red",
-                     label=f"No-go (±{no_go_deg:.0f}°)")
+    ax1.fill_between(theta_ng, 0, r_ceil, alpha=0.2, color="red", label=f"No-go (±{no_go_deg:.0f}°)")
 
     ax1.set_title("Polar  (N = upwind, achieved TWA)", pad=15)
     ax1.legend(loc="lower right", fontsize=8)
@@ -325,11 +326,9 @@ def plot_polar(result: PolarResult, no_go_deg: float, output: Path) -> None:
     ax2 = fig.add_subplot(1, 2, 2)
     ax2.plot(twa_deg, speeds, "b-o", ms=4, lw=2, label="Boat speed (m/s)")
     ax2.plot(twa_deg, vmg, "g--o", ms=4, lw=1.5, label="Upwind VMG (m/s)")
-    ax2.axvline(no_go_deg, color="red", ls="--",
-                label=f"No-go boundary ≈ {no_go_deg:.0f}°")
+    ax2.axvline(no_go_deg, color="red", ls="--", label=f"No-go boundary ≈ {no_go_deg:.0f}°")
     ax2.axvspan(0, no_go_deg, alpha=0.12, color="red")
-    ax2.axvline(best_vmg_twa, color="green", ls=":", lw=1.5,
-                label=f"Best VMG angle ≈ {best_vmg_twa:.0f}°")
+    ax2.axvline(best_vmg_twa, color="green", ls=":", lw=1.5, label=f"Best VMG angle ≈ {best_vmg_twa:.0f}°")
     ax2.set_xlabel("Achieved True Wind Angle (°)")
     ax2.set_ylabel("Speed (m/s)")
     ax2.set_title("Speed and VMG vs. True Wind Angle")
@@ -345,17 +344,23 @@ def plot_polar(result: PolarResult, no_go_deg: float, output: Path) -> None:
 
 
 def main() -> None:
-    global _CONFIG  # noqa: PLW0603 - the sweep helpers read the active config
+    """Sweep wind angles and sail trims, and write the polar."""
+    global _CONFIG
 
     p = argparse.ArgumentParser(description="Generate a sailing polar diagram")
-    p.add_argument("--config", type=str, default=_CONFIG, metavar="YAML",
-                   help=f"boat config under configs/ (default {_CONFIG})")
-    p.add_argument("--twa-step", type=float, default=5.0, metavar="DEG",
-                   help="TWA resolution in degrees (default 5)")
-    p.add_argument("--sail-step", type=float, default=10.0, metavar="DEG",
-                   help="Sail trim sweep step in degrees (default 10)")
-    p.add_argument("--output", type=str, default="scripts/polar_diagram.png",
-                   help="Output PNG path (default: scripts/polar_diagram.png)")
+    p.add_argument(
+        "--config", type=str, default=_CONFIG, metavar="YAML", help=f"boat config under configs/ (default {_CONFIG})"
+    )
+    p.add_argument("--twa-step", type=float, default=5.0, metavar="DEG", help="TWA resolution in degrees (default 5)")
+    p.add_argument(
+        "--sail-step", type=float, default=10.0, metavar="DEG", help="Sail trim sweep step in degrees (default 10)"
+    )
+    p.add_argument(
+        "--output",
+        type=str,
+        default="scripts/polar_diagram.png",
+        help="Output PNG path (default: scripts/polar_diagram.png)",
+    )
     args = p.parse_args()
     _CONFIG = args.config
 

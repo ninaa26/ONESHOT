@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """WebSocket-based simulation runner using SailboatHub.
 
 This module keeps the physics core in Python (via SailboatHub) and exposes
 the kinematic state over a WebSocket connection so a browser (e.g. three.js)
 can render a 3D view and send rudder/sail controls.
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -19,7 +19,6 @@ from typing import Any
 
 import numpy as np
 import yaml
-
 from websockets.exceptions import ConnectionClosed
 from websockets.server import WebSocketServerProtocol, serve
 
@@ -34,7 +33,6 @@ from sailbench.sim.protocol import (
 from sailbench.sim.sailboat_hub import SailboatHub
 from sailbench.sim.shipyard import Catalog, build_catalog, overrides_for, validate_setup
 from sailbench.solvers.rk4 import rk4_step
-
 
 # How long a fresh connection gets to say `hello` before it is taken for a
 # client that predates the shipyard and sailed the CLI defaults on connect.
@@ -63,18 +61,18 @@ class PolicyController:
     prev_distance: float
 
     @classmethod
-    def from_files(cls, model_path: str, config_path: str | None) -> "PolicyController":
+    def from_files(cls, model_path: str, config_path: str | None) -> PolicyController:
+        """Load a trained policy and the env config it was trained against."""
         try:
-            PPO = getattr(importlib.import_module("stable_baselines3"), "PPO")
+            PPO = importlib.import_module("stable_baselines3").PPO  # noqa: N806 - a class, imported late so sb3 stays optional
         except (ImportError, AttributeError) as exc:
             raise RuntimeError(
-                "The --policy-model option requires stable-baselines3. "
-                "Install it to use RL policy control."
+                "The --policy-model option requires stable-baselines3. Install it to use RL policy control."
             ) from exc
 
         try:
             waypoint_env_module = importlib.import_module("sailbench.rl.envs.waypoint_env")
-            WaypointEnvConfig = getattr(waypoint_env_module, "WaypointEnvConfig")
+            WaypointEnvConfig = waypoint_env_module.WaypointEnvConfig  # noqa: N806 - a class, imported late
         except (ImportError, AttributeError) as exc:
             raise RuntimeError(
                 "The --policy-model option requires RL environment dependencies. "
@@ -97,6 +95,7 @@ class PolicyController:
         )
 
     def reset_waypoint(self, state: State, rng: np.random.Generator, wind_dir_deg: float) -> None:
+        """Place a fresh waypoint around the boat, biased upwind as the env does."""
         theta = float(rng.uniform(-math.pi, math.pi))
         bias = float(np.clip(self.cfg.upwind_waypoint_bias, 0.0, 1.0))
         if float(rng.random()) < bias:
@@ -111,6 +110,7 @@ class PolicyController:
         self.prev_distance = self.distance_to_waypoint(state)
 
     def distance_to_waypoint(self, state: State) -> float:
+        """Return the straight-line distance from the boat to the waypoint [m]."""
         dx = self.waypoint[0] - state.x
         dy = self.waypoint[1] - state.y
         return float(math.hypot(dx, dy))
@@ -153,6 +153,7 @@ class PolicyController:
         )
 
     def compute_controls(self, hub: SailboatHub, state: State, deterministic: bool) -> tuple[float, float]:
+        """Return the rudder angle [deg] and sheet limit [deg] the policy asks for."""
         obs = self._observation(hub, state)
         action, _ = self.model.predict(obs, deterministic=deterministic)
         act = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
@@ -202,9 +203,7 @@ class HubSimulation:
         else:
             # Manual mode: rate-limit toward latest targets from the browser.
             max_step_deg = self.manual_rudder_rate_deg_s * float(self.dt)
-            self.rudder_deg += float(
-                np.clip(self.target_rudder_deg - self.rudder_deg, -max_step_deg, max_step_deg)
-            )
+            self.rudder_deg += float(np.clip(self.target_rudder_deg - self.rudder_deg, -max_step_deg, max_step_deg))
 
             # Sail follows command immediately (no backend smoothing/rate limiting).
             self.sheet_limit_rad = float(self.target_sail_rad)
@@ -382,7 +381,7 @@ async def _serve_client(ws: WebSocketServerProtocol, cfg: HubSimulationConfig) -
                 pending = parse_control_message(data)
                 setup = default_setup(catalog)
             sim = build_simulation(cfg, setup, catalog)
-        except Exception as exc:  # noqa: BLE001 - report to the client, keep the connection
+        except Exception as exc:
             pending = None
             await ws.send(json.dumps({"type": "error", "message": str(exc)}))
 
@@ -482,4 +481,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

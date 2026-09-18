@@ -6,8 +6,8 @@ import argparse
 import json
 import sys
 from dataclasses import replace
-from functools import partial
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,7 @@ def _build_run_dir(base_dir: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Train a PPO waypoint policy from a config."""
     parser = argparse.ArgumentParser(description="Train PPO for SailBench waypoint navigation.")
     parser.add_argument(
         "--config",
@@ -129,6 +130,7 @@ def main(argv: list[str] | None = None) -> None:
         train_env = SubprocVecEnv([partial(_sb3_waypoint_monitor_env, env_dict) for _ in range(n_envs)])
         print(f"Training with SubprocVecEnv: {n_envs} parallel environment processes.")
     else:
+
         def make_env(env_idx: int) -> Monitor:
             cfg = env_cfg
             if watch_enabled and env_idx == 0 and vis_server is not None:
@@ -262,4 +264,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

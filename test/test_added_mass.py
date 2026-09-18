@@ -123,9 +123,7 @@ class TestEquationsOfMotion:
         """
         hub = SailboatHub("flingo_floty.yaml")
         heading = math.radians(90.0) - math.pi + math.radians(40.0)
-        st = State.from_array(
-            np.array([0.0, 0.0, math.cos(heading), math.sin(heading), 1.0, 0.0, 0.0])
-        )
+        st = State.from_array(np.array([0.0, 0.0, math.cos(heading), math.sin(heading), 1.0, 0.0, 0.0]))
         integral = 0.0
         for _ in range(4000):
             psi = math.atan2(st.psi[1], st.psi[0])

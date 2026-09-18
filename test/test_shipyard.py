@@ -262,7 +262,9 @@ class TestParseSetupMessage:
     def test_parts_and_helm_are_optional(self) -> None:
         """A bare boat is a valid setup."""
         assert parse_setup_message({"type": "setup", "boat": "fun_boat.yaml"}) == SetupInputs(
-            boat="fun_boat.yaml", parts={}, helm="manual",
+            boat="fun_boat.yaml",
+            parts={},
+            helm="manual",
         )
 
     def test_rejects_wrong_type_and_missing_boat(self) -> None:
@@ -296,7 +298,7 @@ class TestDeclaredAvailabilityMatchesReality:
                 for option_id, declared in offered.items():
                     try:
                         SailboatHub(entry["id"], overrides={row: {PART_KEY[row]: option_id}})
-                    except Exception as exc:  # noqa: BLE001 - any failure means "not on this boat"
+                    except Exception as exc:
                         built: str | None = str(exc)
                     else:
                         built = None

@@ -11,10 +11,10 @@ def make_state(u: float = 0.0, v: float = 0.0, r: float = 0.0, psi: float = 0.0)
     return State.from_array(
         np.array(
             [
-                0.0,         # x
-                0.0,         # y
-                np.cos(psi), # cos(psi)
-                np.sin(psi), # sin(psi)
+                0.0,  # x
+                0.0,  # y
+                np.cos(psi),  # cos(psi)
+                np.sin(psi),  # sin(psi)
                 u,
                 v,
                 r,
@@ -43,7 +43,7 @@ class TestSail:
         sail.p["wind_dir_deg"] = 180.0
         state = make_state()
 
-        fx, fy = sail.compute(state, tf_tree)
+        fx, _fy = sail.compute(state, tf_tree)
         assert fx < -1.0  # Drag should be negative (oppose forward)
 
     def test_beam_wind_produces_lift(self, sail: HybridSail, tf_tree: TFTree2D) -> None:

@@ -182,7 +182,6 @@ def _boat_name(cfg: dict[str, Any], stem: str) -> str:
     return str(declared) if declared else _pretty_name(stem)
 
 
-
 # A foil with no span stated anywhere still has to be drawn. This is the aspect
 # ratio assumed for it, chosen to match the one the unmeasured boats state.
 FALLBACK_ASPECT_RATIO = 4.0
@@ -220,6 +219,7 @@ def _geometry(cfg: Mapping[str, Any]) -> dict[str, Any]:
     in metres, in the simulator's own frame: +x forward of the centre of
     rotation, spans measured downwards for the foils and upwards for the rig.
     """
+
     def number(section: str, key: str) -> float | None:
         value = cfg.get(section, {}).get(key)
         return float(value) if isinstance(value, (int, float)) else None
@@ -227,8 +227,11 @@ def _geometry(cfg: Mapping[str, Any]) -> dict[str, Any]:
     parts: dict[str, Any] = {
         "hull": {"L": number("hull", "L"), "B": number("hull", "B"), "T": number("hull", "T")},
     }
-    for part, fallback in (("keel", FALLBACK_ASPECT_RATIO), ("rudder", FALLBACK_ASPECT_RATIO),
-                           ("sail", FALLBACK_RIG_ASPECT_RATIO)):
+    for part, fallback in (
+        ("keel", FALLBACK_ASPECT_RATIO),
+        ("rudder", FALLBACK_ASPECT_RATIO),
+        ("sail", FALLBACK_RIG_ASPECT_RATIO),
+    ):
         section = cfg.get(part, {})
         parts[part] = {
             "area": number(part, "area"),
@@ -296,7 +299,7 @@ def _trained_on(config_path: Path | None) -> str | None:
     try:
         with config_path.open(encoding="utf-8") as file:
             cfg = yaml.safe_load(file) or {}
-    except Exception:  # noqa: BLE001 - an unreadable run config just means "unknown boat"
+    except Exception:
         return None
     boat = (cfg.get("env") or {}).get("simulator_config")
     return str(boat) if boat else None
@@ -356,7 +359,7 @@ def build_catalog(
     for path in sorted(Path(CONFIG_PATH).glob("*.yaml")):
         try:
             boat = _describe_boat(path)
-        except Exception:  # noqa: BLE001 - a broken YAML is not a boat, skip it
+        except Exception:
             continue
         if boat is not None:
             boats.append(boat)

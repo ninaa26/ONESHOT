@@ -27,24 +27,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from numpy.typing import NDArray
-
 from hull_analysis import autoscale, load_stl, normals_and_areas, split_components, volume_and_centroid
+from numpy.typing import NDArray
 
 Array = NDArray[np.float64]
 
 # Densities [kg/m^3] and areal masses [kg/m^2], from the Fall 2025 report's
 # stated materials plus standard values for those materials.
-CFRP_LAMINATE = 1550.0      # carbon/epoxy by resin infusion
-CARBON_ROD = 1600.0         # pultruded rod, mast and boom
-LEAD_EPOXY = 7000.0         # lead shot in epoxy, ~60% lead by volume
-ALUMINIUM = 2700.0          # 6061 keel rods
-PRINTED_CORE = 220.0        # ASA/PLA at ~20% infill
-HD_FOAM = 200.0             # high-density foam, rudder fill
-SAILCLOTH_AREAL = 0.15      # kg/m^2
+CFRP_LAMINATE = 1550.0  # carbon/epoxy by resin infusion
+CARBON_ROD = 1600.0  # pultruded rod, mast and boom
+LEAD_EPOXY = 7000.0  # lead shot in epoxy, ~60% lead by volume
+ALUMINIUM = 2700.0  # 6061 keel rods
+PRINTED_CORE = 220.0  # ASA/PLA at ~20% infill
+HD_FOAM = 200.0  # high-density foam, rudder fill
+SAILCLOTH_AREAL = 0.15  # kg/m^2
 
 KEEL_ROD_COUNT, KEEL_ROD_DIA, KEEL_ROD_LEN = 2, 0.010, 0.700
-SKIN_PLIES_MM = 0.5         # 2 carbon layers on keel and rudder
+SKIN_PLIES_MM = 0.5  # 2 carbon layers on keel and rudder
 
 # The tetrahedron covariance of a unit tetra, used for the inertia tensor.
 CANON = np.array([[2.0, 1.0, 1.0], [1.0, 2.0, 1.0], [1.0, 1.0, 2.0]]) / 120.0
@@ -57,7 +56,7 @@ class Part:
     tris: Array
     name: str
     volume: float
-    area: float          # total mesh area (both skins for a shell)
+    area: float  # total mesh area (both skins for a shell)
     mass: float = 0.0
     note: str = ""
 
@@ -85,7 +84,7 @@ def assemble(parts: list[Part]) -> tuple[float, Array, Array]:
         vol, f, c = body_moments(p.tris)
         if abs(vol) < 1e-12 or p.mass <= 0.0:
             continue
-        rho = p.mass / abs(vol)          # effective density for this body
+        rho = p.mass / abs(vol)  # effective density for this body
         scale = rho * np.sign(vol)
         mass += p.mass
         first += scale * f
@@ -203,8 +202,10 @@ def main() -> None:
     mass, cg, inertia = assemble(parts)
     print(f"\nmass {mass:.3f} kg")
     print(f"CG (CAD frame) {cg * 1000} mm")
-    print(f"CG in sim frame: x {-(cg[fwd] - cg[fwd]):+.4f} m by definition; "
-          f"height above keel tip {cg[up] - tris.reshape(-1, 3)[:, up].min():.4f} m")
+    print(
+        f"CG in sim frame: x {-(cg[fwd] - cg[fwd]):+.4f} m by definition; "
+        f"height above keel tip {cg[up] - tris.reshape(-1, 3)[:, up].min():.4f} m"
+    )
     print("inertia at the CG [kg*m^2]:")
     print(f"  roll  Lxx {inertia[0, 0]:8.3f}")
     print(f"  yaw   Lyy {inertia[1, 1]:8.3f}   <- boat.inertia_z")

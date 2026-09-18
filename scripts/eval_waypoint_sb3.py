@@ -27,6 +27,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Evaluate a trained waypoint policy and report its scores."""
     parser = argparse.ArgumentParser(description="Evaluate PPO waypoint policy.")
     parser.add_argument(
         "--model",
@@ -136,4 +137,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

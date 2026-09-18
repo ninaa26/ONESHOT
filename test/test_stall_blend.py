@@ -151,8 +151,10 @@ class TestPlateNormalForce:
         deep stall, which no foil does.
         """
         f = foil(alpha_sep_deg=25.0, span=0.478, area=0.0462)  # the Flingo rudder, AR 4.9
-        attached_peak = max(f.blend_stall(float(a), *f.cl_cd(float(a), 1.2e5))[0]
-                            for a in np.radians(np.arange(0.0, 13.0, 0.5)))
-        stalled_peak = max(f.blend_stall(float(a), *f.cl_cd(float(a), 1.2e5))[0]
-                           for a in np.radians(np.arange(20.0, 90.0, 0.5)))
+        attached_peak = max(
+            f.blend_stall(float(a), *f.cl_cd(float(a), 1.2e5))[0] for a in np.radians(np.arange(0.0, 13.0, 0.5))
+        )
+        stalled_peak = max(
+            f.blend_stall(float(a), *f.cl_cd(float(a), 1.2e5))[0] for a in np.radians(np.arange(20.0, 90.0, 0.5))
+        )
         assert stalled_peak < attached_peak

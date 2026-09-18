@@ -1,13 +1,14 @@
-from __future__ import annotations
-
 """Message formats for browser <-> simulation communication.
 
 This module defines the JSON payload shapes used between the Python
 simulation core and a browser frontend (e.g. three.js).
 """
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from sailbench.models.model import State
 
@@ -99,7 +100,7 @@ class StateMessagePayload(TypedDict, total=False):
 
 @dataclass(slots=True)
 class ControlInputs:
-    """Parsed control inputs coming from the browser.
+    r"""Parsed control inputs coming from the browser.
 
     All fields are optional; ``None`` means \"no change\" for that control.
 
@@ -147,6 +148,15 @@ def make_state_message(
     Args:
         state: Current simulation state in body/world coordinates.
         t: Simulation time in seconds.
+        wind_speed: True wind speed [m/s], omitted when the client is not told.
+        wind_dir_deg: Direction the true wind blows toward [deg].
+        sail_force: Sail force in the boat frame, (Fx, Fy) [N].
+        forces: Per-component boat-frame forces, for the force display.
+        sail_angle_deg: Resolved sail angle off the centreline [deg].
+        rudder_angle_deg: Resolved rudder angle [deg].
+        waypoint: Target position in world coordinates, (x, y) [m].
+        control_mode: Which helm is steering, e.g. "manual" or a policy name.
+
     """
     c, s = state.psi
     u, v, r = state.u, state.v, state.r
@@ -198,10 +208,7 @@ def make_state_message(
     if forces is not None:
         force_payload = cast(
             ForcesPayload,
-            {
-                name: {"fx": float(fx), "fy": float(fy)}
-                for name, (fx, fy) in forces.items()
-            },
+            {name: {"fx": float(fx), "fy": float(fy)} for name, (fx, fy) in forces.items()},
         )
         msg["forces"] = force_payload
 
@@ -277,7 +284,6 @@ def parse_control_message(data: Mapping[str, Any]) -> ControlInputs:
         paused=_get_bool(data, "paused"),
         reset=bool(data.get("reset", False)),
     )
-
 
 
 def parse_setup_message(data: Mapping[str, Any]) -> SetupInputs:

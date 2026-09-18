@@ -71,6 +71,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
     metadata: ClassVar[dict[str, list[str]]] = {"render_modes": []}
 
     def __init__(self, config: WaypointEnvConfig) -> None:
+        """Build the env and the boat it drives, from one config."""
         super().__init__()
         self.cfg = config
         self.hub = SailboatHub(config_file=self.cfg.simulator_config)
@@ -150,7 +151,7 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
         vmg = self._velocity_made_good_to_waypoint()
         vmg_term = self.cfg.vmg_multiplier * vmg
         action_delta = np.abs(clipped - self.prev_action)
-        
+
         joint_delta = float(np.sum(action_delta))
         joint_penalty_term = self.cfg.joint_penalty * joint_delta
         movement_penalty_term = joint_penalty_term
@@ -390,11 +391,12 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             # Where the surfaces actually are, on the same scales as the actions.
             rudder = self.hub.rudder_actuator.position / max(self.cfg.max_rudder_deg, 1e-9)
             sheet = math.degrees(abs(self.hub.sail_actuator.position)) / max(self.cfg.max_sail_deg, 1e-9)
-            observation = np.concatenate([
-                observation,
-                np.array([np.clip(rudder, -1.0, 1.0), np.clip(2.0 * sheet - 1.0, -1.0, 1.0)],
-                         dtype=np.float32),
-            ])
+            observation = np.concatenate(
+                [
+                    observation,
+                    np.array([np.clip(rudder, -1.0, 1.0), np.clip(2.0 * sheet - 1.0, -1.0, 1.0)], dtype=np.float32),
+                ]
+            )
         return observation
 
     def _build_info(
@@ -435,4 +437,3 @@ class WaypointEnv(gym.Env[NDArray[np.float32], NDArray[np.float64]]):  # type: i
             "success": success,
             "failure": failure,
         }
-

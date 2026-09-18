@@ -3,9 +3,9 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
+from sailbench.tf.tf_tree import TFTree2D
 
 
 @register(
@@ -22,6 +22,7 @@ class LinearHydroModel(Model):
 
         Args:
             state (State): State object
+            tf_tree (TFTree2D): Unused; the hull works in the boat frame already.
 
         Returns:
             np.ndarray: Returns X and Y forces in newtons (within component frame)

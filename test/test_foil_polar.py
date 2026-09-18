@@ -44,7 +44,7 @@ class TestFoilPolar:
         cl_exact = np.asarray(exact["CL"], dtype=float)
         cd_exact = np.asarray(exact["CD"], dtype=float)
 
-        for alpha_deg, cl_ref, cd_ref in zip(alphas, cl_exact, cd_exact):
+        for alpha_deg, cl_ref, cd_ref in zip(alphas, cl_exact, cd_exact, strict=False):
             cl, cd = foil.cl_cd(float(np.radians(alpha_deg)), re)
             assert abs(cl - cl_ref) < 1e-2
             assert abs(cd - cd_ref) < 1e-2

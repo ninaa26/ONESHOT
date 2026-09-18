@@ -2,9 +2,9 @@
 
 import numpy as np
 
-from sailbench.tf.tf_tree import TFTree2D
 from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
+from sailbench.tf.tf_tree import TFTree2D
 
 
 @register(
@@ -18,9 +18,7 @@ class QuadraticHydroModel(Model):
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute forces on hull model."""
-
         u, v, r = state.u, state.v, state.r
-
 
         # Quadratic damping coefficients
         xu2 = float(self.p.get("xu2", 0.0))  # [N·s²/m²]
@@ -33,4 +31,3 @@ class QuadraticHydroModel(Model):
         n = -nr2 * r * abs(r)
 
         return np.array([x, y, n], dtype=float)
-    

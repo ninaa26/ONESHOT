@@ -1,3 +1,9 @@
+"""A 2-D transform tree.
+
+Every component is given a frame, and resolves the force it computes through
+this tree into the boat frame, so no model has to know where any other sits.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,6 +34,7 @@ class TFTree2D:
     """Simple 2D transform tree."""
 
     def __init__(self) -> None:
+        """Start an empty tree whose only frame is the world root."""
         self.transforms: dict[str, Transform2D] = {}
         self.parents: dict[str, str | None] = {}
         self.root: str = "world"

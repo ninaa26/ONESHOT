@@ -109,6 +109,8 @@ class TestKeelSelection:
         state = State.from_array(np.array([0.0, 0.0, 1.0, 0.0, 1.5, 0.15, 0.0]))
         tf = TFTree2D()
         basic = BasicKeel(self.BASE).compute(state, tf)
-        finite = FiniteSpanKeel({**self.BASE, "span": 0.7, "end_plate_factor": 2.0, "alpha_sep_deg": 25.0}).compute(state, tf)
+        finite = FiniteSpanKeel({**self.BASE, "span": 0.7, "end_plate_factor": 2.0, "alpha_sep_deg": 25.0}).compute(
+            state, tf
+        )
         assert abs(finite[1]) < abs(basic[1])  # less side force
         assert finite[0] < basic[0]  # more drag (both negative, along -x)

@@ -26,7 +26,6 @@ from sailbench.models.model import State
 from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
 
-
 # Keys that only make sense for the finite-span model.
 FINITE_SPAN_KEYS = ("span", "effective_aspect_ratio", "alpha_sep_deg")
 

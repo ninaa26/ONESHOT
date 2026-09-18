@@ -1,4 +1,4 @@
-"""Live WebSocket publisher for RL training visualization. Our RL training """
+"""Live WebSocket publisher for RL training visualization. Our RL training."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ class LiveTrainingVisServer:
         asyncio.set_event_loop(loop)
         try:
             server = loop.run_until_complete(serve(self._handle_client, self.host, self.port))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._start_error = exc
             self._ready.set()
             return

@@ -19,20 +19,28 @@ def make_state(u: float = 0.0, v: float = 0.0, psi: float = 0.0) -> State:
 
 def make_sail(**overrides: float) -> BasicSail:
     """Build a sail with a fixed wind."""
-    return BasicSail({
-        "airfoil_name": "NACA0012", "area": 1.971, "alpha_min": -179, "alpha_max": 179,
-        "res": [1.8e5], "wind_speed": 5.0, "wind_dir_deg": WIND_TO_DEG, "rho_air": 1.225,
-        **overrides,
-    })
+    return BasicSail(
+        {
+            "airfoil_name": "NACA0012",
+            "area": 1.971,
+            "alpha_min": -179,
+            "alpha_max": 179,
+            "res": [1.8e5],
+            "wind_speed": 5.0,
+            "wind_dir_deg": WIND_TO_DEG,
+            "rho_air": 1.225,
+            **overrides,
+        }
+    )
 
 
 def tree(sail_rad: float, psi: float = 0.0) -> TFTree2D:
     """Transform tree with the boat on a heading and the sail trimmed."""
     tf = TFTree2D()
-    tf.add_frame(name="boat", parent="world",
-                 transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
-    tf.add_frame(name="sail", parent="boat",
-                 transform=Transform2D(x=0.0, y=0.0, c=math.cos(sail_rad), s=math.sin(sail_rad)))
+    tf.add_frame(name="boat", parent="world", transform=Transform2D(x=0.0, y=0.0, c=math.cos(psi), s=math.sin(psi)))
+    tf.add_frame(
+        name="sail", parent="boat", transform=Transform2D(x=0.0, y=0.0, c=math.cos(sail_rad), s=math.sin(sail_rad))
+    )
     return tf
 
 
@@ -51,8 +59,7 @@ def drive_coefficient(sail: BasicSail, twa_deg: float, u: float = 1.0) -> float:
     psi = beat(twa_deg)
     st = make_state(u=u, psi=psi)
     v_world = np.array([math.cos(psi), math.sin(psi)]) * u
-    aw = np.array([5.0 * math.cos(math.radians(WIND_TO_DEG)),
-                   5.0 * math.sin(math.radians(WIND_TO_DEG))]) - v_world
+    aw = np.array([5.0 * math.cos(math.radians(WIND_TO_DEG)), 5.0 * math.sin(math.radians(WIND_TO_DEG))]) - v_world
     q_area = 0.5 * 1.225 * float(np.dot(aw, aw)) * float(sail.p["area"])
     return max(sail.compute(st, tree(math.radians(-t), psi))[0] for t in range(5, 90, 5)) / q_area
 
@@ -184,7 +191,7 @@ class TestIntegratorContract:
             hub = SailboatHub("flingo_floty.yaml")
             psi = beat(45.0)
             st = State.from_array(np_.array([0.0, 0.0, math.cos(psi), math.sin(psi), 1.0, 0.0, 0.0]))
-            for _ in range(int(round(secs / dt))):
+            for _ in range(round(secs / dt)):
                 st = hub.step(st, dt, rk4_step, math.radians(20.0), 8.0)
             return np_.array([st.x, st.y, st.u, st.v, st.r])
 
