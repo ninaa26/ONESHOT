@@ -130,9 +130,8 @@ class SailboatHub:
         self.iz = self.boat_cfg.get("inertia_z", self.boat_cfg.get("Iz", 25.0))
 
         # Added mass: the water the hull drags along with it. Resolved once, from
-        # the hull's own geometry. Zero unless the hull model offers it and is
-        # configured for it, in which case the equations below reduce to the
-        # rigid-body ones exactly.
+        # the hull's own geometry. The basic hull reports zero, in which case the
+        # equations below reduce to the rigid-body ones exactly.
         self.hull_cfg.setdefault("mass", self.m)
         # Only a hull model with measured stations to integrate offers added mass;
         # the linear and quadratic hydro models have no geometry to derive it from.

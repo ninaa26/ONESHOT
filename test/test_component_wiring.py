@@ -58,14 +58,27 @@ class TestFoilsUseStallBlending:
     def test_keel_becomes_a_flat_plate_broadside(self) -> None:
         """At 90 degrees of sideslip the keel must give the plate result.
 
-        0.5 * rho * cn_plate * area * v^2. Without blending the keel reads the
-        section table at 90 degrees instead, which is an extrapolation.
+        0.5 * rho * CN * area * v^2, with CN the keel's own plate normal force.
+        Without blending the keel reads the section table at 90 degrees instead,
+        which is an extrapolation. The coefficient is taken from the model
+        rather than written in here, because it is a function of aspect ratio,
+        not a constant -- that is what :meth:`Foil.plate_normal_force` settles.
         """
         hub, _ = hub_at()
         state = State.from_array(np.array([0.0, 0.0, 1.0, 0.0, 1e-4, 1.0, 0.0]))
         force = np.asarray(hub.keel.compute(state, hub.tf), dtype=float)
-        plate = 0.5 * 1000.0 * 2.0 * float(hub.keel.p["area"]) * 1.0**2
+        cn = hub.keel.plate_normal_force()
+        plate = 0.5 * 1000.0 * cn * float(hub.keel.p["area"]) * 1.0**2
         assert abs(force[1]) == pytest.approx(plate, rel=1e-3)
+
+    def test_keel_plate_coefficient_follows_its_aspect_ratio(self) -> None:
+        """And that coefficient is the Hoerner value for this keel, not the 2-D one.
+
+        The keel is AR 8 effective, so CN is about 1.25. It was charged 2.0.
+        """
+        hub, _ = hub_at()
+        assert hub.keel.effective_aspect_ratio() == pytest.approx(8.0, rel=1e-3)
+        assert hub.keel.plate_normal_force() == pytest.approx(1.254, abs=0.01)
 
     def rudder_force(self, deflection_deg: float) -> np.ndarray:
         """Rudder force in the boat frame at a given deflection."""

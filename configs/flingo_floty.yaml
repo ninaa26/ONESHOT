@@ -21,11 +21,39 @@ boat:
   inertia_z: 3.4  # [kg·m²] yaw about the vertical through the CG
 
 hull:
+  # There is one hull model; what used to be a separate `measured` subclass is now
+  # the same model told more about the boat. The Hughes friction line is a
+  # friction part named here, and added mass falls out of the `sections` table
+  # below -- a hull that supplies neither behaves exactly as the old `basic` one.
+  model: basic
+  friction_model: hughes  # ITTC-style Reynolds-dependent line, not the flat 0.004
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   L: 1.372  # [m] length of waterline, at the floating waterline for 27 kg
-  friction_model: hughes  # ITTC-style skin friction instead of a flat 0.004
-  c_wave: 0.01   # residuary (wave-making) resistance; caps speed near 0.4*sqrt(g*L)
+  # Residuary (wave-making) resistance. Calibrated 2026-09-17 against the
+  # resistance curve, not guessed: at 0.01 the term was too weak to do the job
+  # its own comment claimed. Residuary only overtook friction at Fn 0.47 (a
+  # displacement hull crosses at 0.30-0.35), specific resistance R/W ran about
+  # half the published band at every speed, and the boat topped out at Fn 0.63
+  # on a hull whose DLR is ~292. At 0.05 the polar peak is 1.80 m/s = Fn 0.489,
+  # inside the 0.45-0.50 a displacement hull should cap at. 0.08 gives Fn 0.453
+  # if a more central value is wanted; it costs ~0.13 m/s off the whole polar.
+  c_wave: 0.05
+  # Yaw damping, as a cross-flow Cd. Strip theory says this should equal
+  # cross_flow_cd (1.0) and it defaults to that, but the model has no term for
+  # the circulatory lift a yawing hull sheds, so the derived value leaves the
+  # boat badly under-damped: full rudder produced 99 deg/s against a real
+  # 15-40, it turned inside 1.5 LWL against a real 2-4, and a tack cost 96% of
+  # boat speed against a real 40-70%. Swept 2026-09-17 over 1-14; 7.0 is the
+  # only region where all four measurements land in band at once:
+  #   max yaw 40 deg/s (15-40) | turning circle 3.95 LWL (2-4)
+  #   speed held in turn 75%   | speed held through a tack 37% (30-60)
+  # (Re-measured after cn_plate became aspect-ratio dependent, which took some
+  # damping out of the stalled foils and moved these to the top of their bands.)
+  # Below 6 the tack collapses again; above 10 the turning circle opens past
+  # 4 LWL. Straight-line speed is untouched across the whole sweep. A
+  # measured turning circle should replace this.
+  yaw_damping_cd: 7.0
   B: 0.492  # [m] beam at waterline
   T: 0.110  # [m] hull draft (canoe body, not to keel tip)
   # Measured hull skin below the waterline. The 1.7*L*(B+T) approximation this
@@ -34,8 +62,8 @@ hull:
   wetted_surface_m2: 0.571
   # Measured stations for added mass, sim frame (+x forward of the CG). From the
   # same hydrostatics run as the wetted surface; draft is the local submerged
-  # depth. Integrating rho*pi*T^2 over these gives sway added mass 28.1 kg
-  # against a 27.0 kg boat, and yaw added inertia 2.14 kg.m^2 against 3.4.
+  # depth. Integrating rho*pi*T^2 over these gives sway added mass 26.5 kg
+  # against a 27.0 kg boat, and yaw added inertia 1.83 kg.m^2 against 3.4.
   sections:
     - {x_m:  0.693, draft_m: 0.031}
     - {x_m:  0.513, draft_m: 0.067}
@@ -82,28 +110,16 @@ sail:
   area: 1.971  # [m²]    main + jib; sail area / displacement^(2/3) = 21.9
   wind_speed: 5
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
-  # Rig span for induced drag: masthead is 2.592 m above the waterline.
-  span: 2.592   # [m]     geometric AR on the combined area = 3.41
-  # The jib is deck-sweeping and takes the endplate; the main has a 0.086 m gap
-  # between foot and deck and does not. Weighted by area (jib 39%, main 61%)
-  # that is 1 + 0.39, giving an effective AR of 4.75.
-  end_plate_factor: 1.39
-  # Rig height for ORC induced drag: measured masthead above the waterline,
-  # ORC's (b + HBI). Both sails hang from roughly this height.
-  heff: 2.592   # [m]
-  # ORC 5.4.3 does not use that height as-is. Close-hauled the deck-sweeping
-  # jib seals against the hull and the two sails work as one taller wing, so
-  # the effective height is 1.45x the masthead at 20 deg AWA (Figure 5.14),
-  # falling to 0.80x once the sheets are eased past 80. Induced drag goes as
-  # 1/heff^2, so holding heff at the masthead over-charged the rig about 2x on
-  # a beat. `orc` applies the curve; unset, heff is constant.
-  heff_model: orc
-  # ORC eq. 5.42 sail-plan correction, from the measured rig:
-  #   roach         0.000  main area 1.1955 equals 0.5 * luff * foot exactly
-  #   fractionality 0.937  jib head 2.260 / main head 2.412, both above deck
-  #   overlap       1.0    ASSUMED: LP = 0.686 = foot, J not in the CAD notes
-  #   1.1 + 0.08*(0 - 0.2) + 0.5*(0.68 + 0.31*0.937 + 0.075*1.0 - 1.1)
-  eff_span_corr: 1.057
+  # NOTE: the rig's span and endplate are NOT config keys here. ORC charges
+  # induced drag against heff and eff_span_corr below, not against a geometric
+  # aspect ratio, so `span` and `end_plate_factor` would be read by nothing --
+  # the sail model now refuses them rather than carry them. The measurements
+  # they used to hold are kept for the record: masthead 2.592 m above the
+  # waterline (geometric AR 3.41 on the combined area), the jib deck-sweeping
+  # and the main with a 0.086 m foot gap.
+  # heff, heff_model and eff_span_corr are ORC-only and live under the ORC
+  # models below. Shared here they would also reach `basic`, which opens a
+  # section polar and reads none of them.
   # ORC depowering. Both keys together, or neither. UNSET because the righting
   # moment is not measured: the CAD CG sits 0.17 m ABOVE the waterline, which
   # would give GM ~0.09 m, but that rests on the densities the measurement file
@@ -115,10 +131,9 @@ sail:
   # heel_arm_m: 1.47
   x_pos: 0.267  # [m]    combined CE, 0.083 m forward of the keel CLR
   y_pos: 0.0
-  # NeuralFoil model parameters
-  alpha_min: -179 # Minimum and maximum angle of attack in degrees
-  alpha_max: 179
-  res: [1.8e5]  # Re at 6 m/s apparent on the measured 0.447 m mean chord (air)
+  # No NeuralFoil parameters: the ORC model never opens a section polar, so
+  # alpha_min/alpha_max/res would do nothing. (Re on the measured 0.447 m mean
+  # chord at 6 m/s apparent is 1.8e5, if a section model is ever fitted here.)
   # Sheet winch dynamics. The sail used to track its command instantly while the
   # rudder was rate-limited -- backwards, since a winch is far slower than a
   # rudder servo. Literature puts a sheet winch near 3 s.
@@ -129,12 +144,37 @@ sail:
   # a different rig from the real boat, offered because it is askable.
   models:
     basic: {}
-    orc_main: {}
+    # Anchored here and merged into orc_w_jib below: both ORC models charge
+    # induced drag the same way, and the rig they describe is one rig.
+    orc_main: &orc_rig
+      # Rig height for ORC induced drag: measured masthead above the waterline,
+      # ORC's (b + HBI). Both sails hang from roughly this height.
+      heff: 2.592   # [m]
+      # ORC 5.4.3 does not use that height as-is. Close-hauled the deck-sweeping
+      # jib seals against the hull and the two sails work as one taller wing, so
+      # the effective height peaks at 20 deg AWA (Figure 5.14) and falls to 0.80x
+      # once the sheets are eased past 80. Induced drag goes as 1/heff^2, so
+      # holding heff at the masthead over-charged the rig on a beat.
+      #
+      # Which edition of the curve is a choice, and it is made here on purpose:
+      #   orc-2022  peak 1.22   used with ORC's milder depowering (min flat 0.62)
+      #   orc-2023  peak 1.45   raised as a package WITH deeper depowering (0.42)
+      # This boat has no righting-moment limit yet, so it cannot pay the 2023
+      # package's other half. Stay on 2022 until max_heeling_moment_nm is set,
+      # then move to 2023. Unset, heff is constant.
+      heff_model: orc-2022
+      # ORC eq. 5.42 sail-plan correction, from the measured rig:
+      #   roach         0.000  main area 1.1955 equals 0.5 * luff * foot exactly
+      #   fractionality 0.937  jib head 2.260 / main head 2.412, both above deck
+      #   overlap       1.0    ASSUMED: LP = 0.686 = foot, J not in the CAD notes
+      #   1.1 + 0.08*(0 - 0.2) + 0.5*(0.68 + 0.31*0.937 + 0.075*1.0 - 1.1)
+      eff_span_corr: 1.057
     hybrid:
       # `area` here is the combined main + jib, and this model sails it as one
       # surface: jib_area means nothing to it, the same caveat as orc_main.
       # Coefficients default to the model's soft-sail values.
     orc_w_jib:
+      <<: *orc_rig
       jib_area: 0.775  # [m²]  measured; 39% of the rig
 
 windage:

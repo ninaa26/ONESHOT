@@ -66,6 +66,7 @@ from typing import Any
 import numpy as np
 
 import sailbench.utils.coordinate_helper as utils
+from sailbench.foils.sail_keys import FOIL_ONLY_KEYS
 from sailbench.models.model import Model, State
 from sailbench.sim.registry import register
 from sailbench.tf.tf_tree import TFTree2D
@@ -104,19 +105,31 @@ class SailTable:
 MAIN_TABLE = SailTable(MAIN_AWA_DEG, MAIN_CL, MAIN_CD0, KPM)
 JIB_TABLE = SailTable(JIB_AWA_DEG, JIB_CL, JIB_CD0, KPJ)
 
-# --- ORC VPP 2023 Figure 5.14, kheff against apparent wind angle ------------
+# --- ORC Figure 5.14, kheff against apparent wind angle -------------------
 # The effective rig height is not the masthead. Close-hauled the jib seals
 # against the deck and the two sails act as one taller wing, so the rig sheds
 # less tip vortex than its height suggests; eased onto a reach that seal is
 # lost and the interaction turns unfavourable. ORC gives the curve only as a
-# figure, with the text pinning 1.4513 at 20 degrees and 0.80 from 80. These
-# values are traced from the published plot at 5-degree intervals and held at
-# 0.80 past 80 degrees, where the figure ends flat.
+# figure; these are traced from the published plots at 5-degree intervals and
+# held at 0.80 past 80 degrees, where both figures end flat.
+#
+# Two editions are carried because the peak is a rating parameter, not a
+# measurement. ORC raised it from 1.22 to 1.4513 in 2023 as one half of a
+# "package" whose other half was deeper depowering (minimum flat 0.62 -> 0.42)
+# and a stronger twist function. Inside the VPP those offset. In a simulator
+# with no righting-moment limit only the power-adding half is felt, so the
+# 2022 curve is the more defensible choice until that limit is configured.
+# Below 1.0 -- the reaching side -- the two curves are nearly identical.
 KHEFF_AWA_DEG = np.arange(0.0, 81.0, 5.0)
-KHEFF = np.array([
+KHEFF_2022 = np.array([
+    1.000, 1.093, 1.169, 1.210, 1.2200, 1.178, 1.118, 1.059, 0.999,
+    0.939, 0.899, 0.871, 0.845, 0.824, 0.809, 0.801, 0.800,
+])
+KHEFF_2023 = np.array([
     1.000, 1.195, 1.350, 1.433, 1.4513, 1.365, 1.248, 1.133, 1.028,
     0.948, 0.899, 0.868, 0.844, 0.825, 0.810, 0.802, 0.800,
 ])
+KHEFF_CURVES = {"orc-2022": KHEFF_2022, "orc-2023": KHEFF_2023}
 
 
 @register(
@@ -136,9 +149,11 @@ class ORCMainSail(Model):
         area: reference sail area [m^2].
         heff: rig height [m], the highest point of the sail plan above the
             waterline (ORC's ``b + HBI``). Defaults to ``1.8 * sqrt(area)``.
-        heff_model: ``orc`` scales ``heff`` by ORC's ``kheff`` curve against
-            apparent wind angle (Figure 5.14), so the rig is effectively taller
-            close-hauled and shorter on a reach. Absent, ``heff`` is constant.
+        heff_model: ``orc-2022`` or ``orc-2023`` scales ``heff`` by that
+            edition's ``kheff`` curve against apparent wind angle (Figure 5.14),
+            so the rig is effectively taller close-hauled and shorter on a
+            reach. The editions differ only in the close-hauled peak, 1.22
+            against 1.45; see :data:`KHEFF_CURVES`. Absent, ``heff`` is constant.
         eff_span_corr: ORC's sail-plan correction to effective span, eq. 5.42,
             from roach, fractionality and overlap. Default 1.0 (no correction).
         wind_speed, wind_dir_deg: true wind (direction it blows *to*).
@@ -147,19 +162,30 @@ class ORCMainSail(Model):
         flat_stall_floor: residual lift fraction when badly over-sheeted.
     """
 
-    REFUSES: tuple[str, ...] = ("jib_area",)
+    # Declared, not just enforced: the shipyard asks `registry.unavailable` which
+    # models a boat can run and answers from this list without building any of
+    # them, while `_check_keys` enforces the same list at construction. Keeping
+    # one list is what stops the catalog offering a model the boat then refuses.
+    REFUSES: tuple[str, ...] = ("jib_area", *FOIL_ONLY_KEYS)
 
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the ORC sail model."""
         super().__init__(params)
+        self._check_keys()
         self.area = float(self.p.get("area", 1.0))
         self.sails = self._rig()
+        # The parasitic part of CD0: the least drag the rig makes at any angle,
+        # which is skin friction and windage on the sail itself. Everything
+        # above it is form drag from the sail's projected area, and only that
+        # part answers to trim. See `form_drag_trim_factor`.
+        self.cd0_floor = min(self.envelope(float(b))[1] for b in np.arange(0.0, 181.0, 1.0))
         self.heff = float(self.p.get("heff", 1.8 * np.sqrt(max(self.area, 1e-6))))
         heff_model = str(self.p.get("heff_model", "constant")).lower()
-        if heff_model not in ("constant", "orc"):
-            msg = f"ORCMainSail heff_model must be 'constant' or 'orc': got {heff_model!r}"
+        if heff_model != "constant" and heff_model not in KHEFF_CURVES:
+            known = ", ".join(["constant", *sorted(KHEFF_CURVES)])
+            msg = f"ORCMainSail heff_model must be one of {known}: got {heff_model!r}"
             raise ValueError(msg)
-        self.heff_varies = heff_model == "orc"
+        self.kheff = KHEFF_CURVES.get(heff_model)
         self.eff_span_corr = float(self.p.get("eff_span_corr", 1.0))
         self.alpha_opt = np.radians(float(self.p.get("alpha_opt_deg", 22.0)))
         self.flat_floor = float(self.p.get("flat_stall_floor", 0.55))
@@ -182,6 +208,29 @@ class ORCMainSail(Model):
         self.last_cl = 0.0
         self.last_cd = 0.0
         self.last_heff = self.heff
+
+    def _check_keys(self) -> None:
+        """Reject keys that belong to the NeuralFoil section model.
+
+        Same contract the hull, keel and rudder keep: a config says which model
+        it means and gets exactly that one, rather than carrying keys that read
+        as meaningful and are never looked at.
+        """
+        stray = [k for k in self.REFUSES if k in self.p]
+        if "jib_area" in stray:
+            msg = (
+                "sail model_type: orc_main is a single mainsail and got jib_area; "
+                "use model_type: orc_w_jib for ORC's collective main-plus-jib rig"
+            )
+            raise ValueError(msg)
+        if stray:
+            msg = (
+                f"sail model_type: {self.p.get('model_type', 'orc_main')} is the ORC coefficient "
+                f"envelope and got section-polar keys {', '.join(stray)}; the ORC model takes its "
+                "coefficients from apparent wind angle and its induced drag from heff/eff_span_corr, "
+                "so these do nothing. Use model_type: basic for the NeuralFoil section sail"
+            )
+            raise ValueError(msg)
 
     # --- rig ------------------------------------------------------------
     def _rig(self) -> list[tuple[SailTable, float]]:
@@ -227,8 +276,49 @@ class ORCMainSail(Model):
         With ``heff_model`` unset ``kheff`` is 1 and this is the configured
         height scaled by ``eff_span_corr`` alone.
         """
-        k = float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, KHEFF)) if self.heff_varies else 1.0
+        k = 1.0 if self.kheff is None else float(np.interp(abs(awa_deg), KHEFF_AWA_DEG, self.kheff))
         return self.eff_span_corr * k * self.heff
+
+    def form_drag_trim_factor(self, beta: float, alpha: float) -> float:
+        """How much of the table's form drag this trim actually presents.
+
+        ORC's CD0 is the drag of a *correctly trimmed* sail: its VPP chooses the
+        trim and never models a badly set one. This simulator does not choose --
+        the helm sets a sheet limit -- so downwind the table was being charged in
+        full whatever the boom was doing. The consequence was measurable and
+        wrong: past about 150 degrees apparent, moving the sheet from centreline
+        to fully squared changed the drive force by exactly zero newtons. A sail
+        strapped flat amidships was running dead downwind at full speed.
+
+        Two facts fix it. Running, a sail is a drag device, and the drag of a
+        bluff surface goes with its projected area, i.e. with ``sin^2`` of the
+        angle between the chord and the flow. And the trim ORC assumes, once
+        past a beam reach, is square to the apparent wind -- the boom fully
+        eased, which the sheet logic caps at 90 degrees. So
+
+            factor = sin^2(alpha) / sin^2(alpha at the fully-eased boom)
+
+        is 1 at the trim ORC assumes and falls to 0 for a sail sheeted
+        edge-on to the wind, which is the behaviour that was missing.
+
+        Clipped at 1 because trim can only be worse than the optimum the table
+        already represents, never better -- the same contract ``flat`` keeps.
+
+        Returns 1.0 at or inside a beam reach. There the sail is a lifting
+        surface, its CD0 is mostly friction rather than form drag, and trim
+        already acts through ``flat``; leaving it alone also means none of the
+        upwind or reaching polar moves.
+        """
+        if beta <= 0.5 * np.pi:
+            return 1.0
+        # Where the boom sits with the sheet fully eased. The hub caps it at 90.
+        alpha_free = beta - 0.5 * np.pi
+        sin_free = np.sin(alpha_free) ** 2
+        if sin_free <= 1e-9:
+            # Just past the beam, every trim is effectively optimal; this is
+            # what keeps the factor continuous across 90 degrees.
+            return 1.0
+        return float(np.clip(np.sin(alpha) ** 2 / sin_free, 0.0, 1.0))
 
     def flat_from_trim(self, alpha_rad: float) -> float:
         """ORC ``flat`` depowering factor from the sail's angle of attack.
@@ -342,6 +432,11 @@ class ORCMainSail(Model):
         heff = self.effective_height(np.degrees(beta))
         flat = self.flat_from_trim(alpha) if alpha > 0.0 else 0.0
 
+        # Only the form-drag part of CD0 answers to trim; the parasitic floor is
+        # there whatever the boom does. Applied before the righting-moment
+        # solve, so depowering sees the drag the rig actually makes.
+        cd0 = self.cd0_floor + (cd0 - self.cd0_floor) * self.form_drag_trim_factor(beta, alpha)
+
         q = 0.5 * rho * aw_speed * aw_speed * self.area
         flat = self.flat_for_righting_moment(flat, beta, cl_max, cd0, q, kpp, heff)
 
@@ -379,7 +474,9 @@ class ORCWithJibSail(ORCMainSail):
             the reference area the coefficients are normalised by.
     """
 
-    REFUSES: tuple[str, ...] = ()
+    # Same section-polar keys the mainsail refuses, minus `jib_area`: this rig
+    # requires it, so it must not also be on the refused list.
+    REFUSES: tuple[str, ...] = FOIL_ONLY_KEYS
     REQUIRES: tuple[tuple[str, ...], ...] = (("jib_area",),)
 
     def _rig(self) -> list[tuple[SailTable, float]]:

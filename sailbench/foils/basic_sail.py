@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 
+from sailbench.foils.sail_keys import ORC_ONLY_KEYS
 from sailbench.models.foil import Foil
 from sailbench.models.model import State
 from sailbench.sim.registry import register
@@ -20,6 +21,12 @@ from sailbench.tf.tf_tree import TFTree2D
 class BasicSail(Foil):
     """Basic sail foil model."""
 
+    # Declared, not just enforced: the shipyard asks `registry.unavailable` which
+    # models a boat can run, and answers from this list without building any of
+    # them. `_check_keys` enforces the same list, so the catalog and the boat
+    # cannot disagree about what this model accepts.
+    REFUSES: tuple[str, ...] = ORC_ONLY_KEYS
+
     def __init__(self, params: dict[str, Any]) -> None:
         """Initialize the BasicSail model.
 
@@ -28,6 +35,17 @@ class BasicSail(Foil):
 
         """
         super().__init__(params)
+        self._check_keys()
+
+    def _check_keys(self) -> None:
+        """Reject keys that belong to the ORC envelope model."""
+        stray = [k for k in self.REFUSES if k in self.p]
+        if stray:
+            msg = (
+                f"sail model_type: basic is a NeuralFoil section and got ORC keys {', '.join(stray)}; "
+                "use model_type: orc_main or orc_w_jib for the ORC coefficient envelope"
+            )
+            raise ValueError(msg)
 
     def compute(self, state: State, tf_tree: TFTree2D) -> np.ndarray:
         """Compute lift and drag forces for the sail.

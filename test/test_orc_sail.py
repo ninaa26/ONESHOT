@@ -1,5 +1,6 @@
 """ORCMainSail: the ORC VPP coefficient envelope, trim depowering and force split."""
 
+import itertools
 import math
 
 import numpy as np
@@ -9,7 +10,8 @@ from sailbench.foils.orc_sail import (
     JIB_AWA_DEG,
     JIB_CD0,
     JIB_CL,
-    KHEFF,
+    KHEFF_2022,
+    KHEFF_2023,
     KHEFF_AWA_DEG,
     KPJ,
     KPM,
@@ -290,6 +292,54 @@ class TestRigSelection:
         assert isinstance(make_sloop(), ORCMainSail)
 
 
+class TestSectionKeysRefused:
+    """The ORC envelope is not a section model, and says so instead of ignoring the keys.
+
+    Same contract the hull, keel and rudder keep. flingo_floty.yaml carried
+    `span`, `end_plate_factor`, `alpha_min`, `alpha_max` and `res` in its sail
+    section for several commits; none were read, and the comment beside them
+    documented an effective aspect ratio the model never computed.
+    """
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("span", 2.592),
+            ("end_plate_factor", 1.39),
+            ("alpha_min", -179),
+            ("alpha_max", 179),
+            ("res", [1.8e5]),
+            ("airfoil_name", "NACA0012"),
+            ("alpha_sep_deg", 25.0),
+        ],
+    )
+    def test_section_key_is_refused(self, key: str, value: object) -> None:
+        """Each NeuralFoil key is rejected rather than silently carried."""
+        with pytest.raises(ValueError, match="section-polar keys"):
+            make_sail(**{key: value})
+
+    def test_sloop_refuses_them_too(self) -> None:
+        """The check lives on the shared base, so the sloop inherits it."""
+        with pytest.raises(ValueError, match="section-polar keys"):
+            ORCWithJibSail({"area": 1.971, "jib_area": 0.775, "heff": 2.592, "span": 2.592})
+
+    def test_orc_keys_still_accepted(self) -> None:
+        """The refusal is narrow: every key the ORC model actually reads still works."""
+        sail = ORCWithJibSail({
+            "area": 1.971, "jib_area": 0.775, "heff": 2.592,
+            "heff_model": "orc-2022", "eff_span_corr": 1.057,
+            "alpha_opt_deg": 22.0, "flat_stall_floor": 0.55,
+        })
+        assert sail.eff_span_corr == pytest.approx(1.057)
+
+    def test_basic_sail_refuses_orc_keys(self) -> None:
+        """And the mirror: the section sail refuses the envelope's keys."""
+        from sailbench.foils.basic_sail import BasicSail
+
+        with pytest.raises(ValueError, match="ORC keys"):
+            BasicSail({"area": 1.971, "heff": 2.592})
+
+
 class TestSloop:
     """ORC's collective rig: main and jib tables blended by area share."""
 
@@ -378,42 +428,51 @@ class TestEffectiveHeight:
         for awa in (0.0, 20.0, 45.0, 80.0, 150.0):
             assert sail.effective_height(awa) == pytest.approx(2.592)
 
-    def test_orc_curve_matches_the_published_anchors(self) -> None:
-        """The text pins kheff at 1.0 (0 deg), 1.4513 (20 deg) and 0.80 (80 deg on)."""
-        sail = make_sail(heff_model="orc")
+    @pytest.mark.parametrize(("model", "peak"), [("orc-2022", 1.22), ("orc-2023", 1.4513)])
+    def test_orc_curve_matches_the_published_anchors(self, model: str, peak: float) -> None:
+        """Each edition's text pins kheff at 1.0 (0 deg), its peak (20 deg) and 0.80 (80 on)."""
+        sail = make_sail(heff_model=model)
         assert sail.effective_height(0.0) == pytest.approx(2.592 * 1.0)
-        assert sail.effective_height(20.0) == pytest.approx(2.592 * 1.4513)
+        assert sail.effective_height(20.0) == pytest.approx(2.592 * peak)
         assert sail.effective_height(80.0) == pytest.approx(2.592 * 0.80)
         assert sail.effective_height(150.0) == pytest.approx(2.592 * 0.80)
 
-    def test_orc_curve_matches_the_table_at_its_nodes(self) -> None:
+    @pytest.mark.parametrize(("model", "table"), [("orc-2022", KHEFF_2022), ("orc-2023", KHEFF_2023)])
+    def test_orc_curve_matches_the_table_at_its_nodes(self, model: str, table: np.ndarray) -> None:
         """Interpolation reproduces the traced figure exactly."""
-        sail = make_sail(heff_model="orc")
-        for awa, k in zip(KHEFF_AWA_DEG, KHEFF, strict=True):
+        sail = make_sail(heff_model=model)
+        for awa, k in zip(KHEFF_AWA_DEG, table, strict=True):
             assert sail.effective_height(float(awa)) == pytest.approx(2.592 * float(k))
+
+    def test_editions_differ_only_close_hauled(self) -> None:
+        """2023 raised the peak; the reaching side of the curve was left alone."""
+        old, new = make_sail(heff_model="orc-2022"), make_sail(heff_model="orc-2023")
+        assert new.effective_height(20.0) > old.effective_height(20.0)
+        for awa in (50.0, 60.0, 70.0, 80.0):
+            assert new.effective_height(awa) == pytest.approx(old.effective_height(awa), rel=0.01)
 
     def test_taller_on_a_beat_than_on_a_reach(self) -> None:
         """The whole point: jib-hull sealing makes the rig act taller close-hauled."""
-        sail = make_sail(heff_model="orc")
+        sail = make_sail(heff_model="orc-2023")
         assert sail.effective_height(20.0) > sail.effective_height(0.0)
         assert sail.effective_height(20.0) > sail.effective_height(60.0) > sail.effective_height(90.0)
 
     def test_symmetric_in_wind_side(self) -> None:
         """Height depends on the magnitude of the apparent wind angle."""
-        sail = make_sail(heff_model="orc")
+        sail = make_sail(heff_model="orc-2023")
         assert sail.effective_height(-25.0) == sail.effective_height(25.0)
 
     def test_span_correction_scales_the_height(self) -> None:
         """eff_span_corr multiplies the height whatever the model."""
         assert make_sail(eff_span_corr=1.057).effective_height(45.0) == pytest.approx(2.592 * 1.057)
-        orc = make_sail(heff_model="orc", eff_span_corr=1.057)
+        orc = make_sail(heff_model="orc-2023", eff_span_corr=1.057)
         assert orc.effective_height(20.0) == pytest.approx(2.592 * 1.057 * 1.4513)
 
     def test_less_induced_drag_on_a_beat(self) -> None:
         """A taller effective rig sheds less tip vortex for the same lift."""
         psi = beat(35.0)
         args = (make_state(psi=psi), tree(math.radians(15.0), psi))
-        const, orc = make_sail(), make_sail(heff_model="orc")
+        const, orc = make_sail(), make_sail(heff_model="orc-2023")
         const.compute(*args)
         orc.compute(*args)
         assert orc.last_cl == pytest.approx(const.last_cl)
@@ -421,6 +480,82 @@ class TestEffectiveHeight:
         assert orc.last_heff > const.last_heff
 
     def test_unknown_model_raises(self) -> None:
-        """A typo must not silently fall back to a constant height."""
+        """A typo, or the old unversioned name, must not silently fall back."""
         with pytest.raises(ValueError, match="heff_model"):
             make_sail(heff_model="fancy")
+        with pytest.raises(ValueError, match="heff_model"):
+            make_sail(heff_model="orc")
+
+
+class TestDownwindTrimAnswers:
+    """Running, the sheet has to do something: form drag follows projected area.
+
+    ORC's CD0 is the drag of a correctly trimmed sail, and the simulator was
+    charging it in full whatever the boom did. Measured on Flingo before this:
+    at TWA 160-180, moving the sheet across its entire range changed the drive
+    force by exactly 0.00 N, so a policy had no gradient on sail trim there.
+    """
+
+    def test_beam_and_upwind_are_untouched(self) -> None:
+        """The factor is 1 at or inside a beam reach, so no upwind polar moves."""
+        sail = make_sloop()
+        for beta_deg in (0.0, 30.0, 60.0, 89.0, 90.0):
+            beta = math.radians(beta_deg)
+            for boom_deg in (0.0, 20.0, 45.0, 90.0):
+                alpha = beta - math.radians(boom_deg)
+                assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
+
+    def test_continuous_across_the_beam(self) -> None:
+        """No step at 90 degrees: just past the beam every trim is still optimal."""
+        sail = make_sloop()
+        just_past = sail.form_drag_trim_factor(math.radians(90.5), math.radians(45.0))
+        assert just_past == pytest.approx(1.0)
+
+    def test_squared_sail_gets_the_full_table(self) -> None:
+        """At the trim ORC assumes -- boom fully eased -- the factor is exactly 1."""
+        sail = make_sloop()
+        for beta_deg in (120.0, 150.0, 180.0):
+            beta = math.radians(beta_deg)
+            alpha = beta - math.radians(90.0)  # boom fully eased, capped at 90
+            assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
+
+    def test_centreline_sail_presents_nothing_dead_downwind(self) -> None:
+        """Sheeted flat amidships on a run, the sail is edge-on and makes no form drag."""
+        sail = make_sloop()
+        assert sail.form_drag_trim_factor(math.pi, math.pi) == pytest.approx(0.0, abs=1e-9)
+
+    def test_never_exceeds_the_optimum(self) -> None:
+        """Trim can only be worse than the table, never better -- as `flat` cannot exceed 1."""
+        sail = make_sloop()
+        for beta_deg in np.arange(91.0, 180.1, 1.0):
+            for boom_deg in np.arange(0.0, 90.1, 5.0):
+                beta = math.radians(float(beta_deg))
+                f = sail.form_drag_trim_factor(beta, beta - math.radians(float(boom_deg)))
+                assert 0.0 <= f <= 1.0
+
+    def test_drive_now_rises_monotonically_with_sheet_on_a_run(self) -> None:
+        """The behaviour that was missing: easing the sheet downwind makes drive."""
+        drives = [_drive_at(twa_deg=180.0, boom_deg=b) for b in (0.0, 30.0, 60.0, 90.0)]
+        assert all(b > a for a, b in itertools.pairwise(drives))
+        assert drives[0] < 0.1 * drives[-1]  # centreline makes almost nothing
+
+    @pytest.mark.parametrize("twa", [160.0, 170.0, 180.0])
+    def test_sheet_range_changes_drive_downwind(self, twa: float) -> None:
+        """Regression guard on the actual bug: the spread used to be 0.00 N."""
+        drives = [_drive_at(twa_deg=twa, boom_deg=b) for b in np.arange(0.0, 90.1, 15.0)]
+        assert max(drives) - min(drives) > 0.25 * max(drives)
+
+
+def _drive_at(twa_deg: float, boom_deg: float) -> float:
+    """Boat-frame drive force from the Flingo rig at a wind angle and boom angle."""
+    from sailbench.models.model import State
+    from sailbench.sim.sailboat_hub import SailboatHub
+
+    hub = SailboatHub("flingo_floty.yaml")
+    hub.sail_cfg["wind_speed"] = 5.0
+    hub.sail_cfg["wind_dir_deg"] = 90.0
+    psi = math.radians(270.0 - twa_deg)
+    state = State(x=0.0, y=0.0, psi=(math.cos(psi), math.sin(psi)), u=1.5, v=0.0, r=0.0)
+    hub.sail_actuator.position = math.radians(boom_deg)
+    hub._set_kinematic_frames(state, math.radians(boom_deg), 0.0)
+    return float(hub.sail.compute(state, hub.tf)[0])

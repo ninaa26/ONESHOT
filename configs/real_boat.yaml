@@ -36,6 +36,7 @@ boat:
   inertia_z: 1.0  # [kg·m²] yaw inertia
 
 hull:
+  model_type: basic
   x_pos: 0.0  # [m]     x position relative to boat center of rotation
   y_pos: 0.0  # [m]     y position relative to boat center of rotation
   L: 1.5 # [m] length
@@ -71,14 +72,16 @@ sail:
   wind_dir_deg: 90  # direction wind blows TO (deg, 0=east, 90=north)
   x_pos: 0.0
   y_pos: 0.0
-  # NeuralFoil model parameters
-  alpha_min: -179 # Minimum and maximum angle of attack in degrees
-  alpha_max: 179
-  res: [1e5]   # Reynolds number
+  # Everything above is true of this sail whichever model reads it. The NeuralFoil
+  # parameters sit under `basic` below: shared here, they would also be handed to
+  # the ORC envelope, which reads none of them and refuses them.
   # No orc_w_jib block. This boat is a single-sail rig, so the sloop model is
   # not one it lacks data for: it is the wrong model for the boat.
   models:
-    basic: {}
+    basic:
+      alpha_min: -179 # Minimum and maximum angle of attack in degrees
+      alpha_max: 179
+      res: [1e5]   # Reynolds number
     orc_main: {}
     # The analytic model is not specific to any rig, so it is offered here as an
     # alternative to the section polar. Empty: its coefficients default to the

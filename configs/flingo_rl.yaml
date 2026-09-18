@@ -1,8 +1,10 @@
 # RL waypoint training config for the Flingo Floaty hull.
 #
-# Observation scales re-derived 2026-09-17 from the measured polar, now that the
-# physics gaps the previous note was waiting on are closed. The boat reaches
-# 2.02 m/s and 1.77 rad/s, so the scales below are those plus ~15% headroom.
+# Observation scales re-derived 2026-09-17 from the measured polar, AFTER the
+# hull calibration (c_wave 0.01 -> 0.05, yaw_damping_cd 7.0). That calibration
+# moved both scales a long way, so the previous values no longer fit: the boat
+# had been running to Fn 0.63 and 99 deg/s, neither of which a displacement
+# hull does. Re-measured envelope is 1.80 m/s and 0.71 rad/s.
 # Policies trained before this will not transfer: the polar, the observation
 # scales and the observation width have all changed.
 env:
@@ -20,8 +22,12 @@ env:
   upwind_half_angle_deg: 25.0
   success_radius_m: 1.5
   fail_radius_m: 80.0
-  speed_scale: 2.5      # top speed measured 2.02 m/s
-  yaw_rate_scale: 2.5   # max yaw rate measured 1.77 rad/s (101 deg/s)
+  speed_scale: 2.1      # polar max measured 1.80 m/s (TWA 80) + ~17% headroom
+  # Max yaw rate measured 0.71 rad/s (40 deg/s), swept over TWA 40-150 at 20 and
+  # 35 deg rudder. The old 2.5 was set against a boat that could reach 1.77
+  # rad/s; under the calibrated yaw damping it never gets close, so 2.5 squeezed
+  # this observation into +-28% of its range and the policy saw almost no signal.
+  yaw_rate_scale: 0.9
   wind_speed_scale: 15.0
   # The sheet winch lags 3 s; without this the policy sees only its own command.
   include_actuator_state: true
