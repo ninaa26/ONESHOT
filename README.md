@@ -43,6 +43,101 @@ Sailbench is an end-to-end sailing physics simulator made by [Cornell Autonomous
 5. **[Optional but recommended] Setup VSCode Extensions**   
     I would recommend utilizing VSCode for developing in this project. The two extensions to install are [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) (Python formatter and linter) as well as [MyPy](https://marketplace.visualstudio.com/items?itemName=ms-python.mypy-type-checker) (Python type checker). This will help keep consistent code quality and style across sailbench.
 
+## Checks
+
+Three commands, and CI runs the same three on every pull request. A change that fails
+any of them cannot be merged, so it is worth running them before pushing rather than
+finding out on GitHub.
+
+```bash
+uv run pytest -q                 # the suite
+uv run ruff check .              # lint
+uv run ruff format --check .     # formatting
+```
+
+`ruff check . --fix` and `ruff format .` fix most of what they find. The rule set lives
+in `pyproject.toml` under `[tool.ruff.lint]`; where a rule is switched off there is a
+comment saying why, so if one gets in your way read that first rather than reaching for
+a blanket `noqa`.
+
+Useful while working on one thing:
+
+```bash
+uv run pytest test/test_orc_sail.py -v    # one file
+uv run pytest -k "keel" -v                # tests matching a name
+uv run pytest --lf                        # only what failed last time
+```
+
+`FIXLIST.md` in the repo root is the standing list of what to do next and why.
+
+## Adding a model
+
+A boat is assembled from **parts**, and each part is a slot you can swap a model into.
+Nothing central holds a list of what exists: a model registers itself, and a config names
+the one it wants.
+
+| part | models it currently offers |
+| --- | --- |
+| `sail` | `basic`, `hybrid`, `orc_main`, `orc_w_jib` |
+| `keel` | `basic`, `finite_span` |
+| `rudder` | `basic`, `finite_span` |
+| `hull` | `basic`, `linear`, `quadratic` |
+| `friction` | `flat`, `hughes` |
+
+To add one, write the class and decorate it. There is no table to update:
+
+```python
+@register(
+    "keel",
+    "finite_span",
+    name="Finite span",
+    blurb="Lifting-line induced drag and post-stall blend",
+)
+class FiniteSpanKeel(BasicKeel):
+    REQUIRES = (("span", "effective_aspect_ratio"),)   # one of each group must be present
+    REFUSES = ()                                       # keys this model does not read
+    DEFAULTS = {"alpha_sep_deg": 25.0}                 # physics constants it owns
+```
+
+`FiniteSpanRudder` next door is the same shape with `REFUSES = CLAMP_KEYS` — it blends
+past stall, so the clamp keys the basic rudder uses would do nothing on it and are
+rejected rather than silently ignored.
+
+`name` and `blurb` are what the shipyard screen shows, so a new model arrives already
+described. `REQUIRES` and `REFUSES` are what let the shipyard grey out a model a given
+boat cannot run, *with the reason*, without building anything — and each model's
+`_check_keys` enforces that same `REFUSES` list at construction, so the screen and the
+boat cannot disagree.
+
+Registration happens on import, so the module must be imported by
+`sailbench/foils/__init__.py` or `sailbench/dynamics/__init__.py`. **A model in a file
+nobody imports is a model the registry has never heard of.**
+
+Prefer a new model over a subclass that hardcodes a combination. Skin friction is the
+worked example: rather than a hull subclass that fixes the Hughes line and then has to
+refuse a `friction_model` key, friction is its own part, so any friction law composes
+with any hull and the shipyard can offer the choice.
+
+### How a boat config names models
+
+Shared keys apply to whichever model runs. Each model's own parameters go in a block it
+owns, so no model is handed another's keys:
+
+```yaml
+keel:
+  area: 0.1225          # shared: every keel model reads these
+  x_pos: 0.184
+  model: finite_span    # which one to build
+  models:
+    basic: {}           # empty is fine — a model with no parameters of its own
+    finite_span:
+      span: 0.700
+      end_plate_factor: 2.0
+```
+
+A section with no `models:` block is read exactly as before, so older configs keep working
+and a boat can be migrated one part at a time.
+
 ## Running the Web Simulation
 
 Once you've installed the packages, you can play sailbench with manual control with the following instructions.
@@ -58,14 +153,25 @@ Once you've installed the packages, you can play sailbench with manual control w
    python -m http.server 8000
    ```
 
-3. Open http://localhost:8000/sim/ in your browser.
+3. Open http://localhost:8000/ in your browser.
 
-The page talks to the backend on port 8765. To point it somewhere else -- a
-second checkout running its own backend, say -- pass the port in the URL:
-`http://localhost:8000/?port=8766`. `?host=` reaches another machine and `?ws=`
-replaces the whole socket URL.
+`web/` serves four separate front-ends over a shared core, and the page at the root is a
+launcher linking to all of them:
 
-The page opens on the **shipyard**: pick a boat (any boat config under
+| page | what it is | needs the backend? |
+| --- | --- | --- |
+| `/sim/` | the 3D simulator, sailing whatever `--config` was launched with | yes |
+| `/shipyard/` | the same sim, with the boat-assembly screen in front of it | yes |
+| `/game/` | the scored waypoint task — manual, autopilot or a trained policy | only for `backend` mode |
+| `/physics/` | the physics lab, every model pulled apart | no |
+
+The pages that talk to the backend use port 8765. To point one somewhere else -- a
+second checkout running its own backend, say -- pass the port in the URL of the page
+itself: `http://localhost:8000/sim/?port=8766`. `?host=` reaches another machine and
+`?ws=` replaces the whole socket URL. The launcher does not forward these, so put them
+on the app's own URL rather than on `/`.
+
+`/shipyard/` opens on the **shipyard**: pick a boat (any boat config under
 `configs/`), then the sail, keel, rudder and hull models and who holds the helm
 (you, or a trained policy found under `runs/`), and set sail. Arrow keys move
 around, Enter launches, Esc while sailing brings you back to re-rig. Models a
