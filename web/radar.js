@@ -69,7 +69,14 @@ const COLORS = {
 };
 
 export function createRadar(canvas) {
-  const ctx = canvas.getContext("2d");
+  // A missing canvas must not take the simulator down with it. This is a
+  // read-out, not a control: without it the boat still sails, and an element
+  // that has gone missing -- a stale page against fresh scripts, say -- should
+  // cost the radar, not the whole app.
+  const ctx = canvas ? canvas.getContext("2d") : null;
+  if (!ctx) {
+    return { update() {}, reset() {} };
+  }
   const trail = [];
   let range = 40;
   let lastWaypoint = null;
