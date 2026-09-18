@@ -248,9 +248,11 @@ function makeWsUrl() {
           // point, so the first keypress nudges from there instead of jumping.
           if (windCmdMs === null && typeof stateVis.wind.speed === "number") {
             windCmdMs = stateVis.wind.speed;
+            syncWindSliders();
           }
           if (windDirCmdDeg === null && typeof stateVis.wind.dir_deg === "number") {
             windDirCmdDeg = stateVis.wind.dir_deg;
+            syncWindSliders();
           }
           setWind(stateVis.wind.speed, stateVis.wind.dir_deg, windCmdMs, windDirCmdDeg);
         }
@@ -321,12 +323,39 @@ let lastSentWindDirDeg = null;
 function nudgeWind(deltaMs) {
   if (windCmdMs === null) return;
   windCmdMs = Math.min(WIND_MAX_MS, Math.max(WIND_MIN_MS, windCmdMs + deltaMs));
+  syncWindSliders();
 }
 
 function nudgeWindDir(deltaDeg) {
   if (windDirCmdDeg === null) return;
   // Direction wraps rather than clamping: there is no end of the compass.
   windDirCmdDeg = ((windDirCmdDeg + deltaDeg) % 360 + 360) % 360;
+  syncWindSliders();
+}
+
+// The sliders and the keys are two handles on one command, so each writes the
+// command and then both are made to agree with it.
+const windSpeedSlider = document.getElementById("wind-speed-slider");
+const windDirSlider = document.getElementById("wind-dir-slider");
+
+function syncWindSliders() {
+  if (windSpeedSlider && windCmdMs !== null) {
+    windSpeedSlider.value = String(windCmdMs);
+  }
+  if (windDirSlider && windDirCmdDeg !== null) {
+    windDirSlider.value = String(Math.round(windDirCmdDeg));
+  }
+}
+
+if (windSpeedSlider) {
+  windSpeedSlider.addEventListener("input", () => {
+    windCmdMs = Number(windSpeedSlider.value);
+  });
+}
+if (windDirSlider) {
+  windDirSlider.addEventListener("input", () => {
+    windDirCmdDeg = Number(windDirSlider.value);
+  });
 }
 
 const RUDDER_MAX_DEG = 35.0;
@@ -341,6 +370,10 @@ let keyUp = false;
 let keyDown = false;
 
 window.addEventListener("keydown", (ev) => {
+  // A focused slider owns its own arrow keys; steering the boat from them at
+  // the same time would fight whoever is dragging it.
+  const tag = ev.target && ev.target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   if (shipyard.handleKey(ev)) return;
   switch (ev.code) {
     case "ArrowLeft":
