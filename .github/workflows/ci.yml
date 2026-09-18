@@ -1,0 +1,56 @@
+name: CI
+
+# The point is not automation for its own sake: it is that "it works on my
+# machine" stops being an argument. Nothing else stops a branch that breaks the
+# physics from being merged, because nobody is obliged to run pytest first.
+#
+# The workflow only *reports* until branch protection requires it. To make it
+# block: Settings -> Branches -> Add branch protection rule for `main`, tick
+# "Require status checks to pass before merging", and select the `check` job.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # Lint and tests are split so a style failure does not hide a physics failure,
+  # and so the fast job does not wait on torch.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # No --group rl: ruff does not need torch, and skipping it keeps this
+      # job's install to a few seconds.
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --group rl pulls in torch, which is a large download; the cache above is
+      # what keeps this to seconds after the first run.
+      - name: Install dependencies
+        run: uv sync --group dev --group rl
+
+      - name: Unit tests
+        run: uv run pytest -q
