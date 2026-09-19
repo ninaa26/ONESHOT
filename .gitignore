@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Training checkpoints: resume points, not results. The runs kept in
+# runs/*/ commit best_model, config_used.yaml, eval_logs and summary.json;
+# the intermediates are reproducible from config_used.yaml (seed is fixed).
+runs/*/checkpoints/
+runs/tensorboard/

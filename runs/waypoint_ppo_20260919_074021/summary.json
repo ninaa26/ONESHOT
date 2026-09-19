@@ -1,0 +1,10 @@
+{
+  "run_dir": "runs/waypoint_ppo_20260919_074021",
+  "seed": 7,
+  "total_timesteps": 750000,
+  "n_envs": 4,
+  "parallel_rollout_envs": 4,
+  "vec_env": "subproc",
+  "final_model_path": "runs/waypoint_ppo_20260919_074021/final_model.zip",
+  "resumed_from": null
+}
