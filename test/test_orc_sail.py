@@ -528,18 +528,44 @@ class TestDownwindTrimAnswers:
                 assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
 
     def test_continuous_across_the_beam(self) -> None:
-        """No step at 90 degrees: just past the beam every trim is still optimal."""
+        """No step at 90 degrees: the penalty ramps in from nothing at the beam."""
         sail = make_sloop()
-        just_past = sail.form_drag_trim_factor(math.radians(90.5), math.radians(45.0))
-        assert just_past == pytest.approx(1.0)
+        at_beam = sail.form_drag_trim_factor(math.radians(90.0), math.radians(45.0))
+        assert at_beam == pytest.approx(1.0)
+        # Approaching the beam from outside, the factor returns to the inside branch.
+        for past in (10.0, 1.0, 0.1, 0.01):
+            beta = math.radians(90.0 + past)
+            assert sail.form_drag_trim_factor(beta, math.radians(45.0)) == pytest.approx(1.0, abs=past / 90.0)
 
-    def test_squared_sail_gets_the_full_table(self) -> None:
-        """At the trim ORC assumes -- boom fully eased -- the factor is exactly 1."""
+    def test_square_to_the_wind_gets_the_full_table(self) -> None:
+        """The table's drag belongs to the sail square to the flow, not to any one boom.
+
+        Square to the apparent wind is `alpha = 90 deg`, which is a boom at
+        `beta - 90`. A boom fully eased to 90 degrees is only that trim on a dead
+        run; at 120 degrees apparent it is 30 degrees past square and by the lee,
+        so it is charged less, not the full table.
+        """
         sail = make_sloop()
         for beta_deg in (120.0, 150.0, 180.0):
             beta = math.radians(beta_deg)
-            alpha = beta - math.radians(90.0)  # boom fully eased, capped at 90
-            assert sail.form_drag_trim_factor(beta, alpha) == pytest.approx(1.0)
+            assert sail.form_drag_trim_factor(beta, 0.5 * math.pi) == pytest.approx(1.0)
+
+        over_eased = sail.form_drag_trim_factor(math.radians(120.0), math.radians(120.0 - 90.0))
+        assert over_eased < 0.9
+
+    def test_intermediate_sheets_are_not_all_identical(self) -> None:
+        """The regression that hid the bug for a whole training run.
+
+        `sin^2(alpha)` peaks at 90 degrees, so normalising against the fully-eased
+        boom made every trim between hard in and fully out compute above 1 and
+        clip back to it. At 139.5 degrees apparent, sheet limits of 10 through 80
+        degrees returned byte-identical drive.
+        """
+        sail = make_sloop()
+        beta = math.radians(139.5)
+        factors = [sail.form_drag_trim_factor(beta, beta - math.radians(b)) for b in (10.0, 20.0, 40.0, 60.0, 80.0)]
+        assert len(set(round(f, 6) for f in factors)) == len(factors)
+        assert max(factors) - min(factors) > 0.1
 
     def test_centreline_sail_presents_nothing_dead_downwind(self) -> None:
         """Sheeted flat amidships on a run, the sail is edge-on and makes no form drag."""

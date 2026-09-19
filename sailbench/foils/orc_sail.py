@@ -319,40 +319,39 @@ class ORCMainSail(Model):
         ORC's CD0 is the drag of a *correctly trimmed* sail: its VPP chooses the
         trim and never models a badly set one. This simulator does not choose --
         the helm sets a sheet limit -- so downwind the table was being charged in
-        full whatever the boom was doing. The consequence was measurable and
-        wrong: past about 150 degrees apparent, moving the sheet from centreline
-        to fully squared changed the drive force by exactly zero newtons. A sail
-        strapped flat amidships was running dead downwind at full speed.
+        full whatever the boom was doing. A sail strapped flat amidships was
+        running dead downwind at full speed.
 
-        Two facts fix it. Running, a sail is a drag device, and the drag of a
-        bluff surface goes with its projected area, i.e. with ``sin^2`` of the
-        angle between the chord and the flow. And the trim ORC assumes, once
-        past a beam reach, is square to the apparent wind -- the boom fully
-        eased, which the sheet logic caps at 90 degrees. So
+        Running, a sail is a drag device, and the drag of a bluff surface goes
+        with its projected area: ``sin^2`` of the angle between the chord and the
+        flow, which is ``alpha``. That peaks at ``alpha = 90 deg`` -- the sail
+        square to the apparent wind -- and square to the wind is the trim ORC's
+        table represents, so the projected area is normalised against 1.
 
-            factor = sin^2(alpha) / sin^2(alpha at the fully-eased boom)
+        Normalising against the fully-eased boom instead, as this did until
+        2026-09-19, made the factor inert. ``sin^2`` is not monotonic in
+        ``alpha``: easing sweeps ``alpha`` from ``beta`` down through 90 degrees,
+        where ``sin^2`` is at its maximum, so every trim between hard in and
+        fully out computed greater than 1 and clipped back to it. Measured at
+        AWA 139 degrees, sheet limits of 10, 20, 40, 60 and 80 degrees returned
+        byte-identical drive; only a boom within a few degrees of the centreline
+        was charged anything at all. A learned policy answered exactly as it
+        should have and pinned the sheet at one end for 100% of its steps.
 
-        is 1 at the trim ORC assumes and falls to 0 for a sail sheeted
-        edge-on to the wind, which is the behaviour that was missing.
+        The penalty ramps in across the second quadrant rather than switching on
+        at the beam. At ``beta = 90`` the weight is zero, so this is 1 and joins
+        the lifting-surface branch below without a step; by a dead run it is
+        charged in full. That gradient is also physical -- a sail at 100 degrees
+        apparent is still mostly a lifting surface, one at 170 is not.
 
         Clipped at 1 because trim can only be worse than the optimum the table
         already represents, never better -- the same contract ``flat`` keeps.
-
-        Returns 1.0 at or inside a beam reach. There the sail is a lifting
-        surface, its CD0 is mostly friction rather than form drag, and trim
-        already acts through ``flat``; leaving it alone also means none of the
-        upwind or reaching polar moves.
         """
         if beta <= 0.5 * np.pi:
             return 1.0
-        # Where the boom sits with the sheet fully eased. The hub caps it at 90.
-        alpha_free = beta - 0.5 * np.pi
-        sin_free = np.sin(alpha_free) ** 2
-        if sin_free <= 1e-9:
-            # Just past the beam, every trim is effectively optimal; this is
-            # what keeps the factor continuous across 90 degrees.
-            return 1.0
-        return float(np.clip(np.sin(alpha) ** 2 / sin_free, 0.0, 1.0))
+        projected = float(np.sin(alpha) ** 2)
+        weight = float(np.clip((beta - 0.5 * np.pi) / (0.5 * np.pi), 0.0, 1.0))
+        return float(np.clip(1.0 - weight * (1.0 - projected), 0.0, 1.0))
 
     def flat_from_trim(self, alpha_rad: float) -> float:
         """ORC ``flat`` depowering factor from the sail's angle of attack.
