@@ -1,0 +1,29 @@
+{
+  "task": {
+    "episodes": 20,
+    "seed_base": 1000,
+    "pinch_threshold_deg": 25.0,
+    "overrides": {
+      "upwind_waypoint_bias": 0.5
+    },
+    "boat": "basic_sailbot.yaml"
+  },
+  "scored_at": "2026-09-19T16:37:54+00:00",
+  "checkpoints": {
+    "best": {
+      "model": "runs/claude_run_5_lr1e4_oscillating/best_model/best_model.zip",
+      "sha256": "cb26552b0093584ca47f4ecd5db2d3b3df03f511a0328d92dc5f26051d3fe7e0",
+      "size": 157155,
+      "episodes": 20,
+      "success_rate": 0.6,
+      "mean_speed_m_s": 2.041972201899095,
+      "pinch_share": 0.2453165945063008,
+      "sheet_pinned_share": 0.0,
+      "mean_steps": 735.8571428571429,
+      "mean_time_to_goal_s": 11.336666666666515,
+      "mean_path_efficiency": 0.6927379055775841,
+      "mean_final_distance_m": 1.7645922688916325,
+      "diverged_share": 0.3
+    }
+  }
+}

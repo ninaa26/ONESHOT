@@ -10,6 +10,8 @@ greyed out with the hub's own reason rather than blowing up after launch.
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +28,55 @@ if TYPE_CHECKING:
     from sailbench.sim.protocol import SetupInputs
 
 RUNS_PATH = "runs/"
+
+#: What `scripts/score_runs.py` leaves in a run directory.
+SCORECARD_NAME = "scorecard.json"
+
+#: A run directory the trainer named itself. Any other name was chosen by a
+#: person, and a name a person chose beats one derived from a config diff.
+GENERATED_RUN = re.compile(r"^waypoint_ppo_\d{8}_\d{6}$")
+
+#: How a differing config key is said in a chip. Cosmetic only -- a key that is
+#: not here falls back to its own name, so a knob that starts differing between
+#: runs needs nothing added.
+KNOB_NAMES: dict[str, str] = {
+    "env.upwind_waypoint_bias": "upwind bias",
+    "env.no_go_zone_penalty": "no-go",
+    "env.no_go_zone_half_angle_deg": "no-go angle",
+    "env.no_go_occupancy_tau_s": "no-go lag",
+    "env.jibe_penalty": "jibe penalty",
+    "env.include_actuator_state": "actuator obs",
+    "env.success_reward": "mark bonus",
+    "train.learning_rate": "lr",
+    "train.ent_coef": "entropy",
+    "train.gamma": "gamma",
+}
+
+#: Keys that differ without saying anything about what a run tried: the boat
+#: (the helm row reports it already), bookkeeping cadence, and the budget, which
+#: every chip carries in front anyway.
+KNOBS_IGNORED = frozenset(
+    {
+        "env.simulator_config",
+        "train.total_timesteps",
+        "train.checkpoint_freq",
+        "train.eval_freq",
+        "train.tensorboard_log",
+        "train.device",
+        "train.seed",
+        "train.watch_web",
+        "train.watch_stride",
+    }
+)
+
+#: A policy reaching the mark less often than this has that said about it first;
+#: above it, success rate separates nothing on these runs and speed is the story.
+SUCCESS_WORTH_SAYING = 0.9
+
+#: Sheet command pinned at an extreme for less than this share of steps means
+#: the policy is actually trimming, which one of these runs does and the rest
+#: do not.
+TRIMS_BELOW = 0.9
 
 # The rows the shipyard shows, each mapping to what it actually selects:
 # (the part models register under, the config key an override sets).
@@ -73,6 +124,10 @@ class Policy:
     #: Why this checkpoint cannot be sailed, or None when it can. A checkpoint
     #: that exists is always listed: greyed out with the reason beats vanishing.
     reason: str | None = None
+    #: The long form of the name: the path, what the run changed, and what the
+    #: scorecard measured. The chip has room for a few words; this has room for
+    #: the sentence behind them.
+    blurb: str | None = None
 
 
 @dataclass(slots=True)
@@ -104,6 +159,7 @@ class Catalog:
                     "id": p.id,
                     "name": p.name,
                     "trained_on": p.trained_on,
+                    "blurb": p.blurb,
                     "disabled": p.reason is not None,
                     "reason": p.reason,
                 }
@@ -305,33 +361,23 @@ def _trained_on(config_path: Path | None) -> str | None:
     return str(boat) if boat else None
 
 
-def _find_policies(default_model: str | None, default_config: str | None, reason: str | None) -> list[Policy]:
-    """Trained checkpoints under runs/, plus whatever the CLI was started with."""
-    policies: list[Policy] = []
-    seen: set[str] = set()
+@dataclass(slots=True)
+class _Checkpoint:
+    """A trained file on disk, before it has anything to call itself."""
 
-    def add(model_path: Path, name: str, config_path: Path | None) -> None:
-        key = str(model_path)
-        if key in seen:
-            return
-        seen.add(key)
-        policies.append(
-            Policy(
-                id=key,
-                name=name,
-                model_path=key,
-                config_path=str(config_path) if config_path is not None else None,
-                trained_on=_trained_on(config_path),
-                reason=reason,
-            )
-        )
+    model: Path
+    #: Which checkpoint of its run this is: the best evaluation, or the last.
+    kind: str
+    #: The run it came from, or None for a path handed in on the command line.
+    run: Path | None
+    config: Path | None
 
-    if default_model is not None and Path(default_model).is_file():
-        add(
-            Path(default_model),
-            f"{Path(default_model).parent.name}/{Path(default_model).name} (--policy-model)",
-            Path(default_config) if default_config else None,
-        )
+
+def _checkpoints(default_model: str | None, default_config: str | None) -> list[_Checkpoint]:
+    """Every checkpoint the helm could be handed, in run order."""
+    fallback = Path(default_config) if default_config else None
+    found: list[_Checkpoint] = []
+    seen: set[Path] = set()
 
     runs = Path(RUNS_PATH)
     if runs.is_dir():
@@ -339,13 +385,245 @@ def _find_policies(default_model: str | None, default_config: str | None, reason
             # The run's own config carries the env scaling the policy was trained
             # with; fall back to the CLI's config when a run did not keep one.
             used = run / "config_used.yaml"
-            config = used if used.is_file() else (Path(default_config) if default_config else None)
-            best = run / "best_model" / "best_model.zip"
-            if best.is_file():
-                add(best, f"{run.name} (best)", config)
-            final = run / "final_model.zip"
-            if final.is_file():
-                add(final, f"{run.name} (final)", config)
+            config = used if used.is_file() else fallback
+            for kind, relative in (("best", "best_model/best_model.zip"), ("final", "final_model.zip")):
+                model = run / relative
+                if model.is_file():
+                    found.append(_Checkpoint(model=model, kind=kind, run=run, config=config))
+                    seen.add(model)
+
+    # A checkpoint named on the command line that is not under runs/ is still
+    # sailable, so it is listed -- it just has no run to be described by.
+    if default_model is not None:
+        model = Path(default_model)
+        if model.is_file() and model not in seen:
+            found.append(_Checkpoint(model=model, kind="named", run=None, config=fallback))
+    return found
+
+
+def _read_config(path: Path | None) -> dict[str, Any]:
+    """Load a run's config, or an empty one when it kept none."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        with path.open(encoding="utf-8") as file:
+            return dict(yaml.safe_load(file) or {})
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _flatten(config: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Flatten a config to `section.key` entries so two runs can be compared."""
+    flat: dict[str, Any] = {}
+    for key, value in config.items():
+        if isinstance(value, Mapping):
+            flat.update(_flatten(value, f"{prefix}{key}."))
+        else:
+            flat[f"{prefix}{key}"] = value
+    return flat
+
+
+def _number(value: object) -> str:
+    """Render a config value the way a label wants it, not the way YAML wrote it."""
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, float):
+        return f"{value:.4f}".rstrip("0").rstrip(".") or "0"
+    return str(value)
+
+
+def _budget(steps: object) -> str | None:
+    """Return `750000` as `750 k`, which is how anyone reads a training budget."""
+    if isinstance(steps, bool) or not isinstance(steps, (int, float)):
+        return None
+    total = int(steps)
+    if total >= 1_000_000:
+        return f"{total / 1_000_000:g} M"
+    if total >= 1_000:
+        return f"{total / 1_000:g} k"
+    return str(total)
+
+
+def _unusual(flat: Mapping[str, Any], peers: list[Mapping[str, Any]], limit: int = 2) -> list[str]:
+    """Return the knobs that set this run apart from the others on the same boat.
+
+    There is no list of interesting keys, because which key is interesting
+    depends on the runs sitting next to it: a knob matters here exactly when
+    the runs disagree about it. They come back rarest-value first, so the
+    leading token is the thing this run was actually trying.
+    """
+    ranked: list[tuple[int, str]] = []
+    for key, value in flat.items():
+        if key in KNOBS_IGNORED:
+            continue
+        values = [peer.get(key) for peer in peers]
+        if all(other == value for other in values):
+            continue
+        ranked.append((sum(1 for other in values if other == value), key))
+    ranked.sort()
+    return [
+        f"{KNOB_NAMES.get(key, key.rsplit('.', 1)[-1].replace('_', ' '))} {_number(flat[key])}"
+        for _, key in ranked[:limit]
+    ]
+
+
+def _score(checkpoint: _Checkpoint) -> dict[str, Any] | None:
+    """Return what `scripts/score_runs.py` measured for this checkpoint, if anything.
+
+    A scorecard written against a different file than the one on disk is
+    ignored rather than shown: a stale number under a chip is worse than no
+    number, because nothing about it looks wrong.
+    """
+    if checkpoint.run is None:
+        return None
+    card_path = checkpoint.run / SCORECARD_NAME
+    if not card_path.is_file():
+        return None
+    try:
+        with card_path.open(encoding="utf-8") as file:
+            card = json.load(file)
+        score = dict(card.get("checkpoints", {}).get(checkpoint.kind, {}))
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not score or score.get("size") != checkpoint.model.stat().st_size:
+        return None
+    return score
+
+
+def _measured(score: Mapping[str, Any] | None) -> str:
+    """Return the short form: what it does, in the terms that separate these runs.
+
+    Success rate leads only when it is bad. Every Flingo run on disk reaches
+    the mark essentially every time, so ranking them by it ranks nothing --
+    speed and how much of the episode goes on pinching are the difference, and
+    `runs/README.md` has the argument for why.
+    """
+    if score is None:
+        return "unscored"
+    diverged = float(score.get("diverged_share", 0.0))
+    if diverged > 0.0:
+        return f"blows the solver up in {diverged * 100:.0f}% of episodes"
+    bits = []
+    success = float(score.get("success_rate", 0.0))
+    if success < SUCCESS_WORTH_SAYING:
+        bits.append(f"reaches the mark {success * 100:.0f}%")
+    bits.append(f"{float(score.get('mean_speed_m_s', 0.0)):.2f} m/s")
+    bits.append(f"{float(score.get('pinch_share', 0.0)) * 100:.0f}% pinch")
+    if float(score.get("sheet_pinned_share", 1.0)) < TRIMS_BELOW:
+        bits.append("trims")
+    return ", ".join(bits)
+
+
+def _blurb(checkpoint: _Checkpoint, knobs: list[str], score: Mapping[str, Any] | None, boat: str | None) -> str:
+    """Return the long form, for the line under the helm row."""
+    parts = [str(checkpoint.model)]
+    if boat:
+        parts.append(f"trained on {boat}")
+    if knobs:
+        parts.append("changed: " + ", ".join(knobs))
+    if score is None:
+        parts.append("not scored yet — run `uv run python scripts/score_runs.py` to fill this in")
+        return " · ".join(parts)
+
+    episodes = int(score.get("episodes", 0))
+    diverged = float(score.get("diverged_share", 0.0))
+    measured = [
+        f"{float(score.get('success_rate', 0.0)) * 100:.0f}% reached the mark",
+        f"{float(score.get('mean_speed_m_s', 0.0)):.2f} m/s",
+        f"{float(score.get('pinch_share', 0.0)) * 100:.0f}% of steps inside 25° of the wind",
+        f"sheet pinned {float(score.get('sheet_pinned_share', 0.0)) * 100:.0f}% of steps",
+    ]
+    if diverged > 0.0:
+        measured.append(f"{diverged * 100:.0f}% of episodes blew the solver up")
+    parts.append(f"over {episodes} seeded episodes: " + ", ".join(measured))
+    return " · ".join(parts)
+
+
+def _best_of_each_boat(scores: Mapping[Path, Mapping[str, Any] | None], boats: Mapping[Path, str | None]) -> set[Path]:
+    """Return the fastest checkpoint per boat, among those that can sail one at all."""
+    leaders: dict[str | None, tuple[float, Path]] = {}
+    for model, score in scores.items():
+        if score is None or float(score.get("diverged_share", 0.0)) > 0.0:
+            continue
+        if float(score.get("success_rate", 0.0)) < SUCCESS_WORTH_SAYING:
+            continue
+        speed = float(score.get("mean_speed_m_s", 0.0))
+        boat = boats.get(model)
+        if boat not in leaders or speed > leaders[boat][0]:
+            leaders[boat] = (speed, model)
+    return {model for _, model in leaders.values()}
+
+
+def _find_policies(default_model: str | None, default_config: str | None, reason: str | None) -> list[Policy]:
+    """Trained checkpoints under runs/, each named for what it tried and what it does.
+
+    `waypoint_ppo_20260919_074021 (best)` is a timestamp and a directory
+    listing: it cannot tell you what the run changed or whether the policy is
+    any good, which are the only two things you want to know while picking one.
+    Both are on disk already -- the run kept the config it trained with, and
+    `scripts/score_runs.py` leaves a scorecard next to it -- so the name is
+    built from them instead.
+    """
+    found = _checkpoints(default_model, default_config)
+    configs = {cp.model: _flatten(_read_config(cp.config)) for cp in found}
+    boats = {cp.model: _trained_on(cp.config) for cp in found}
+    scores = {cp.model: _score(cp) for cp in found}
+
+    # Peers are the other *runs* on the same boat, counted once each: a config
+    # is a property of the run, so best and final must not vote twice.
+    by_run: dict[Path | None, Mapping[str, Any]] = {}
+    for checkpoint in found:
+        by_run.setdefault(checkpoint.run or checkpoint.model, configs[checkpoint.model])
+    peers_for_boat: dict[str | None, list[Mapping[str, Any]]] = {}
+    for flat in by_run.values():
+        peers_for_boat.setdefault(flat.get("env.simulator_config"), []).append(flat)
+
+    starred = _best_of_each_boat(scores, boats)
+
+    policies: list[Policy] = []
+    for checkpoint in found:
+        flat = configs[checkpoint.model]
+        peers = peers_for_boat.get(flat.get("env.simulator_config"), [flat])
+        knobs = _unusual(flat, peers)
+        run_name = checkpoint.run.name if checkpoint.run is not None else checkpoint.model.stem
+
+        head: list[str] = []
+        if checkpoint.run is not None and not GENERATED_RUN.match(run_name):
+            # Somebody named this run on purpose; that beats a config diff.
+            head.append(run_name)
+        else:
+            budget = _budget(flat.get("train.total_timesteps"))
+            head.extend(bit for bit in [budget, *knobs] if bit)
+        if not head:
+            head.append(run_name)
+        if checkpoint.kind != "named":
+            head.append(checkpoint.kind)
+
+        name = f"{' · '.join(head)} — {_measured(scores[checkpoint.model])}"
+
+        policies.append(
+            Policy(
+                id=str(checkpoint.model),
+                name=name,
+                model_path=str(checkpoint.model),
+                config_path=str(checkpoint.config) if checkpoint.config is not None else None,
+                trained_on=boats[checkpoint.model],
+                reason=reason,
+                blurb=_blurb(checkpoint, knobs, scores[checkpoint.model], boats[checkpoint.model]),
+            )
+        )
+
+    # Two runs can be the same experiment twice -- 074021 and 120703 came out
+    # bit-identical -- so say which is which rather than offering one chip
+    # twice. Done before the star, which would otherwise hide the collision.
+    counts: dict[str, int] = {}
+    for policy in policies:
+        counts[policy.name] = counts.get(policy.name, 0) + 1
+    for policy, checkpoint in zip(policies, found, strict=True):
+        if counts[policy.name] > 1 and checkpoint.run is not None:
+            policy.name = f"{policy.name} ({checkpoint.run.name.rsplit('_', 1)[-1]})"
+        if checkpoint.model in starred:
+            policy.name = f"★ {policy.name}"
     return policies
 
 
@@ -384,7 +662,10 @@ def build_catalog(
         note = None
 
     # Only hand the CLI's `--policy-model` the helm when it is one we can load.
-    default_helm = sailable[0].id if policy_model is not None and sailable else "manual"
+    # Matching on the path rather than taking the first sailable policy: the
+    # checkpoints are listed in run order now, so first is no longer the CLI's.
+    preselected = next((p for p in sailable if policy_model and Path(p.model_path) == Path(policy_model)), None)
+    default_helm = preselected.id if preselected is not None else "manual"
     if default_boat not in {b["id"] for b in boats}:
         default_boat = boats[0]["id"]
     return Catalog(

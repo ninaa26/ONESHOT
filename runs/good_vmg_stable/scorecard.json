@@ -1,0 +1,44 @@
+{
+  "task": {
+    "episodes": 20,
+    "seed_base": 1000,
+    "pinch_threshold_deg": 25.0,
+    "overrides": {
+      "upwind_waypoint_bias": 0.5
+    },
+    "boat": "basic_sailbot.yaml"
+  },
+  "scored_at": "2026-09-19T16:38:05+00:00",
+  "checkpoints": {
+    "best": {
+      "model": "runs/good_vmg_stable/best_model/best_model.zip",
+      "sha256": "c5317c07e82f3d25ac6263f41dc7c6ad08a85b0d3e4a42ffaebe9d1a76df664b",
+      "size": 157149,
+      "episodes": 20,
+      "success_rate": 0.6,
+      "mean_speed_m_s": 1.910710522940073,
+      "pinch_share": 0.3766465539628603,
+      "sheet_pinned_share": 0.0,
+      "mean_steps": 711.7333333333333,
+      "mean_time_to_goal_s": 9.04333333333323,
+      "mean_path_efficiency": 0.8830711638398323,
+      "mean_final_distance_m": 2.0859299156989173,
+      "diverged_share": 0.25
+    },
+    "final": {
+      "model": "runs/good_vmg_stable/final_model.zip",
+      "sha256": "0a350811ecb12ae29e8d4d5c4525bdaf1fb7dc1db1121e3b9fec18d2172078e5",
+      "size": 157150,
+      "episodes": 20,
+      "success_rate": 0.5,
+      "mean_speed_m_s": 1.8418711813905138,
+      "pinch_share": 0.37468620852600487,
+      "sheet_pinned_share": 0.0,
+      "mean_steps": 751.9230769230769,
+      "mean_time_to_goal_s": 9.049999999999894,
+      "mean_path_efficiency": 0.8775218546140485,
+      "mean_final_distance_m": 2.3465435885919663,
+      "diverged_share": 0.35
+    }
+  }
+}

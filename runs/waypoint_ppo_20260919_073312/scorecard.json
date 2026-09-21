@@ -1,0 +1,44 @@
+{
+  "task": {
+    "episodes": 20,
+    "seed_base": 1000,
+    "pinch_threshold_deg": 25.0,
+    "overrides": {
+      "upwind_waypoint_bias": 0.5
+    },
+    "boat": "flingo_floty.yaml"
+  },
+  "scored_at": "2026-09-19T16:39:11+00:00",
+  "checkpoints": {
+    "best": {
+      "model": "runs/waypoint_ppo_20260919_073312/best_model/best_model.zip",
+      "sha256": "b884c4336286a70de536c4de6d96477d60b4e4a863783a3b70d45a20520a6b25",
+      "size": 160927,
+      "episodes": 20,
+      "success_rate": 1.0,
+      "mean_speed_m_s": 1.2239487987370286,
+      "pinch_share": 0.27190883281740713,
+      "sheet_pinned_share": 1.0,
+      "mean_steps": 1008.2,
+      "mean_time_to_goal_s": 20.16399999999968,
+      "mean_path_efficiency": 0.7451534190821147,
+      "mean_final_distance_m": 1.4930991714088964,
+      "diverged_share": 0.0
+    },
+    "final": {
+      "model": "runs/waypoint_ppo_20260919_073312/final_model.zip",
+      "sha256": "216914d4df7b6622eef896095222a15ccbec604ad7bb6546842d737ed49a1403",
+      "size": 160927,
+      "episodes": 20,
+      "success_rate": 1.0,
+      "mean_speed_m_s": 1.2311189350759542,
+      "pinch_share": 0.25699485756325596,
+      "sheet_pinned_share": 1.0,
+      "mean_steps": 1023.45,
+      "mean_time_to_goal_s": 20.468999999999678,
+      "mean_path_efficiency": 0.7286230374224998,
+      "mean_final_distance_m": 1.4937005567323407,
+      "diverged_share": 0.0
+    }
+  }
+}

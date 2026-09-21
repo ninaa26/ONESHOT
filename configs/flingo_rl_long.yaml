@@ -1,0 +1,154 @@
+# LONG RUN of configs/flingo_rl.yaml -- same boat, same task, same PPO
+# hyperparameters, only the budget and the bookkeeping cadence differ.
+#
+# Boat is configs/flingo_floty.yaml exactly as composed on 2026-09-19:
+#   hull    BasicHullModel (basic)     Hughes friction, L 1.372, c_wave 0.05,
+#                                      yaw_damping_cd 7.0, wetted 0.571 m2,
+#                                      7 stations -> added mass 1.35/26.46/1.83
+#   keel    FiniteSpanKeel             NACA0010, 0.1225 m2, span 0.700,
+#                                      end_plate 2.0 -> effective AR 8.00
+#   sail    ORCWithJibSail             1.971 m2 (jib 0.775), heff 2.592,
+#                                      kheff orc-2022, eff_span_corr 1.057,
+#                                      sheet tau 3.0 s
+#   rudder  FiniteSpanRudder           NACA0012, 0.0462 m2, span 0.478,
+#                                      effectiveness 0.6, effective AR 4.95
+#   windage Windage                    active
+#
+# 25 M steps at the ~3700 fps this config reaches once evaluation is thinned
+# is about two hours. Note the short run converges at ~450 k and plateaus, so
+# most of this budget is spent past convergence; what it buys is samples in the
+# bands the task visits rarely -- only 4.8% of steps are past 140 deg TWA -- and
+# a policy that has stopped moving rather than one caught mid-swing.
+#
+# RL waypoint training config for the Flingo Floaty hull.
+#
+# Observation scales re-derived 2026-09-17 from the measured polar, AFTER the
+# hull calibration (c_wave 0.01 -> 0.05, yaw_damping_cd 7.0). That calibration
+# moved both scales a long way, so the previous values no longer fit: the boat
+# had been running to Fn 0.63 and 99 deg/s, neither of which a displacement
+# hull does. Re-measured envelope is 1.80 m/s and 0.71 rad/s.
+# Policies trained before this will not transfer: the polar, the observation
+# scales and the observation width have all changed.
+env:
+  simulator_config: flingo_floty.yaml
+  dt: 0.02
+  max_episode_steps: 1750
+  max_rudder_deg: 35.0
+  max_sail_deg: 85.0
+  initial_heading_range_deg: 30.0
+  initial_speed_max: 0.2
+  spawn_radius_m: 10.0
+  waypoint_min_radius_m: 12.0
+  waypoint_max_radius_m: 25.0
+  # 1 put every mark dead upwind, which meant the policy never left the one
+  # region where a hard-sheeted main is genuinely right -- it pinned the sheet
+  # action at one extreme for 100% of its steps and steered on the rudder alone,
+  # leaving half the action space untrained. 0.5 keeps the beat (the skill worth
+  # having) and adds reaching and running legs, where the sheet now costs 12-42%
+  # of boat speed if it is wrong. Raise it back towards 1 only for a policy that
+  # is meant to do nothing but beat.
+  upwind_waypoint_bias: 0.5
+  upwind_half_angle_deg: 25.0
+  success_radius_m: 1.5
+  fail_radius_m: 80.0
+  speed_scale: 2.1      # polar max measured 1.80 m/s (TWA 80) + ~17% headroom
+  # Max yaw rate measured 0.71 rad/s (40 deg/s), swept over TWA 40-150 at 20 and
+  # 35 deg rudder. The old 2.5 was set against a boat that could reach 1.77
+  # rad/s; under the calibrated yaw damping it never gets close, so 2.5 squeezed
+  # this observation into +-28% of its range and the policy saw almost no signal.
+  yaw_rate_scale: 0.9
+  wind_speed_scale: 15.0
+  # The sheet winch lags 3 s; without this the policy sees only its own command.
+  include_actuator_state: true
+  vmg_multiplier: 1.0
+  joint_penalty: 0.01
+  dist_multiplier: 0.0
+  time_penalty: 0.0
+  stagnation_penalty: 0
+  stagnation_u_threshold: 0.35
+  # A TASK CONSTRAINT STANDING IN FOR MISSING PHYSICS, not a tuning parameter.
+  # Flingo holds 22 deg true in the simulator and drives at 1.46 m/s there; a
+  # real boat of her type stops between 30 and 45. Searched for the cause on
+  # 2026-09-19 and did not find it -- rig induced drag (kheff off), keel induced
+  # drag (end_plate 2.0 -> 1.4 and 1.2) and the heel depowering that
+  # flat_for_righting_moment already implements (righting moment swept 10-120
+  # N.m) all leave the minimum angle at 18-22 deg. A 50% change in induced drag
+  # buys about 2 deg of drag angle and roughly 12 are needed. What is left is the
+  # sail's lift at low apparent wind, which is ORC's own published table, and
+  # changing that to match a reference band drawn from full-size keelboats is
+  # not a measurement. A GPS log of Flingo beating would settle it in an
+  # afternoon; delete this block when there is one.
+  #
+  # 0.3 did nothing: it peaked at 0.054 per step against a VMG term reaching
+  # 1.28. 15.0 worked on its target -- time inside 25 deg fell 41% -> 28%, mean
+  # speed rose 1.04 -> 1.20 -- but it was far too big: at ~1.3 per step it
+  # matched the whole VMG term, the sheet's contribution (0.2-0.5 per step)
+  # became second-order, and the policy went back to strapping the main flat for
+  # 100% of its steps. Footing only has to beat pinching by the VMG difference
+  # between 25 and 40 degrees, which is 0.04, plus the tacks it saves. 3.0 gives
+  # 0.26 per step at 25 deg: decisive against 0.04, still small against the sheet.
+  no_go_zone_penalty: 3.0
+  no_go_zone_half_angle_deg: 35.0  # real no-go for this type; the sim's is ~22
+  # Charge for settling inside the zone, not for entering it. At 0 this prices
+  # the tack itself -- a tack is inside for ~2.3 s -- and the policy stops
+  # tacking rather than starting to foot.
+  no_go_occupancy_tau_s: 4.0
+  jibe_penalty: 0.5
+  jibe_threshold_deg: 150.0
+  surge_speed_bonus: 0.0
+  surge_speed_bonus_cap_m_s: 6.0
+  # The VMG term telescopes -- summed over an episode it is just
+  # (1/dt) * distance closed -- so ending at 1.6 m scores within 5 reward of
+  # ending at 1.5 m and nothing explicitly pays for crossing the success radius.
+  # That reads like a hole, but it is not one in practice: at 250k steps this
+  # config reaches the mark 65% of the time on VMG alone. A 200.0 terminal bonus
+  # was tried on 2026-09-19 (with gamma 0.999) and scored 0%; see the gamma note.
+  success_reward: 0.0
+  failure_penalty: 0.0
+train:
+  vec_env: subproc
+  total_timesteps: 25000000
+  device: cpu
+  seed: 7
+  n_envs: 4
+  learning_rate: 0.0001
+  n_steps: 1024
+  batch_size: 256
+  n_epochs: 10
+  # 1/(1-gamma) at dt 0.02 is the horizon the policy can see: 0.99 gives 100
+  # steps = 2.0 s, against a 1750-step (35 s) episode. That looks far too short
+  # for a beat, and a 100k-step checkpoint did behave myopically -- constant
+  # action, bore away onto a reach, ended 43 m from a 20 m mark. It recovers on
+  # its own: by 250k the same config reaches the mark 65% of the time.
+  #
+  # TRIED AND REJECTED 2026-09-19: gamma 0.999 (bundled with success_reward 200)
+  # at a matched 250k budget scored 0% against this config's 65%, sailing off at
+  # 0.41 m/s without ever tacking -- the critic never fit the ~10x larger
+  # returns (explained_variance ~0 well into the run) with this vf_coef, lr and
+  # no reward normalization. If it is retried: change one of the two at a time,
+  # give it more than 250k steps, and normalize the reward.
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.005
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_sde: false
+  normalize_observation: false
+  normalize_reward: false
+  checkpoint_freq: 500000
+  # 10000 made evaluation cost more simulation than training: 75 evals x 10
+  # episodes x up to 1750 steps is up to 1.31 M eval steps against 750 k training
+  # steps, and all of it runs serially on one DummyVecEnv. At 50000 it is 15
+  # evals, and the eval set is now fixed (SeededEvalCallback) so fewer of them
+  # still give a comparable curve.
+  eval_freq: 200000
+  eval_episodes: 10
+  deterministic_eval: true
+  tensorboard_log: runs/tensorboard
+  watch_web: false
+  watch_stride: 2
+eval:
+  episodes: 20
+  deterministic: true
+  render: false

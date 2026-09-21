@@ -133,7 +133,7 @@ class PolicyController:
         wind_boat_x = c * wind_world_x + s * wind_world_y
         wind_boat_y = -s * wind_world_x + c * wind_world_y
 
-        return np.array(
+        observation = np.array(
             [
                 np.clip(dx_boat / self.cfg.waypoint_max_radius_m, -1.0, 1.0),
                 np.clip(dy_boat / self.cfg.waypoint_max_radius_m, -1.0, 1.0),
@@ -151,6 +151,21 @@ class PolicyController:
             ],
             dtype=np.float32,
         )
+
+        if self.cfg.include_actuator_state:
+            # The same two elements WaypointEnv._get_observation appends: where the
+            # surfaces actually are, on the scales the actions use. Without them a
+            # policy trained with include_actuator_state gets a 13-wide vector it
+            # was never built for and SB3 refuses it.
+            rudder = hub.rudder_actuator.position / max(self.cfg.max_rudder_deg, 1e-9)
+            sheet = math.degrees(abs(hub.sail_actuator.position)) / max(self.cfg.max_sail_deg, 1e-9)
+            observation = np.concatenate(
+                [
+                    observation,
+                    np.array([np.clip(rudder, -1.0, 1.0), np.clip(2.0 * sheet - 1.0, -1.0, 1.0)], dtype=np.float32),
+                ]
+            )
+        return observation
 
     def compute_controls(self, hub: SailboatHub, state: State, deterministic: bool) -> tuple[float, float]:
         """Return the rudder angle [deg] and sheet limit [deg] the policy asks for."""

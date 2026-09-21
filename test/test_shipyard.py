@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from sailbench.foils.basic_sail import BasicSail
 from sailbench.foils.orc_sail import ORCMainSail
@@ -128,7 +130,7 @@ class TestCatalog:
         assert set(payload["parts"]) == {"sail", "keel", "rudder", "hull"}
         assert "policy_note" in payload
         for policy in payload["policies"]:
-            assert set(policy) == {"id", "name", "trained_on", "disabled", "reason"}
+            assert set(policy) == {"id", "name", "trained_on", "blurb", "disabled", "reason"}
 
 
 class TestPolicies:
@@ -137,7 +139,7 @@ class TestPolicies:
     def test_finds_the_checkpoints_on_disk(self, catalog: Catalog) -> None:
         """Every run's best and final model is offered as a helm."""
         names = {p.name for p in catalog.policies}
-        assert any(name.endswith("(best)") for name in names), names
+        assert any(" best — " in name for name in names), names
         assert all(p.model_path.endswith(".zip") for p in catalog.policies)
 
     def test_reports_the_boat_a_run_learned(self, catalog: Catalog) -> None:
@@ -183,6 +185,215 @@ class TestPolicies:
         assert empty.policies == []
         assert empty.policy_note is not None
         assert "train" in empty.policy_note
+
+
+class TestPolicyNames:
+    """A helm chip says what the run changed and what the policy does.
+
+    `waypoint_ppo_20260919_074021 (best)` is a timestamp: picking between six
+    of those means opening six directories. Both halves of the name are read
+    off disk -- the config the run kept, and the scorecard
+    `scripts/score_runs.py` writes beside it.
+    """
+
+    BOAT = "flingo_floty.yaml"
+
+    def _run(
+        self,
+        root: Path,
+        name: str,
+        *,
+        env: dict | None = None,
+        steps: int = 750_000,
+        best: bytes = b"a checkpoint",
+        score: dict | None = None,
+    ) -> Path:
+        """Write a run directory the catalog can read: config, model, scorecard."""
+        run = root / name
+        (run / "best_model").mkdir(parents=True)
+        (run / "best_model" / "best_model.zip").write_bytes(best)
+        config = {
+            "env": {"simulator_config": self.BOAT, **(env or {})},
+            "train": {"total_timesteps": steps},
+        }
+        (run / "config_used.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
+        if score is not None:
+            card = {
+                "task": {"episodes": 20},
+                "checkpoints": {"best": {"size": len(best), "episodes": 20, **score}},
+            }
+            (run / shipyard.SCORECARD_NAME).write_text(json.dumps(card), encoding="utf-8")
+        return run
+
+    SAILS = {
+        "success_rate": 1.0,
+        "mean_speed_m_s": 1.32,
+        "pinch_share": 0.148,
+        "sheet_pinned_share": 1.0,
+        "diverged_share": 0.0,
+    }
+
+    def _names(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        monkeypatch.setattr(shipyard, "RUNS_PATH", str(tmp_path))
+        monkeypatch.setattr(shipyard, "_backend_reason", lambda: None)
+        return [p.name for p in build_catalog(self.BOAT).policies]
+
+    def test_the_name_is_the_budget_the_change_and_the_measurement(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Two runs differing in one knob are named by that knob, not their timestamps."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", env={"no_go_zone_penalty": 3.0}, score=self.SAILS)
+        self._run(
+            tmp_path,
+            "waypoint_ppo_20260919_073312",
+            env={"no_go_zone_penalty": 15.0},
+            best=b"another checkpoint",
+            score={**self.SAILS, "mean_speed_m_s": 1.19, "pinch_share": 0.276},
+        )
+        names = self._names(tmp_path, monkeypatch)
+
+        assert any("no-go 15" in name and "1.19 m/s" in name and "28% pinch" in name for name in names), names
+        assert any("no-go 3" in name and "1.32 m/s" in name for name in names), names
+        assert all("750 k" in name for name in names), names
+        assert all("20260919" not in name for name in names), names
+
+    def test_a_knob_every_run_shares_is_not_worth_saying(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A name carries what makes a run unusual, so agreement is silent."""
+        shared = {"no_go_zone_penalty": 3.0, "jibe_penalty": 0.5}
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", env=shared, score=self.SAILS)
+        self._run(tmp_path, "waypoint_ppo_20260919_120703", env={**shared, "gamma": 0.999}, best=b"b", score=self.SAILS)
+        names = self._names(tmp_path, monkeypatch)
+
+        assert not any("jibe" in name for name in names), names
+        assert sum("gamma 0.999" in name for name in names) == 1, names
+
+    def test_a_name_somebody_chose_is_kept(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`good_vmg_stable` already says more than a config diff could."""
+        self._run(tmp_path, "good_vmg_stable", score=self.SAILS)
+        names = self._names(tmp_path, monkeypatch)
+        assert names[0].startswith("★ good_vmg_stable"), names
+        assert "1.32 m/s" in names[0]
+
+    def test_the_fastest_is_starred(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The question behind the row is which one to sail, so one chip answers it."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", env={"gamma": 0.99}, score=self.SAILS)
+        self._run(
+            tmp_path,
+            "waypoint_ppo_20260919_120703",
+            env={"gamma": 0.98},
+            best=b"b",
+            score={**self.SAILS, "mean_speed_m_s": 1.10},
+        )
+        names = self._names(tmp_path, monkeypatch)
+        starred = [name for name in names if name.startswith("★")]
+        assert len(starred) == 1, names
+        assert "1.32 m/s" in starred[0]
+
+    def test_a_policy_that_blows_the_solver_up_says_so(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A mean speed averaged over episodes the integrator lost is not a speed."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", score={**self.SAILS, "diverged_share": 0.2})
+        names = self._names(tmp_path, monkeypatch)
+        assert "blows the solver up in 20% of episodes" in names[0], names
+        assert not names[0].startswith("★"), names
+
+    def test_reaching_the_mark_is_mentioned_only_when_it_is_a_problem(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Every Flingo run scores ~100%, so the number ranks nothing until it drops."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", score=self.SAILS)
+        self._run(tmp_path, "waypoint_ppo_20260919_120703", best=b"b", score={**self.SAILS, "success_rate": 0.45})
+        names = sorted(self._names(tmp_path, monkeypatch))
+        assert not any("reaches the mark 100%" in name for name in names), names
+        assert any("reaches the mark 45%" in name for name in names), names
+
+    def test_trimming_is_named_because_one_run_does_it(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A policy that works the sheet instead of pinning it is the rare one."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", score={**self.SAILS, "sheet_pinned_share": 0.65})
+        assert "trims" in self._names(tmp_path, monkeypatch)[0]
+
+    def test_an_unscored_checkpoint_says_so_rather_than_guessing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Silence about quality beats a number nobody measured."""
+        run = self._run(tmp_path, "waypoint_ppo_20260919_074021")
+        names = self._names(tmp_path, monkeypatch)
+        assert names[0].endswith("unscored"), names
+        assert "score_runs.py" in build_catalog(self.BOAT).policies[0].blurb
+        assert not (run / shipyard.SCORECARD_NAME).exists()
+
+    def test_a_scorecard_for_a_different_file_is_ignored(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Retraining into the same path must not leave the old numbers on the chip."""
+        run = self._run(tmp_path, "waypoint_ppo_20260919_074021", score=self.SAILS)
+        (run / "best_model" / "best_model.zip").write_bytes(b"a retrained checkpoint")
+        names = self._names(tmp_path, monkeypatch)
+        assert names[0].endswith("unscored"), names
+
+    def test_the_same_experiment_twice_is_still_two_chips(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """074021 and 120703 are the same config, so the label has to disambiguate."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", score=self.SAILS)
+        self._run(tmp_path, "waypoint_ppo_20260919_120703", best=b"b", score=self.SAILS)
+        names = self._names(tmp_path, monkeypatch)
+        assert len(set(names)) == 2, names
+        assert any(name.endswith("(074021)") for name in names), names
+
+    def test_the_blurb_carries_the_path_and_the_full_measurement(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The chip has room for a few words; the line under the row has the rest."""
+        self._run(tmp_path, "waypoint_ppo_20260919_074021", env={"no_go_zone_penalty": 3.0}, score=self.SAILS)
+        monkeypatch.setattr(shipyard, "RUNS_PATH", str(tmp_path))
+        monkeypatch.setattr(shipyard, "_backend_reason", lambda: None)
+        policy = build_catalog(self.BOAT).policies[0]
+
+        assert policy.blurb is not None
+        assert "best_model.zip" in policy.blurb
+        assert f"trained on {self.BOAT}" in policy.blurb
+        assert "20 seeded episodes" in policy.blurb
+        assert "sheet pinned 100% of steps" in policy.blurb
+        assert build_catalog(self.BOAT).to_payload()["policies"][0]["blurb"] == policy.blurb
+
+    def test_the_preselected_checkpoint_takes_the_helm(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`--policy-model` picks a checkpoint by path, not whichever is listed first."""
+        self._run(tmp_path, "waypoint_ppo_20260919_061347", score=self.SAILS)
+        wanted = self._run(tmp_path, "waypoint_ppo_20260919_121045", best=b"b", score=self.SAILS)
+        monkeypatch.setattr(shipyard, "RUNS_PATH", str(tmp_path))
+        monkeypatch.setattr(shipyard, "_backend_reason", lambda: None)
+        model = wanted / "best_model" / "best_model.zip"
+
+        catalog = build_catalog(self.BOAT, policy_model=str(model))
+        assert catalog.default_helm == str(model)
 
 
 class TestOverridesFor:

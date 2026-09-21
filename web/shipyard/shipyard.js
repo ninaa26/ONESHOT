@@ -61,9 +61,13 @@ export function createShipyard({ onLaunch }) {
         ...catalog.policies.map((p) => ({
           id: p.id,
           name: p.name,
-          blurb: p.trained_on
-            ? `Trained PPO policy — learned to sail ${p.trained_on}`
-            : "Trained PPO policy sails to waypoints",
+          // The backend names a checkpoint for what its run changed and what
+          // the scorecard measured; the long form of that goes under the row.
+          blurb:
+            p.blurb ||
+            (p.trained_on
+              ? `Trained PPO policy — learned to sail ${p.trained_on}`
+              : "Trained PPO policy sails to waypoints"),
           disabled: Boolean(p.disabled),
           reason: p.reason,
         })),

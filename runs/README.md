@@ -43,6 +43,41 @@ For reference, the boat does 1.68 m/s close-hauled and 1.80 m/s at its best
 angle, so even the fastest of these is sailing at about four fifths of what the
 hull will give.
 
+## Scorecards
+
+`scripts/score_runs.py` writes `scorecard.json` into each run directory, and the
+shipyard reads it: the helm row no longer offers `waypoint_ppo_20260919_074021
+(best)` but `750 k · no-go 3 · no-go lag 4 · best — 1.20 m/s, 30% pinch, trims`,
+with the left of the dash diffed from the run's own `config_used.yaml` against
+the other runs on the same boat. Twenty fixed-seed episodes per checkpoint,
+`upwind_waypoint_bias` forced to 0.5 because it is the one knob that changes
+what a seed produces, and every other setting -- the observation scales
+especially -- left as the run trained with it.
+
+It reproduces the table above, run for run:
+
+| run | speed | pinch | sheet pinned | success |
+|---|---|---|---|---|
+| `121045` best | 1.34 m/s | 14.0% | 100% | 100% |
+| `073312` best | 1.22 | 27.2% | 100% | 100% |
+| `074021` best | 1.20 | 30.5% | 57% | 95% |
+| `063537` best | 1.13 | 34.6% | 75% | 85% |
+| `061347` best | 1.13 | 32.8% | 99% | 100% |
+
+Two things to read carefully. `061347` comes out at 1.13 m/s and 32.8% here
+against the 0.972 and 49.6% above, because it is being scored on the mixed task
+rather than the all-upwind one it trained on -- it is still the slowest of the
+five, but the two numbers are not the same measurement. And `120703` scores
+identically to `074021` on all five columns, which is the same-policy claim
+above arrived at from the other end.
+
+The three `basic_sailbot` runs in this directory -- `claude_run_4`,
+`claude_run_5`, `good_vmg_stable` -- blow the integrator up in 20-35% of
+episodes on the current physics: the boat runs away, and the wave drag term's
+`(|u|/v_hull)**4` overflows a few steps later. The scorer counts those episodes
+and leaves them out of the averages, and the shipyard chip says so instead of
+showing a speed. Whether it is the policies or the boat has not been looked at.
+
 ---
 
 ## `waypoint_ppo_20260919_121045` -- the one to use

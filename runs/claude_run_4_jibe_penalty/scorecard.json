@@ -1,0 +1,29 @@
+{
+  "task": {
+    "episodes": 20,
+    "seed_base": 1000,
+    "pinch_threshold_deg": 25.0,
+    "overrides": {
+      "upwind_waypoint_bias": 0.5
+    },
+    "boat": "basic_sailbot.yaml"
+  },
+  "scored_at": "2026-09-19T16:37:48+00:00",
+  "checkpoints": {
+    "best": {
+      "model": "runs/claude_run_4_jibe_penalty/best_model/best_model.zip",
+      "sha256": "e56b92c280eda88c1f666b2af70e0dfc952e3fd47b0eecbd77cecf170aff9e90",
+      "size": 157153,
+      "episodes": 20,
+      "success_rate": 0.75,
+      "mean_speed_m_s": 2.1319173381403322,
+      "pinch_share": 0.26871780335648765,
+      "sheet_pinned_share": 0.0,
+      "mean_steps": 652.875,
+      "mean_time_to_goal_s": 11.594666666666509,
+      "mean_path_efficiency": 0.7225190689386378,
+      "mean_final_distance_m": 1.7244269064491373,
+      "diverged_share": 0.2
+    }
+  }
+}

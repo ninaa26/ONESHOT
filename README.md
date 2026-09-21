@@ -409,3 +409,35 @@ Notes:
 
 - Pass `--vecnormalize` only if your training run produced `vecnormalize.pkl` (i.e., you enabled observation/reward normalization in the training config).
 - `eval_waypoint_sb3.py` prints a JSON blob of summary metrics to stdout; use `--output-json <path>` to save them.
+
+### Score the runs so the shipyard can name them
+
+`eval_waypoint_sb3.py` answers a question about one checkpoint. `score_runs.py`
+answers the question you have while picking one from a list of nine:
+
+```bash
+uv run python scripts/score_runs.py            # score whatever is not scored yet
+uv run python scripts/score_runs.py --force    # score it all again
+```
+
+It writes `scorecard.json` into each run directory and the shipyard reads it, so
+the helm row stops offering `waypoint_ppo_20260919_074021 (best)` and starts
+offering `750 k · no-go 3 · best — 1.15 m/s, 37% pinch, trims`. The left of the
+dash is a diff of the run's own `config_used.yaml` against the other runs on the
+same boat; the right is what the scorecard measured. A star marks the fastest
+policy that reaches the mark on each boat, and a checkpoint with no scorecard
+says `unscored` rather than guessing.
+
+Every policy is scored on the same fixed-seed episodes, with
+`upwind_waypoint_bias` — the one knob that changes what a seed produces — forced
+to a common value. Observation scales come from each run's own config, because
+those are part of the encoding the policy was trained with.
+
+What it measures, and why not success rate: every Flingo run on disk reaches the
+mark essentially every time, so success rate ranks nothing. Mean speed, the
+share of steps spent pinching inside 25° of the true wind, and whether the sheet
+is pinned at an extreme are what separate these policies — `runs/README.md` has
+the argument, and the note on `no_go_zone_penalty` in `configs/flingo_rl.yaml`
+has the physics behind it. Episodes the integrator cannot finish are counted and
+reported rather than averaged in; a policy that blows the solver up says so on
+its own chip.
