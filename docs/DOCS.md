@@ -5,8 +5,8 @@ Working documents about the simulator. Recovered from published Artifacts on
 
 | File | What it is | Published |
 |---|---|---|
-| `sailbench-field-guide.html` | The field guide to sailbench, 228 KB | `claude.ai/artifact/Ru3NMqGhocWHfU1VuWMTG5` |
-| `one-physics-core.html` | Unifying the physics into one core | `claude.ai/artifact/1YtLauNpysQKgJDici47Sk` |
+| `sailbench-oneshot_sailbench-field-guide.html` | The field guide to sailbench, 228 KB | `claude.ai/artifact/Ru3NMqGhocWHfU1VuWMTG5` |
+| `sailbench-oneshot_one-physics-core.html` | Unifying the physics into one core | `claude.ai/artifact/1YtLauNpysQKgJDici47Sk` |
 | `flingo-floaty-physics-audit-briefing.md` | Two confirmed physics defects — no wave-making resistance, no induced drag — with a validated fix and config diff | `claude.ai/artifact/DrREgq5NWjxVyJxuaYXDAu` |
 
 **Not copied down:** *Flingo Floaty Sim Physics — Audit & v2 Proposal*,
